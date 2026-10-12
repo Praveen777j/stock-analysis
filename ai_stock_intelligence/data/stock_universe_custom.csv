@@ -1,0 +1,11 @@
+ticker,name,exchange,country,sector,industry,aliases
+RELIANCE.NS,Reliance Industries Ltd,NSE,India,Energy,Oil & Gas Refining,RELIANCE
+TCS.NS,Tata Consultancy Services Ltd,NSE,India,Technology,IT Services,TCS
+HDFCBANK.NS,HDFC Bank Ltd,NSE,India,Financial Services,Private Sector Bank,HDFCBANK
+INFY.NS,Infosys Ltd,NSE,India,Technology,IT Services,INFY
+ICICIBANK.NS,ICICI Bank Ltd,NSE,India,Financial Services,Private Sector Bank,ICICIBANK
+HINDUNILVR.NS,Hindustan Unilever Ltd,NSE,India,Consumer Defensive,Household & Personal,HINDUNILVR
+ITC.NS,ITC Ltd,NSE,India,Consumer Defensive,Tobacco & FMCG,ITC
+SBIN.NS,State Bank of India,NSE,India,Financial Services,Public Sector Bank,SBIN
+BHARTIARTL.NS,Bharti Airtel Ltd,NSE,India,Communication Services,Telecom Services,BHARTIARTL
+KOTAKBANK.NS,Kotak Mahindra Bank Ltd,NSE,India,Financial Services,Private Sector Bank,KOTAKBANK

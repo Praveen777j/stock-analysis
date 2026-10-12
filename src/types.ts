@@ -1,0 +1,410 @@
+export interface StockQuote {
+  ticker: string;
+  companyName: string;
+  exchange?: string;
+  country?: string;
+  sector?: string;
+  industry?: string;
+  price: number;
+  change: number;
+  changePct: number;
+  high52w: number;
+  low52w: number;
+  volume: number;
+  currency: string;
+  lastUpdated?: string;
+  dataStatus?: 'LIVE' | 'REFERENCE' | 'UNAVAILABLE';
+  website?: string;
+  businessSummary?: string;
+  fundamentals?: StockFundamentals;
+  // Multi-period returns during fetch
+  change1mPct?: number;
+  change1wPct?: number;
+  change3mPct?: number;
+  change1yPct?: number;
+  change1mAmount?: number;
+}
+
+export interface HistoricalBar {
+  date: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+  ema20?: number;
+  ema50?: number;
+  ema200?: number;
+  sma20?: number;
+  sma50?: number;
+  sma200?: number;
+  rsi?: number;
+  macd?: number;
+  macdSignal?: number;
+  macdHist?: number;
+  bbUpper?: number;
+  bbLower?: number;
+  atr?: number;
+  adx?: number;
+}
+
+export interface TechnicalIndicators {
+  rsi: number;
+  macd: number;
+  macdSignal: number;
+  macdHist: number;
+  ema20: number;
+  ema50: number;
+  ema200: number;
+  volatility20d: number;
+  atr?: number;
+  adx?: number;
+  bbBandwidth?: number;
+  roc10?: number;
+  momentum10?: number;
+}
+
+export interface NewsArticle {
+  title: string;
+  publisher: string;
+  date: string;
+  summary: string;
+  vaderScore: number;
+  finbertScore: number;
+  sentimentLabel?: 'POSITIVE' | 'NEUTRAL' | 'NEGATIVE';
+}
+
+export interface RedditPost {
+  title: string;
+  subreddit: string;
+  score: number;
+  numComments: number;
+  url: string;
+  date?: string;
+  vaderScore?: number;
+  finbertScore?: number;
+  sentimentLabel?: 'POSITIVE' | 'NEUTRAL' | 'NEGATIVE';
+}
+
+export interface RedditResult {
+  status: 'AUTH_REQUIRED' | 'SUCCESS' | 'EMPTY' | 'RATE_LIMITED' | 'ERROR';
+  message: string;
+  postCount: number;
+  posts: RedditPost[];
+  socialBuzzScore?: number;
+  bullishPct?: number;
+  bearishPct?: number;
+}
+
+export interface SentimentData {
+  vaderCompound: number;
+  finbertScore: number;
+  newsCount: number;
+  overallScore: number;
+  label: 'BULLISH' | 'NEUTRAL' | 'BEARISH';
+  articles: NewsArticle[];
+  reddit: RedditResult;
+  dataStatus?: 'LIVE' | 'EMPTY' | 'UNAVAILABLE';
+}
+
+export interface AnnualFinancialRow {
+  year: string;
+  revenue: number; // In ₹ Cr (or $B)
+  expenses: number;
+  operatingProfit: number;
+  opmPct: number;
+  depreciation: number;
+  interest: number;
+  pbt: number;
+  tax: number;
+  netProfit: number; // Profit After Tax (PAT) -> negative represents Loss
+  netProfitGrowthPct?: number; // YoY growth
+  patMarginPct: number;
+  eps: number;
+  roePct: number;
+  debtToEquity: number;
+}
+
+export interface ShareholdingPattern {
+  promoterPct: number;
+  fiiPct: number;
+  diiPct: number;
+  publicPct: number;
+}
+
+export interface StockFundamentals {
+  peRatio?: number;
+  forwardPe?: number;
+  pbRatio?: number;
+  eps?: number;
+  marketCap?: string;
+  enterpriseValue?: string;
+  bookValue?: number;
+  faceValue?: number;
+  dividendYield?: number;
+  roe?: number;
+  roce?: number;
+  debtToEquity?: number;
+  totalRevenue?: string;
+  revenueGrowthYoY?: string;
+  profitMarginPct?: number;
+  operatingMarginPct?: number;
+  grossMarginPct?: number;
+  freeCashFlow?: string;
+  operatingCashFlow?: string;
+  currentRatio?: number;
+  website?: string;
+  sector?: string;
+  industry?: string;
+  businessSummary?: string;
+  financialHealthGrade?: 'A+ (Excellent)' | 'A (Strong)' | 'B (Moderate)' | 'C (Leveraged)' | 'D (Distressed)';
+  profitSituation?: 'Surging Profit Growth' | 'Stable Expansion' | 'Margin Compression' | 'Loss Accumulation';
+  annualPnL?: AnnualFinancialRow[];
+  shareholding?: ShareholdingPattern;
+  dataStatus?: 'LIVE_PROVIDER_DATA' | 'SAMPLE_DATA' | 'VERIFIED_AUDIT' | 'UNAVAILABLE';
+  pnlStatus?: 'LIVE_PROVIDER_DATA' | 'SAMPLE_DATA' | 'VERIFIED_AUDIT' | 'UNAVAILABLE';
+  shareholdingStatus?: 'LIVE_PROVIDER_DATA' | 'SAMPLE_DATA' | 'VERIFIED_AUDIT' | 'UNAVAILABLE';
+}
+
+export interface BenchmarkData {
+  benchmarkTicker: string;
+  marketReturn1d?: number;
+  marketReturn5d?: number;
+  marketReturn20d?: number;
+  marketVolatility20d?: number;
+  dataStatus?: 'LIVE' | 'UNAVAILABLE';
+}
+
+export interface FeatureContribution {
+  feature: string;
+  value: number;
+  impact: number;
+  direction: 'POSITIVE' | 'NEGATIVE';
+  description: string;
+}
+
+export interface BullishCatalyst {
+  source: 'NEWS_API' | 'REDDIT_SOCIAL' | 'TECHNICAL_MOMENTUM';
+  title: string;
+  category: string;
+  impactScore: number;
+  upsidePotential: string;
+  reasoning: string;
+}
+
+export interface TomorrowForecast {
+  direction: 'RISE' | 'FALL' | 'NEUTRAL';
+  tradeAction: 'BUY' | 'SELL' | 'HOLD';
+  accuracyPct: number;
+  probabilityRisePct: number;
+  probabilityFallPct: number;
+  expectedTargetPrice: number;
+  expectedRangeLow: number;
+  expectedRangeHigh: number;
+  expectedChangePct: number;
+  pivotPoint: number;
+  supportLevel: number;
+  resistanceLevel: number;
+  gapOutlook: 'GAP UP' | 'GAP DOWN' | 'FLAT OPEN';
+  confidenceLabel: 'HIGH CONFIDENCE' | 'MODERATE' | 'SPECULATIVE';
+  rationale: string;
+  keyDrivers: string[];
+}
+
+export interface ModelSignal {
+  signal: 'BUY' | 'HOLD' | 'SELL' | 'HOLD / LOW CONFIDENCE';
+  probabilities: {
+    BUY: number;
+    HOLD: number;
+    SELL: number;
+  };
+  confidence: 'High' | 'Medium' | 'Low';
+  confidenceScore: number;
+  predictionHorizon: string;
+  modelName: string;
+  topContributions: FeatureContribution[];
+  // Unified Hybrid Model Attributes
+  unifiedScore: number;
+  exactAction: 'STRONG BUY' | 'BUY' | 'HOLD' | 'SELL' | 'STRONG SELL';
+  breakdown: {
+    finbert: { score: number; weight: number; contribution: number };
+    vader: { score: number; weight: number; contribution: number };
+    technicals: { score: number; weight: number; contribution: number };
+    fundamentals?: { score: number; weight: number; contribution: number };
+    mlEnsemble: { score: number; weight: number; contribution: number };
+  };
+  executiveSummary: string;
+  catalysts?: BullishCatalyst[];
+  upwardProbabilityPct?: number;
+  tomorrowForecast?: TomorrowForecast;
+  professionalTradeSetup?: ProfessionalTradeSetup;
+}
+
+export interface ProfessionalTradeSetup {
+  bias: 'BULLISH SWING' | 'INTRADAY MOMENTUM' | 'BEARISH BREAKDOWN' | 'MEAN REVERSION';
+  entryZone: string;
+  triggerPrice: number;
+  stopLoss: number;
+  stopLossPct: number;
+  target1: number;
+  target1Pct: number;
+  target2: number;
+  target2Pct: number;
+  riskRewardRatio: string;
+  vwap: number;
+  priceVsVwap: 'ABOVE VWAP (BULLISH)' | 'BELOW VWAP (BEARISH)' | 'AT VWAP';
+  deliveryVolumePct: number;
+  institutionalBias: 'INSTITUTIONAL ACCUMULATION' | 'INSTITUTIONAL DISTRIBUTION' | 'NEUTRAL ROTATION';
+  multiTimeframeConfluence: {
+    dailyTrend: 'STRONG BULLISH' | 'BEARISH' | 'CONSOLIDATION';
+    hourlyBreakout: 'CONFIRMED' | 'TESTING RESISTANCE' | 'BREAKDOWN' | 'RANGE';
+    momentumRsi: 'BULLISH (>55)' | 'OVERSOLD (<35)' | 'OVERBOUGHT (>70)' | 'BEARISH (<45)';
+    confluenceRating: '4/4 HIGH CONFLUENCE' | '3/4 MODERATE' | '2/4 WEAK';
+  };
+  recommendedPositionSizePct: number;
+  traderPlaybook: string;
+}
+
+export interface BacktestTrade {
+  entryDate: string;
+  exitDate: string;
+  entryPrice: number;
+  exitPrice: number;
+  returnPct: number;
+  won: boolean;
+}
+
+export interface EquityPoint {
+  date: string;
+  strategy: number;
+  buyHold: number;
+}
+
+export interface BacktestResult {
+  metrics: {
+    strategyReturnPct: number;
+    buyHoldReturnPct: number;
+    strategyCagrPct: number;
+    buyHoldCagrPct: number;
+    sharpeRatio: number;
+    maxDrawdownPct: number;
+    buyHoldMaxDrawdownPct: number;
+    winRatePct: number;
+    totalTrades: number;
+    winningTrades: number;
+    profitFactor: number;
+    calmarRatio: number;
+    initialCapital: number;
+    finalCapital: number;
+  };
+  equityCurve: EquityPoint[];
+  trades: BacktestTrade[];
+}
+
+export interface ScannerCandidate {
+  ticker: string;
+  name: string;
+  exchange: string;
+  country: string;
+  sector: string;
+  price: number;
+  changePct: number;
+  rsi: number;
+  emaAlignment: 'Bullish' | 'Bearish';
+  macdHist: number;
+  signal: 'BUY' | 'HOLD' | 'SELL';
+}
+
+export interface ScannerResult {
+  totalCandidates: number;
+  matchesFound: number;
+  results: ScannerCandidate[];
+}
+
+export interface ModelComparisonMetric {
+  model: string;
+  accuracy: number;
+  balancedAccuracy: number;
+  precision: number;
+  recall: number;
+  f1: number;
+  sharpe: number;
+  maxDrawdown: number;
+  totalReturn: number;
+}
+
+export interface IPODetails {
+  id: string;
+  companyName: string;
+  symbol: string;
+  exchange: 'NSE / BSE' | 'NSE SME' | 'BSE SME' | 'NASDAQ / NYSE';
+  sector: string;
+  industry: string;
+  status: 'OPEN NOW' | 'UPCOMING' | 'CLOSED' | 'LISTED';
+  ipoType?: 'Mainboard' | 'SME';
+  openDate: string;
+  closeDate: string;
+  listingDate: string;
+  priceBand: string;
+  minPrice: number;
+  maxPrice: number;
+  issuePrice?: number;
+  listingPrice?: number;
+  currentPrice?: number;
+  listingGainLossPct?: number;
+  dataStatus?: 'REFERENCE_CATALOG' | 'LIVE_FEED';
+  issueSizeCr: number;
+  freshIssueCr: number;
+  ofsCr: number;
+  lotSize: number;
+  minInvestment: number;
+  retailQuotaPct?: number;
+  gmpAmount?: number;
+  gmpPct?: number;
+  expectedListingPrice?: number;
+  subscription?: {
+    qib: number;
+    nii: number;
+    retail: number;
+    total: number;
+  };
+  website: string;
+  businessSummary: string;
+  revenueYoYGrowthPct: number;
+  annualRevenueCr: number;
+  netProfitLossCr: number;
+  profitMarginPct: number;
+  debtToEquity: number;
+  postIssuePe: number;
+  peerAveragePe: number;
+  promoterHoldingPostPct: number;
+  strengths: string[];
+  redFlags: string[];
+  verdict?: 'STRONG APPLY' | 'APPLY FOR LISTING GAINS' | 'NEUTRAL / MAY AVOID' | 'AVOID (HIGH RISK)' | 'REFERENCE DISCLOSURE' | 'HISTORICAL FILING';
+  verdictScore?: number;
+  verdictRationale?: string;
+  longTermSuitability?: 'HIGH' | 'MODERATE' | 'LOW' | 'SPECULATIVE' | 'REFERENCE';
+  anchorBook?: {
+    totalCr: number;
+    marqueeInvestors: string[];
+    lockin30dDate: string;
+    lockin90dDate: string;
+  };
+  listingDayPlaybook?: {
+    ifOpensPremium: string;
+    ifOpensFlat: string;
+    trailStopLossRule: string;
+  };
+  biddingCategoryStrategy?: {
+    retailAdvice: string;
+    hniAdvice: string;
+    allotmentOdds: 'HIGH CHANCE' | 'MODERATE CHANCE' | 'HEAVILY OVERSUBSCRIBED LOTTERY';
+  };
+  valuationMatrix?: {
+    fairValueEst: number;
+    marginOfSafetyPct: number;
+    evToEbitda: number;
+    priceToSales: number;
+  };
+  gmpHistory?: Array<{ date: string; gmpPrice: number; gmpPct: number }>;
+}
