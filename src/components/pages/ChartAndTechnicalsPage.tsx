@@ -22,7 +22,7 @@ export const ChartAndTechnicalsPage: React.FC<ChartAndTechnicalsPageProps> = ({
       <ChartsPage ticker={ticker} bars={bars} quote={quote} />
 
       {/* 2. Technical Oscillators & Moving Average Hierarchy Scorecard */}
-      <TechnicalIndicatorsPage technicals={technicals} quote={quote} />
+      <TechnicalIndicatorsPage technicals={technicals} quote={quote} bars={bars} />
     </div>
   );
 };

@@ -32,8 +32,10 @@ export interface HistoricalBar {
   low: number;
   close: number;
   volume: number;
+  ema10?: number;
   ema20?: number;
   ema50?: number;
+  ema100?: number;
   ema200?: number;
   sma20?: number;
   sma50?: number;
@@ -44,20 +46,25 @@ export interface HistoricalBar {
   macdHist?: number;
   bbUpper?: number;
   bbLower?: number;
+  bbMiddle?: number;
+  bbBandwidth?: number;
+  bbPercentB?: number;
+  stochK?: number;
+  stochD?: number;
   atr?: number;
   adx?: number;
 }
 
 export interface TechnicalIndicators {
-  rsi: number;
-  macd: number;
-  macdSignal: number;
-  macdHist: number;
+  rsi?: number;
+  macd?: number;
+  macdSignal?: number;
+  macdHist?: number;
   ema10?: number;
-  ema20: number;
-  ema50: number;
+  ema20?: number;
+  ema50?: number;
   ema100?: number;
-  ema200: number;
+  ema200?: number;
   volatility20d: number;
   atr?: number;
   adx?: number;
@@ -65,6 +72,7 @@ export interface TechnicalIndicators {
   bbLower?: number;
   bbMiddle?: number;
   bbBandwidth?: number;
+  bbPercentB?: number;
   stochK?: number;
   stochD?: number;
   pivot?: number;
@@ -80,6 +88,7 @@ export interface TechnicalIndicators {
   fibS2?: number;
   roc10?: number;
   momentum10?: number;
+  dataStatus?: 'LIVE' | 'UNAVAILABLE';
 }
 
 export interface NewsArticle {
@@ -270,9 +279,9 @@ export interface ProfessionalTradeSetup {
   target2Pct: number;
   riskRewardRatio: string;
   vwap: number;
-  priceVsVwap: 'ABOVE VWAP (BULLISH)' | 'BELOW VWAP (BEARISH)' | 'AT VWAP';
+  priceVsVwap: 'ABOVE VWAP (BULLISH)' | 'BELOW VWAP (BEARISH)' | 'AT VWAP' | 'UNAVAILABLE';
   deliveryVolumePct: number;
-  institutionalBias: 'INSTITUTIONAL ACCUMULATION' | 'INSTITUTIONAL DISTRIBUTION' | 'NEUTRAL ROTATION';
+  institutionalBias: 'INSTITUTIONAL ACCUMULATION' | 'INSTITUTIONAL DISTRIBUTION' | 'NEUTRAL ROTATION' | 'UNAVAILABLE';
   multiTimeframeConfluence: {
     dailyTrend: 'STRONG BULLISH' | 'BEARISH' | 'CONSOLIDATION';
     hourlyBreakout: 'CONFIRMED' | 'TESTING RESISTANCE' | 'BREAKDOWN' | 'RANGE';
@@ -317,6 +326,7 @@ export interface BacktestResult {
   };
   equityCurve: EquityPoint[];
   trades: BacktestTrade[];
+  dataStatus?: 'LIVE' | 'UNAVAILABLE';
 }
 
 export interface ScannerCandidate {

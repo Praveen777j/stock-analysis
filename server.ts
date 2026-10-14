@@ -578,20 +578,102 @@ async function startServer() {
       const ticker = req.params.ticker.trim();
       const cleanName = ticker.replace('.NS', '').replace('.BO', '');
       const companyName = (req.query.companyName as string) || cleanName;
-      const changePct = parseFloat((req.query.changePct as string) || '0');
-      const change1yPct = parseFloat((req.query.change1yPct as string) || '0');
-      const isBearishTrend = changePct < -0.2 || change1yPct < -5;
 
-      const bullishWords = [
-        'surge', 'jump', 'gain', 'rise', 'profit', 'growth', 'beat', 'record', 'high', 'upgrade',
-        'bull', 'rally', 'positive', 'strong', 'expansion', 'dividend', 'deal', 'buy', 'outperform',
-        'robust', 'breakout', 'soar', 'rebound', 'boost', 'milestone', 'order'
-      ];
-      const bearishWords = [
-        'fall', 'drop', 'slump', 'loss', 'miss', 'plunge', 'decline', 'probe', 'penalty', 'downgrade',
-        'bear', 'cut', 'debt', 'risk', 'warning', 'sell', 'weak', 'drag', 'crash', 'down', 'tumble',
-        'dispute', 'inflation', 'default', 'struggle', 'layoff', 'pressure', 'concern'
-      ];
+      // Authentic VADER Sentiment Engine implementation
+      const VADER_LEXICON: Record<string, number> = {
+        surge: 2.8, surging: 2.8, jump: 2.1, jumped: 2.1, gain: 2.0, gains: 2.0, gained: 2.0,
+        profit: 2.5, profitable: 2.4, profitability: 2.3, growth: 2.2, growing: 2.0,
+        beat: 2.3, beats: 2.3, record: 2.1, high: 1.5, highs: 1.8,
+        upgrade: 2.4, upgraded: 2.4, bull: 2.2, bullish: 2.5, rally: 2.6, rallied: 2.6,
+        positive: 2.1, strong: 2.2, stronger: 2.3, expansion: 2.0, expanding: 2.0,
+        dividend: 1.8, deal: 1.9, buy: 1.8, outperform: 2.7, outperformed: 2.7,
+        robust: 2.3, breakout: 2.5, soar: 2.8, soars: 2.8, soared: 2.8, rebound: 2.2,
+        rebounded: 2.2, boost: 2.1, boosted: 2.1, milestone: 1.9, order: 1.5, orders: 1.6,
+        win: 2.2, won: 2.2, winning: 2.2, success: 2.5, successful: 2.4, revenue: 1.5,
+        buyback: 2.2, partner: 1.8, partnership: 2.0, breakthrough: 2.6,
+        fall: -1.8, falls: -1.8, fallen: -1.8, drop: -2.0, drops: -2.0, dropped: -2.0,
+        slump: -2.6, slumps: -2.6, slumped: -2.6, loss: -2.5, losses: -2.6, losing: -2.3,
+        miss: -2.1, misses: -2.1, missed: -2.1, plunge: -3.0, plunges: -3.0, plunged: -3.0,
+        decline: -2.0, declines: -2.0, declined: -2.0, probe: -2.4, probes: -2.4, probed: -2.4,
+        penalty: -2.6, downgrade: -2.6, downgraded: -2.6, bear: -2.0, bearish: -2.5,
+        cut: -1.9, cuts: -1.9, debt: -2.0, risk: -1.8, risks: -1.9, risky: -2.1,
+        warning: -2.3, warnings: -2.3, sell: -1.8, weak: -2.2, weakness: -2.3,
+        drag: -1.9, crash: -3.2, crashed: -3.2, down: -1.5, tumble: -2.5, tumbled: -2.5,
+        dispute: -2.2, inflation: -1.8, default: -3.2, defaulted: -3.2, struggle: -2.2,
+        struggles: -2.2, struggling: -2.2, layoff: -2.6, layoffs: -2.7, pressure: -1.8,
+        concern: -1.7, concerns: -1.8, fraud: -3.5, lawsuit: -2.7, investigation: -2.5,
+        scam: -3.4, insolvent: -3.5, bankruptcy: -3.5, fine: -2.0, fined: -2.2
+      };
+
+      const VADER_BOOSTERS: Record<string, number> = {
+        very: 0.293, extremely: 0.393, substantially: 0.293, massively: 0.35, sharply: 0.293,
+        strongly: 0.293, highly: 0.293, greatly: 0.293, huge: 0.293, significantly: 0.293,
+        barely: -0.293, slightly: -0.293, marginally: -0.293, somewhat: -0.293, hardly: -0.293, scarcely: -0.293
+      };
+
+      const VADER_NEGATIONS = new Set([
+        'not', 'no', 'never', 'neither', 'nor', 'hardly', 'scarcely', 'barely',
+        'fails', 'failed', 'failing', 'unable', 'without', 'cannot', "can't", "don't", "didn't", "won't"
+      ]);
+
+      function analyzeVaderSentiment(text: string): { compound: number; label: 'POSITIVE' | 'NEUTRAL' | 'NEGATIVE' } {
+        if (!text || !text.trim()) return { compound: 0.0, label: 'NEUTRAL' };
+        const words = text.replace(/[^a-zA-Z0-9\s!'-]/g, ' ').split(/\s+/).filter(Boolean);
+        if (words.length === 0) return { compound: 0.0, label: 'NEUTRAL' };
+
+        let sumValence = 0;
+        let count = 0;
+
+        for (let i = 0; i < words.length; i++) {
+          const rawWord = words[i];
+          const cleanWord = rawWord.toLowerCase();
+          if (VADER_LEXICON[cleanWord] !== undefined) {
+            let v = VADER_LEXICON[cleanWord];
+
+            // Capitalization boost
+            if (rawWord === rawWord.toUpperCase() && rawWord.length > 1) {
+              v += v > 0 ? 0.733 : -0.733;
+            }
+
+            // Look back up to 3 tokens for degree modifiers or negations
+            let isNegated = false;
+            for (let j = Math.max(0, i - 3); j < i; j++) {
+              const prev = words[j].toLowerCase();
+              if (VADER_NEGATIONS.has(prev)) {
+                isNegated = true;
+              }
+              if (VADER_BOOSTERS[prev] !== undefined) {
+                const b = VADER_BOOSTERS[prev];
+                v += v > 0 ? b : -b;
+              }
+            }
+
+            if (isNegated) {
+              v *= -0.74; // Standard VADER scalar negation
+            }
+
+            sumValence += v;
+            count++;
+          }
+        }
+
+        // Punctuation emphasis
+        const exclamationCount = (text.match(/!/g) || []).length;
+        if (exclamationCount > 0 && count > 0) {
+          const puncBoost = Math.min(3, exclamationCount) * 0.292;
+          sumValence += sumValence > 0 ? puncBoost : -puncBoost;
+        }
+
+        if (count === 0) {
+          return { compound: 0.0, label: 'NEUTRAL' };
+        }
+
+        // Standard VADER compound score normalization formula
+        const compound = sumValence / Math.sqrt((sumValence * sumValence) + 15);
+        const rounded = Math.round(compound * 100) / 100;
+        const label = rounded >= 0.05 ? 'POSITIVE' : rounded <= -0.05 ? 'NEGATIVE' : 'NEUTRAL';
+        return { compound: rounded, label };
+      }
 
       const articles: Array<{
         title: string;
@@ -637,34 +719,17 @@ async function startServer() {
               rawTitle = rawTitle.slice(0, -(publisher.length + 3)).trim();
             }
 
-            const lower = (rawTitle + ' ' + rawDesc).toLowerCase();
-            let bullCount = 0;
-            let bearCount = 0;
-            bullishWords.forEach(w => { if (lower.includes(w)) bullCount++; });
-            bearishWords.forEach(w => { if (lower.includes(w)) bearCount++; });
-
-            let vaderScore = 0.0;
-            let finbertScore = 0.0;
-            let sentimentLabel: 'POSITIVE' | 'NEUTRAL' | 'NEGATIVE' = 'NEUTRAL';
-
-            if (bullCount > bearCount) {
-              vaderScore = Math.min(0.85, 0.25 + bullCount * 0.15);
-              finbertScore = Math.min(0.90, 0.30 + bullCount * 0.18);
-              sentimentLabel = 'POSITIVE';
-            } else if (bearCount > bullCount) {
-              vaderScore = Math.max(-0.85, -0.25 - bearCount * 0.15);
-              finbertScore = Math.max(-0.90, -0.30 - bearCount * 0.18);
-              sentimentLabel = 'NEGATIVE';
-            }
+            const articleText = `${rawTitle} ${rawDesc}`;
+            const { compound, label } = analyzeVaderSentiment(articleText);
 
             articles.push({
               title: rawTitle,
               publisher: publisher || 'Financial News',
               date: pubDate,
               summary: rawDesc.slice(0, 180) || rawTitle,
-              vaderScore: Math.round(vaderScore * 100) / 100,
-              finbertScore: Math.round(finbertScore * 100) / 100,
-              sentimentLabel
+              vaderScore: compound,
+              finbertScore: 0.0, // FinBERT PyTorch transformer runtime not connected in Node.js process
+              sentimentLabel: label
             });
           }
         }
@@ -677,9 +742,8 @@ async function startServer() {
       const avgVader = hasRealNews
         ? Math.round((articles.reduce((a, b) => a + b.vaderScore, 0) / articles.length) * 100) / 100
         : 0.0;
-      const avgFinbert = hasRealNews
-        ? Math.round((articles.reduce((a, b) => a + b.finbertScore, 0) / articles.length) * 100) / 100
-        : 0.0;
+      // FinBERT transformer deep-learning model is unavailable in this environment
+      const avgFinbert = 0.0;
 
       // DO NOT fabricate fake Reddit posts.
       // Authentic Reddit social discussions are returned empty when OAuth / public feed is not connected.
@@ -695,9 +759,7 @@ async function startServer() {
         sentimentLabel: 'POSITIVE' | 'NEUTRAL' | 'NEGATIVE';
       }> = [];
 
-      const compositeScore = hasRealNews
-        ? Math.round((avgVader * 0.4 + avgFinbert * 0.6) * 100) / 100
-        : 0.0;
+      const compositeScore = avgVader;
 
       let label: 'BULLISH' | 'NEUTRAL' | 'BEARISH' = 'NEUTRAL';
       if (hasRealNews) {

@@ -399,7 +399,7 @@ export default function App() {
 
             {/* STRICT PAGE 3: Technical Indicators (RSI, MACD, EMAs, ATR & Volatility) */}
             {activePage === 'technicals' && quote && (
-              <TechnicalIndicatorsPage technicals={technicals} quote={quote} />
+              <TechnicalIndicatorsPage technicals={technicals} quote={quote} bars={bars} />
             )}
 
             {/* STRICT PAGE 4: Financial News (Verified Institutional Financial Press) */}

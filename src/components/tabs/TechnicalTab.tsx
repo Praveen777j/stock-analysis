@@ -25,19 +25,23 @@ export const TechnicalTab: React.FC<TechnicalTabProps> = ({ technicals, quote, b
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 text-xs">
         <div className="bg-slate-900/50 border border-slate-800 rounded-lg p-3">
           <span className="text-slate-400">RSI (14)</span>
-          <div className="text-lg font-bold font-mono text-indigo-400 mt-1">{technicals.rsi.toFixed(1)}</div>
+          <div className="text-lg font-bold font-mono text-indigo-400 mt-1">
+            {technicals.rsi !== undefined ? technicals.rsi.toFixed(1) : 'N/A'}
+          </div>
           <div className="text-[11px] text-slate-500 mt-0.5">
-            {technicals.rsi > 70 ? 'Overbought (>70)' : technicals.rsi < 30 ? 'Oversold (<30)' : 'Neutral Zone'}
+            {technicals.rsi !== undefined ? (technicals.rsi > 70 ? 'Overbought (>70)' : technicals.rsi < 30 ? 'Oversold (<30)' : 'Neutral Zone') : 'Requires 15 bars'}
           </div>
         </div>
 
         <div className="bg-slate-900/50 border border-slate-800 rounded-lg p-3">
           <span className="text-slate-400">MACD Histogram</span>
-          <div className={`text-lg font-bold font-mono mt-1 ${technicals.macdHist >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-            {technicals.macdHist.toFixed(2)}
+          <div className={`text-lg font-bold font-mono mt-1 ${technicals.macdHist !== undefined ? (technicals.macdHist >= 0 ? 'text-emerald-400' : 'text-rose-400') : 'text-slate-400'}`}>
+            {technicals.macdHist !== undefined ? technicals.macdHist.toFixed(2) : 'N/A'}
           </div>
           <div className="text-[11px] text-slate-500 mt-0.5">
-            MACD: {technicals.macd.toFixed(2)} · Sig: {technicals.macdSignal.toFixed(2)}
+            {technicals.macd !== undefined && technicals.macdSignal !== undefined
+              ? `MACD: ${technicals.macd.toFixed(2)} · Sig: ${technicals.macdSignal.toFixed(2)}`
+              : 'Requires 34 bars'}
           </div>
         </div>
 
@@ -68,39 +72,53 @@ export const TechnicalTab: React.FC<TechnicalTabProps> = ({ technicals, quote, b
         {/* Moving Averages Row */}
         <div className="bg-slate-900/50 border border-slate-800 rounded-lg p-3">
           <span className="text-slate-400">EMA 20</span>
-          <div className="text-lg font-bold font-mono text-amber-400 mt-1">{technicals.ema20.toFixed(1)}</div>
+          <div className="text-lg font-bold font-mono text-amber-400 mt-1">
+            {technicals.ema20 !== undefined ? technicals.ema20.toFixed(1) : 'N/A'}
+          </div>
           <div className="text-[11px] text-slate-500 mt-0.5">
-            Spread: {(((quote.price / technicals.ema20) - 1) * 100).toFixed(1)}%
+            {technicals.ema20 !== undefined ? `Spread: ${(((quote.price / technicals.ema20) - 1) * 100).toFixed(1)}%` : 'Requires 20 bars'}
           </div>
         </div>
 
         <div className="bg-slate-900/50 border border-slate-800 rounded-lg p-3">
           <span className="text-slate-400">EMA 50</span>
-          <div className="text-lg font-bold font-mono text-emerald-400 mt-1">{technicals.ema50.toFixed(1)}</div>
+          <div className="text-lg font-bold font-mono text-emerald-400 mt-1">
+            {technicals.ema50 !== undefined ? technicals.ema50.toFixed(1) : 'N/A'}
+          </div>
           <div className="text-[11px] text-slate-500 mt-0.5">
-            Alignment: {technicals.ema20 > technicals.ema50 ? 'Bullish' : 'Bearish'}
+            {technicals.ema20 !== undefined && technicals.ema50 !== undefined
+              ? `Alignment: ${technicals.ema20 > technicals.ema50 ? 'Bullish' : 'Bearish'}`
+              : 'Requires 50 bars'}
           </div>
         </div>
 
         <div className="bg-slate-900/50 border border-slate-800 rounded-lg p-3">
           <span className="text-slate-400">EMA 200</span>
-          <div className="text-lg font-bold font-mono text-purple-400 mt-1">{technicals.ema200.toFixed(1)}</div>
+          <div className="text-lg font-bold font-mono text-purple-400 mt-1">
+            {technicals.ema200 !== undefined ? technicals.ema200.toFixed(1) : 'N/A'}
+          </div>
           <div className="text-[11px] text-slate-500 mt-0.5">
-            Macro Bias: {quote.price > technicals.ema200 ? 'Above Baseline' : 'Below Baseline'}
+            {technicals.ema200 !== undefined
+              ? `Macro Bias: ${quote.price > technicals.ema200 ? 'Above Baseline' : 'Below Baseline'}`
+              : 'Requires 200 bars'}
           </div>
         </div>
 
         <div className="bg-slate-900/50 border border-slate-800 rounded-lg p-3">
           <span className="text-slate-400">Bollinger Bandwidth</span>
-          <div className="text-lg font-bold font-mono text-slate-200 mt-1">{technicals.bbBandwidth || 6.2}%</div>
+          <div className="text-lg font-bold font-mono text-slate-200 mt-1">
+            {technicals.bbBandwidth !== undefined ? `${technicals.bbBandwidth.toFixed(1)}%` : 'N/A'}
+          </div>
           <div className="text-[11px] text-slate-500 mt-0.5">
-            Upper: {latest.bbUpper?.toFixed(1) || (quote.price * 1.05).toFixed(1)}
+            Upper: {latest?.bbUpper !== undefined ? latest.bbUpper.toFixed(1) : 'N/A'}
           </div>
         </div>
 
         <div className="bg-slate-900/50 border border-slate-800 rounded-lg p-3">
           <span className="text-slate-400">Rate of Change (ROC 10)</span>
-          <div className="text-lg font-bold font-mono text-slate-200 mt-1">+{technicals.roc10 || 2.4}%</div>
+          <div className="text-lg font-bold font-mono text-slate-200 mt-1">
+            {technicals.roc10 !== undefined ? `${technicals.roc10 >= 0 ? '+' : ''}${technicals.roc10.toFixed(1)}%` : 'N/A'}
+          </div>
           <div className="text-[11px] text-slate-500 mt-0.5">10-Session Velocity</div>
         </div>
       </div>

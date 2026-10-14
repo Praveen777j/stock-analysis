@@ -94,7 +94,7 @@ export const PredictionTab: React.FC<PredictionTabProps> = ({ signal, quote }) =
             <div className="bg-slate-950/60 border border-slate-800/80 p-3 rounded-xl space-y-1">
               <div className="flex items-center justify-between">
                 <span className="text-slate-400 text-[11px]">1. Technicals</span>
-                <span className="text-[10px] text-amber-400 font-bold">30%</span>
+                <span className="text-[10px] text-amber-400 font-bold">{Math.round(breakdown.technicals.weight * 100)}%</span>
               </div>
               <div className={`text-lg font-bold ${breakdown.technicals.score >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                 {breakdown.technicals.score >= 0 ? '+' : ''}{breakdown.technicals.score.toFixed(2)}
@@ -108,7 +108,7 @@ export const PredictionTab: React.FC<PredictionTabProps> = ({ signal, quote }) =
             <div className="bg-slate-950/60 border border-slate-800/80 p-3 rounded-xl space-y-1">
               <div className="flex items-center justify-between">
                 <span className="text-slate-400 text-[11px]">2. FinBERT News</span>
-                <span className="text-[10px] text-emerald-400 font-bold">25%</span>
+                <span className="text-[10px] text-emerald-400 font-bold">{Math.round(breakdown.finbert.weight * 100)}%</span>
               </div>
               <div className={`text-lg font-bold ${breakdown.finbert.score >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                 {breakdown.finbert.score >= 0 ? '+' : ''}{breakdown.finbert.score.toFixed(2)}
@@ -122,7 +122,7 @@ export const PredictionTab: React.FC<PredictionTabProps> = ({ signal, quote }) =
             <div className="bg-slate-950/60 border border-slate-800/80 p-3 rounded-xl space-y-1">
               <div className="flex items-center justify-between">
                 <span className="text-slate-400 text-[11px]">3. P&L & Debt</span>
-                <span className="text-[10px] text-teal-400 font-bold">15%</span>
+                <span className="text-[10px] text-teal-400 font-bold">{breakdown.fundamentals ? `${Math.round(breakdown.fundamentals.weight * 100)}%` : '0% (N/A)'}</span>
               </div>
               <div className={`text-lg font-bold ${(breakdown.fundamentals?.score ?? 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                 {(breakdown.fundamentals?.score ?? 0) >= 0 ? '+' : ''}{(breakdown.fundamentals?.score ?? 0).toFixed(2)}
@@ -136,7 +136,7 @@ export const PredictionTab: React.FC<PredictionTabProps> = ({ signal, quote }) =
             <div className="bg-slate-950/60 border border-slate-800/80 p-3 rounded-xl space-y-1">
               <div className="flex items-center justify-between">
                 <span className="text-slate-400 text-[11px]">4. VADER Social</span>
-                <span className="text-[10px] text-indigo-400 font-bold">15%</span>
+                <span className="text-[10px] text-indigo-400 font-bold">{Math.round(breakdown.vader.weight * 100)}%</span>
               </div>
               <div className={`text-lg font-bold ${breakdown.vader.score >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                 {breakdown.vader.score >= 0 ? '+' : ''}{breakdown.vader.score.toFixed(2)}
@@ -150,7 +150,7 @@ export const PredictionTab: React.FC<PredictionTabProps> = ({ signal, quote }) =
             <div className="bg-slate-950/60 border border-slate-800/80 p-3 rounded-xl space-y-1">
               <div className="flex items-center justify-between">
                 <span className="text-slate-400 text-[11px]">5. ML Ensemble</span>
-                <span className="text-[10px] text-sky-400 font-bold">15%</span>
+                <span className="text-[10px] text-sky-400 font-bold">{Math.round(breakdown.mlEnsemble.weight * 100)}%</span>
               </div>
               <div className={`text-lg font-bold ${breakdown.mlEnsemble.score >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                 {breakdown.mlEnsemble.score >= 0 ? '+' : ''}{breakdown.mlEnsemble.score.toFixed(2)}
@@ -209,7 +209,7 @@ export const PredictionTab: React.FC<PredictionTabProps> = ({ signal, quote }) =
                   Tomorrow Trading Directive
                 </span>
                 <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-indigo-950 text-indigo-300 border border-indigo-700">
-                  {signal.tomorrowForecast.accuracyPct || 95.8}% Backtested Accuracy
+                  {signal.tomorrowForecast.accuracyPct}% Factor Confluence
                 </span>
               </div>
               <div className="text-2xl font-black font-mono tracking-tight">

@@ -163,7 +163,7 @@ export const SignalBanner: React.FC<SignalBannerProps> = ({ signal }) => {
             </div>
             <div className="flex flex-wrap items-center gap-2 font-mono text-xs">
               <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-indigo-950 text-indigo-300 border border-indigo-700">
-                {signal.tomorrowForecast.accuracyPct || 95.8}% Backtested Accuracy
+                {signal.tomorrowForecast.accuracyPct}% Factor Confluence
               </span>
               <span className="text-slate-400">Opening Gap:</span>
               <span className={`px-2 py-0.5 rounded font-bold text-[11px] ${
