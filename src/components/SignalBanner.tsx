@@ -110,31 +110,31 @@ export const SignalBanner: React.FC<SignalBannerProps> = ({ signal }) => {
         {signal.breakdown && (
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 w-full md:w-auto font-mono text-xs">
             <div className="bg-slate-900/80 border border-slate-800 p-2 rounded-lg text-center">
-              <span className="text-[10px] text-slate-400 block">Technical (30%)</span>
+              <span className="text-[10px] text-slate-400 block">Technical ({Math.round(signal.breakdown.technicals.weight * 100)}%)</span>
               <span className={`font-bold ${signal.breakdown.technicals.score >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                 {signal.breakdown.technicals.score >= 0 ? '+' : ''}{signal.breakdown.technicals.score.toFixed(2)}
               </span>
             </div>
             <div className="bg-slate-900/80 border border-slate-800 p-2 rounded-lg text-center">
-              <span className="text-[10px] text-slate-400 block">FinBERT News (25%)</span>
-              <span className={`font-bold ${signal.breakdown.finbert.score >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                {signal.breakdown.finbert.score >= 0 ? '+' : ''}{signal.breakdown.finbert.score.toFixed(2)}
+              <span className="text-[10px] text-slate-400 block">FinBERT ({Math.round(signal.breakdown.finbert.weight * 100)}%)</span>
+              <span className={`font-bold ${signal.breakdown.finbert.status === 'UNAVAILABLE' || signal.breakdown.finbert.weight === 0 ? 'text-slate-500' : signal.breakdown.finbert.score >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                {signal.breakdown.finbert.status === 'UNAVAILABLE' || signal.breakdown.finbert.weight === 0 ? 'Offline' : `${signal.breakdown.finbert.score >= 0 ? '+' : ''}${signal.breakdown.finbert.score.toFixed(2)}`}
               </span>
             </div>
             <div className="bg-slate-900/80 border border-slate-800 p-2 rounded-lg text-center">
-              <span className="text-[10px] text-slate-400 block">P&L Financials (15%)</span>
-              <span className={`font-bold ${(signal.breakdown.fundamentals?.score ?? 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                {(signal.breakdown.fundamentals?.score ?? 0) >= 0 ? '+' : ''}{(signal.breakdown.fundamentals?.score ?? 0).toFixed(2)}
+              <span className="text-[10px] text-slate-400 block">P&L ({signal.breakdown.fundamentals ? `${Math.round(signal.breakdown.fundamentals.weight * 100)}%` : 'N/A'})</span>
+              <span className={`font-bold ${signal.breakdown.fundamentals ? ((signal.breakdown.fundamentals.score ?? 0) >= 0 ? 'text-emerald-400' : 'text-rose-400') : 'text-slate-500'}`}>
+                {signal.breakdown.fundamentals ? `${(signal.breakdown.fundamentals.score ?? 0) >= 0 ? '+' : ''}${(signal.breakdown.fundamentals.score ?? 0).toFixed(2)}` : 'N/A'}
               </span>
             </div>
             <div className="bg-slate-900/80 border border-slate-800 p-2 rounded-lg text-center">
-              <span className="text-[10px] text-slate-400 block">VADER Social (15%)</span>
+              <span className="text-[10px] text-slate-400 block">VADER ({Math.round(signal.breakdown.vader.weight * 100)}%)</span>
               <span className={`font-bold ${signal.breakdown.vader.score >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                 {signal.breakdown.vader.score >= 0 ? '+' : ''}{signal.breakdown.vader.score.toFixed(2)}
               </span>
             </div>
             <div className="bg-slate-900/80 border border-slate-800 p-2 rounded-lg text-center">
-              <span className="text-[10px] text-slate-400 block">Ensemble ML (15%)</span>
+              <span className="text-[10px] text-slate-400 block">Ensemble ML ({Math.round(signal.breakdown.mlEnsemble.weight * 100)}%)</span>
               <span className={`font-bold ${signal.breakdown.mlEnsemble.score >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                 {signal.breakdown.mlEnsemble.score >= 0 ? '+' : ''}{signal.breakdown.mlEnsemble.score.toFixed(2)}
               </span>

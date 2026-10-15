@@ -26,8 +26,8 @@ export const SentimentTab: React.FC<SentimentTabProps> = ({ sentiment, quote }) 
   const isBearish = sentiment.label === 'BEARISH';
 
   // Calculate positive / neutral / negative proportions across articles
-  const posCount = sentiment.articles.filter(a => a.finbertScore > 0.15).length;
-  const negCount = sentiment.articles.filter(a => a.finbertScore < -0.15).length;
+  const posCount = sentiment.articles.filter(a => a.sentimentLabel === 'POSITIVE' || a.vaderScore >= 0.05).length;
+  const negCount = sentiment.articles.filter(a => a.sentimentLabel === 'NEGATIVE' || a.vaderScore <= -0.05).length;
   const neuCount = Math.max(0, sentiment.articles.length - posCount - negCount);
   const total = Math.max(1, sentiment.articles.length);
 
@@ -82,13 +82,13 @@ export const SentimentTab: React.FC<SentimentTabProps> = ({ sentiment, quote }) 
         </div>
 
         <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-3.5">
-          <span className="text-slate-400 uppercase tracking-wider text-[11px] font-sans font-semibold">Financial Press Tone</span>
+          <span className="text-slate-400 uppercase tracking-wider text-[11px] font-sans font-semibold">Press Sentiment Tone</span>
           <div className={`text-2xl font-extrabold mt-1 ${
-            sentiment.finbertScore >= 0 ? 'text-emerald-400' : 'text-rose-400'
+            sentiment.vaderCompound >= 0 ? 'text-emerald-400' : 'text-rose-400'
           }`}>
-            {sentiment.finbertScore >= 0 ? '+' : ''}{sentiment.finbertScore.toFixed(2)}
+            {sentiment.vaderCompound >= 0 ? '+' : ''}{sentiment.vaderCompound.toFixed(2)}
           </div>
-          <div className="text-[10px] text-slate-400 mt-0.5 font-sans">Corporate News Analysis</div>
+          <div className="text-[10px] text-slate-400 mt-0.5 font-sans">VADER Sentiment Analysis</div>
         </div>
 
         <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-3.5">
@@ -136,13 +136,13 @@ export const SentimentTab: React.FC<SentimentTabProps> = ({ sentiment, quote }) 
                 Institutional Press Reporting
               </span>
               <span className={`font-mono text-[10px] px-2 py-0.5 rounded font-bold uppercase border ${
-                sentiment.finbertScore >= 0.15
+                sentiment.vaderCompound >= 0.05
                   ? 'bg-emerald-950 text-emerald-400 border-emerald-800'
-                  : sentiment.finbertScore <= -0.15
+                  : sentiment.vaderCompound <= -0.05
                   ? 'bg-rose-950 text-rose-400 border-rose-800'
                   : 'bg-slate-800 text-slate-300 border-slate-700'
               }`}>
-                {sentiment.finbertScore >= 0.15 ? 'BULLISH REPORTING' : sentiment.finbertScore <= -0.15 ? 'BEARISH CONCERNS' : 'NEUTRAL DISCLOSURE'}
+                {sentiment.vaderCompound >= 0.05 ? 'BULLISH REPORTING' : sentiment.vaderCompound <= -0.05 ? 'BEARISH CONCERNS' : 'NEUTRAL DISCLOSURE'}
               </span>
             </div>
             <p className="text-slate-300 text-[11px] leading-relaxed font-sans">
@@ -257,8 +257,8 @@ export const SentimentTab: React.FC<SentimentTabProps> = ({ sentiment, quote }) 
               </div>
             ) : (
               sentiment.articles.map((art, idx) => {
-              const isPositiveArticle = art.finbertScore > 0.15;
-              const isNegativeArticle = art.finbertScore < -0.15;
+              const isPositiveArticle = art.sentimentLabel === 'POSITIVE' || art.vaderScore >= 0.05;
+              const isNegativeArticle = art.sentimentLabel === 'NEGATIVE' || art.vaderScore <= -0.05;
               return (
                 <div
                   key={idx}
@@ -280,10 +280,27 @@ export const SentimentTab: React.FC<SentimentTabProps> = ({ sentiment, quote }) 
                         }`}>
                           {isPositiveArticle ? 'BULLISH IMPACT' : isNegativeArticle ? 'BEARISH CONCERN' : 'NEUTRAL DISCLOSURE'}
                         </span>
+                        {art.isCatalyst && (
+                          <span className="px-2 py-0.5 rounded text-[9px] font-mono font-bold bg-indigo-950 text-indigo-300 border border-indigo-800">
+                            Corporate Catalyst
+                          </span>
+                        )}
                       </div>
 
                       <h5 className="text-sm font-semibold text-slate-100 leading-snug pt-0.5">
-                        {art.title}
+                        {art.url ? (
+                          <a
+                            href={art.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="hover:text-emerald-400 hover:underline transition-colors inline-flex items-baseline gap-1"
+                          >
+                            <span>{art.title}</span>
+                            <ExternalLink className="w-3 h-3 text-slate-500 inline shrink-0" />
+                          </a>
+                        ) : (
+                          <span>{art.title}</span>
+                        )}
                       </h5>
 
                       <p className="text-xs text-slate-300 leading-relaxed pt-0.5 font-sans">
@@ -292,14 +309,14 @@ export const SentimentTab: React.FC<SentimentTabProps> = ({ sentiment, quote }) 
                     </div>
 
                     <div className="sm:text-right shrink-0 font-mono text-xs bg-slate-950/70 p-2.5 rounded-lg border border-slate-800">
-                      <span className="text-[10px] text-slate-500 uppercase block font-sans">Market Bias Score</span>
+                      <span className="text-[10px] text-slate-500 uppercase block font-sans">VADER Sentiment</span>
                       <span className={`text-base font-bold ${
-                        art.finbertScore >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                        art.vaderScore >= 0 ? 'text-emerald-400' : 'text-rose-400'
                       }`}>
-                        {art.finbertScore >= 0 ? '+' : ''}{art.finbertScore.toFixed(2)}
+                        {art.vaderScore >= 0 ? '+' : ''}{art.vaderScore.toFixed(2)}
                       </span>
                       <div className="text-[10px] text-slate-400 mt-0.5 font-sans">
-                        {art.finbertScore >= 0.15 ? 'Positive Catalyst' : art.finbertScore <= -0.15 ? 'Downside Risk' : 'Neutral Event'}
+                        {isPositiveArticle ? 'Positive Catalyst' : isNegativeArticle ? 'Downside Risk' : 'Neutral Event'}
                       </div>
                     </div>
                   </div>
@@ -333,7 +350,7 @@ export const SentimentTab: React.FC<SentimentTabProps> = ({ sentiment, quote }) 
               </div>
             ) : (
               redditPosts.map((post: RedditPost, idx: number) => {
-              const postScore = post.finbertScore !== undefined ? post.finbertScore : post.vaderScore || 0;
+              const postScore: number = (post.finbertScore !== undefined && post.finbertScore !== null) ? post.finbertScore : (post.vaderScore ?? 0);
               const isBullishPost = postScore > 0.10;
               const isBearishPost = postScore < -0.10;
 

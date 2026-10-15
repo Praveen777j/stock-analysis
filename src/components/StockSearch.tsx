@@ -62,14 +62,14 @@ export const StockSearch: React.FC<StockSearchProps> = ({
   const currSym = quote.currency === 'USD' ? '$' : '₹';
 
   const quickPicks = [
-    { ticker: 'RELIANCE.NS', label: 'Reliance', gain1m: '+8.4%' },
-    { ticker: 'TCS.NS', label: 'TCS', gain1m: '+12.8%' },
-    { ticker: 'INFY.NS', label: 'Infosys', gain1m: '+18.2%' },
-    { ticker: 'HDFCBANK.NS', label: 'HDFC Bank', gain1m: '+4.5%' },
-    { ticker: 'SHADOWFAX.NS', label: 'Shadowfax', gain1m: '+8.9%' },
-    { ticker: 'SBIN.NS', label: 'SBI', gain1m: '+11.2%' },
-    { ticker: 'TATAMOTORS.NS', label: 'Tata Motors', gain1m: '+24.5%' },
-    { ticker: 'ZOMATO.NS', label: 'Zomato', gain1m: '+42.6%' }
+    { ticker: 'RELIANCE.NS', label: 'Reliance' },
+    { ticker: 'TCS.NS', label: 'TCS' },
+    { ticker: 'INFY.NS', label: 'Infosys' },
+    { ticker: 'HDFCBANK.NS', label: 'HDFC Bank' },
+    { ticker: 'SHADOWFAX.NS', label: 'Shadowfax' },
+    { ticker: 'SBIN.NS', label: 'SBI' },
+    { ticker: 'TATAMOTORS.NS', label: 'Tata Motors' },
+    { ticker: 'ZOMATO.NS', label: 'Zomato' }
   ];
 
   return (
@@ -147,7 +147,7 @@ export const StockSearch: React.FC<StockSearchProps> = ({
         </div>
       </form>
 
-      {/* Quick Select Buttons with 1M Gains */}
+      {/* Quick Select Buttons */}
       <div className="flex flex-wrap items-center gap-1.5 mt-2.5 text-[11px] font-mono">
         <span className="text-slate-500 text-[11px] mr-1">Popular Equities:</span>
         {quickPicks.map((p) => (
@@ -162,8 +162,8 @@ export const StockSearch: React.FC<StockSearchProps> = ({
             }`}
           >
             <span>{p.label}</span>
-            <span className="text-[10px] text-emerald-400 font-bold bg-emerald-950/80 px-1 rounded border border-emerald-900">
-              {p.gain1m}
+            <span className="text-[10px] text-slate-400 font-mono bg-slate-800/80 px-1 rounded border border-slate-700">
+              {p.ticker.replace('.NS', '')}
             </span>
           </button>
         ))}

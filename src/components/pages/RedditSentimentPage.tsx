@@ -192,7 +192,7 @@ export const RedditSentimentPage: React.FC<RedditSentimentPageProps> = ({ sentim
             </div>
           ) : (
             filteredPosts.map((post: RedditPost, idx: number) => {
-              const postScore = post.finbertScore !== undefined ? post.finbertScore : post.vaderScore || 0;
+              const postScore: number = (post.finbertScore !== undefined && post.finbertScore !== null) ? post.finbertScore : (post.vaderScore ?? 0);
               const isBullishPost = postScore > 0.08;
               const isBearishPost = postScore < -0.08;
 

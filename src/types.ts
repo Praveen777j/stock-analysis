@@ -97,8 +97,10 @@ export interface NewsArticle {
   date: string;
   summary: string;
   vaderScore: number;
-  finbertScore: number;
+  finbertScore: number | null;
   sentimentLabel?: 'POSITIVE' | 'NEUTRAL' | 'NEGATIVE';
+  url?: string;
+  isCatalyst?: boolean;
 }
 
 export interface RedditPost {
@@ -109,7 +111,7 @@ export interface RedditPost {
   url: string;
   date?: string;
   vaderScore?: number;
-  finbertScore?: number;
+  finbertScore?: number | null;
   sentimentLabel?: 'POSITIVE' | 'NEUTRAL' | 'NEGATIVE';
 }
 
@@ -125,7 +127,8 @@ export interface RedditResult {
 
 export interface SentimentData {
   vaderCompound: number;
-  finbertScore: number;
+  finbertScore: number | null;
+  finbertStatus?: 'LIVE' | 'UNAVAILABLE';
   newsCount: number;
   overallScore: number;
   label: 'BULLISH' | 'NEUTRAL' | 'BEARISH';
@@ -187,10 +190,12 @@ export interface StockFundamentals {
   financialHealthGrade?: 'A+ (Excellent)' | 'A (Strong)' | 'B (Moderate)' | 'C (Leveraged)' | 'D (Distressed)';
   profitSituation?: 'Surging Profit Growth' | 'Stable Expansion' | 'Margin Compression' | 'Loss Accumulation';
   annualPnL?: AnnualFinancialRow[];
+  quarterlyPnL?: AnnualFinancialRow[];
   shareholding?: ShareholdingPattern;
   dataStatus?: 'LIVE_PROVIDER_DATA' | 'SAMPLE_DATA' | 'VERIFIED_AUDIT' | 'UNAVAILABLE';
   pnlStatus?: 'LIVE_PROVIDER_DATA' | 'SAMPLE_DATA' | 'VERIFIED_AUDIT' | 'UNAVAILABLE';
   shareholdingStatus?: 'LIVE_PROVIDER_DATA' | 'SAMPLE_DATA' | 'VERIFIED_AUDIT' | 'UNAVAILABLE';
+  statementsUnavailableReason?: string;
 }
 
 export interface BenchmarkData {
@@ -254,7 +259,7 @@ export interface ModelSignal {
   unifiedScore: number;
   exactAction: 'STRONG BUY' | 'BUY' | 'HOLD' | 'SELL' | 'STRONG SELL';
   breakdown: {
-    finbert: { score: number; weight: number; contribution: number };
+    finbert: { score: number; weight: number; contribution: number; status?: 'LIVE' | 'UNAVAILABLE' };
     vader: { score: number; weight: number; contribution: number };
     technicals: { score: number; weight: number; contribution: number };
     fundamentals?: { score: number; weight: number; contribution: number };
@@ -365,10 +370,10 @@ export interface IPODetails {
   id: string;
   companyName: string;
   symbol: string;
-  exchange: 'NSE / BSE' | 'NSE SME' | 'BSE SME' | 'NASDAQ / NYSE';
+  exchange: 'NSE / BSE' | 'NSE' | 'BSE' | 'NSE SME' | 'BSE SME' | 'NASDAQ / NYSE' | string;
   sector: string;
   industry: string;
-  status: 'OPEN NOW' | 'UPCOMING' | 'CLOSED' | 'LISTED';
+  status: 'OPEN NOW' | 'UPCOMING' | 'CLOSED' | 'LISTED' | 'CANCELLED' | 'POSTPONED';
   ipoType?: 'Mainboard' | 'SME';
   openDate: string;
   closeDate: string;
@@ -380,7 +385,10 @@ export interface IPODetails {
   listingPrice?: number;
   currentPrice?: number;
   listingGainLossPct?: number;
-  dataStatus?: 'REFERENCE_CATALOG' | 'LIVE_FEED';
+  dataStatus?: 'REFERENCE_CATALOG' | 'LIVE_FEED' | 'LIVE_EXCHANGE_DATA' | 'REGULATORY_FILING' | 'UNAVAILABLE';
+  sourceUrl?: string;
+  lastUpdated?: string;
+  gmpUpdated?: string;
   issueSizeCr: number;
   freshIssueCr: number;
   ofsCr: number;

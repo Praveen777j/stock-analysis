@@ -88,12 +88,17 @@ async function startServer() {
     }
     try {
       const cRes = await fetch('https://fc.yahoo.com', {
-        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
       });
-      const cookie = cRes.headers.get('set-cookie');
-      if (!cookie) return null;
+      const rawCookie = cRes.headers.get('set-cookie');
+      if (!rawCookie) return null;
+      // Strip path, domain, expires for HTTP Cookie header
+      const cookie = rawCookie.split(';')[0].trim();
       const crRes = await fetch('https://query1.finance.yahoo.com/v1/test/getcrumb', {
-        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)', 'Cookie': cookie }
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Cookie': cookie
+        }
       });
       if (!crRes.ok) return null;
       const crumb = (await crRes.text()).trim();
@@ -112,9 +117,9 @@ async function startServer() {
     try {
       const session = await getYahooCrumb();
       if (session) {
-        const url = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?crumb=${encodeURIComponent(session.crumb)}&modules=financialData,defaultKeyStatistics,assetProfile,summaryDetail`;
+        const url = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?crumb=${encodeURIComponent(session.crumb)}&modules=incomeStatementHistory,balanceSheetHistory,cashflowStatementHistory,financialData,defaultKeyStatistics,assetProfile,summaryDetail`;
         const qRes = await fetch(url, {
-          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)', 'Cookie': session.cookie }
+          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36', 'Cookie': session.cookie }
         });
         if (qRes.ok) {
           const data = await qRes.json();
@@ -147,12 +152,55 @@ async function startServer() {
             }
           }
 
+          // Parse genuine annual income statement history (figures in ₹ Crores)
+          const incomeHistory = r?.incomeStatementHistory?.incomeStatementHistory || [];
+          const annualPnL: any[] = [];
+
+          for (const stmt of incomeHistory) {
+            const endDate = stmt.endDate?.fmt || '';
+            const yearStr = endDate ? (endDate.startsWith('20') ? `FY${endDate.slice(2, 4)}` : endDate) : 'FY';
+            const revCr = stmt.totalRevenue?.raw ? Math.round((stmt.totalRevenue.raw / 10000000) * 100) / 100 : 0;
+            const netProfitCr = stmt.netIncome?.raw ? Math.round((stmt.netIncome.raw / 10000000) * 100) / 100 : 0;
+            const opProfitCr = stmt.operatingIncome?.raw
+              ? Math.round((stmt.operatingIncome.raw / 10000000) * 100) / 100
+              : (stmt.ebit?.raw ? Math.round((stmt.ebit.raw / 10000000) * 100) / 100 : undefined);
+            const expensesCr = stmt.totalOperatingExpenses?.raw
+              ? Math.round((stmt.totalOperatingExpenses.raw / 10000000) * 100) / 100
+              : (revCr && opProfitCr !== undefined ? Math.round((revCr - opProfitCr) * 100) / 100 : 0);
+            const interestCr = stmt.interestExpense?.raw ? Math.round((stmt.interestExpense.raw / 10000000) * 100) / 100 : 0;
+            const pbtCr = stmt.incomeBeforeTax?.raw ? Math.round((stmt.incomeBeforeTax.raw / 10000000) * 100) / 100 : 0;
+            const taxCr = stmt.incomeTaxExpense?.raw ? Math.round((stmt.incomeTaxExpense.raw / 10000000) * 100) / 100 : 0;
+            const patMarginPct = revCr > 0 ? Math.round((netProfitCr / revCr) * 10000) / 100 : 0;
+            const opmPct = (revCr > 0 && opProfitCr !== undefined) ? Math.round((opProfitCr / revCr) * 10000) / 100 : 0;
+
+            if (revCr > 0 || netProfitCr !== 0) {
+              annualPnL.push({
+                year: yearStr,
+                revenue: revCr,
+                expenses: expensesCr,
+                operatingProfit: opProfitCr ?? 0,
+                opmPct,
+                depreciation: 0,
+                interest: interestCr,
+                pbt: pbtCr,
+                tax: taxCr,
+                netProfit: netProfitCr,
+                patMarginPct,
+                eps: 0,
+                roePct: 0,
+                debtToEquity: dToE ?? 0
+              });
+            }
+          }
+          // Arrange chronologically
+          annualPnL.reverse();
+
           return {
             website: prof?.website || '',
             sector: prof?.sector || 'Equities',
             industry: prof?.industry || 'General',
             businessSummary: prof?.longBusinessSummary || '',
-            totalRevenue: fin?.totalRevenue?.fmt || 'N/A',
+            totalRevenue: fin?.totalRevenue?.fmt || (annualPnL.length > 0 ? `₹${annualPnL[annualPnL.length - 1].revenue.toLocaleString()} Cr` : 'N/A'),
             revenueGrowthYoY: fin?.revenueGrowth?.fmt || 'N/A',
             profitMarginPct: (fin?.profitMargins?.raw !== undefined && fin?.profitMargins?.raw !== null) ? Math.round(fin.profitMargins.raw * 10000) / 100 : undefined,
             operatingMarginPct: (fin?.operatingMargins?.raw !== undefined && fin?.operatingMargins?.raw !== null) ? Math.round(fin.operatingMargins.raw * 10000) / 100 : undefined,
@@ -171,47 +219,18 @@ async function startServer() {
             financialHealthGrade: healthGrade,
             profitSituation,
             dataStatus: 'LIVE_PROVIDER_DATA',
-            pnlStatus: 'UNAVAILABLE',
+            pnlStatus: annualPnL.length > 0 ? 'LIVE_PROVIDER_DATA' : 'UNAVAILABLE',
             shareholdingStatus: 'UNAVAILABLE',
-            annualPnL: [],
+            annualPnL,
             shareholding: undefined
           };
         }
       }
-    } catch (_) {}
-
-    // Deterministic Catalog Fallback for known sample demonstration blue chips
-    const isRel = symbol.includes('RELIANCE');
-    const isTcs = symbol.includes('TCS');
-    const isInfy = symbol.includes('INFY');
-    const isAapl = symbol.includes('AAPL');
-    if (isRel || isTcs || isInfy || isAapl) {
-      return {
-        website: isRel ? 'https://www.ril.com' : isTcs ? 'https://www.tcs.com' : isInfy ? 'https://www.infosys.com' : 'https://www.apple.com',
-        sector: isRel ? 'Energy' : isAapl ? 'Consumer Tech' : 'Technology',
-        industry: isRel ? 'Oil & Gas Refining & Marketing' : isAapl ? 'Consumer Electronics' : 'Information Technology Services',
-        businessSummary: isRel ? 'Reliance Industries Limited is an Indian multinational conglomerate.' : isTcs ? 'Tata Consultancy Services is an Indian multinational IT services company.' : 'Enterprise operating in global technology markets.',
-        totalRevenue: isRel ? '₹9,65,400 Cr' : isTcs ? '₹2,58,400 Cr' : isAapl ? '$415.2B' : 'N/A',
-        revenueGrowthYoY: isRel ? '+7.4%' : isTcs ? '+8.4%' : '+6.0%',
-        profitMarginPct: isRel ? 7.7 : isTcs ? 19.3 : 25.4,
-        operatingMarginPct: isRel ? 18.5 : isTcs ? 26.6 : 30.5,
-        debtToEquity: isRel ? 46.28 : isTcs ? 10.21 : 152.0,
-        peRatio: isRel ? 21.57 : isTcs ? 15.29 : 38.2,
-        pbRatio: isRel ? 1.78 : isTcs ? 6.95 : 3.4,
-        eps: isRel ? 116.0 : isTcs ? 137.5 : 6.95,
-        marketCap: isRel ? '₹15.8T' : isTcs ? '₹11.2T' : '$3.45T',
-        dividendYield: isRel ? 0.35 : isTcs ? 2.1 : 0.5,
-        roe: isRel ? 9.8 : isTcs ? 48.2 : 165.0,
-        financialHealthGrade: isTcs ? 'A+ (Excellent)' : 'A (Strong)',
-        profitSituation: 'Stable Expansion',
-        dataStatus: 'SAMPLE_DATA',
-        pnlStatus: 'SAMPLE_DATA',
-        shareholdingStatus: 'SAMPLE_DATA',
-        annualPnL: [],
-        shareholding: undefined
-      };
+    } catch (err) {
+      console.warn(`[Fundamentals Diagnostic] Provider lookup failed for ${symbol}:`, err);
     }
 
+    // Honest unavailable state when verified provider does not provide statements
     return {
       website: '',
       sector: 'Equities',
@@ -234,7 +253,6 @@ async function startServer() {
       pnlStatus: 'UNAVAILABLE',
       shareholdingStatus: 'UNAVAILABLE',
       annualPnL: [],
-      shareholding: undefined
     };
   }
 
@@ -572,6 +590,425 @@ async function startServer() {
     }
   });
 
+  // --- Helper: Decode all HTML entities cleanly ---
+  function decodeHtml(html: string): string {
+    return html
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/&apos;/g, "'")
+      .replace(/&#x27;/g, "'")
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&#8217;/g, "'")
+      .replace(/&#8216;/g, "'")
+      .replace(/&#8220;/g, '"')
+      .replace(/&#8221;/g, '"')
+      .trim();
+  }
+
+  // --- API: Live Primary Market IPO Pipeline & Statutory Exchange Filings ---
+  app.get('/api/ipos', async (req, res) => {
+    try {
+      let liveNseIssues: any[] = [];
+      let liveNseError = false;
+      try {
+        const nseRes = await fetch('https://www.nseindia.com/api/ipo-current-issue', {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'application/json'
+          }
+        });
+        if (nseRes.ok) {
+          const nseData = await nseRes.json();
+          if (Array.isArray(nseData)) {
+            liveNseIssues = nseData;
+          }
+        } else {
+          liveNseError = true;
+        }
+      } catch (err) {
+        liveNseError = true;
+        console.warn('[IPO Feed Warning] Live NSE issue query encountered an issue:', err);
+      }
+
+      // Current Date in Indian Market Timezone (Asia/Kolkata)
+      const now = new Date();
+      const istDateStr = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }); // YYYY-MM-DD
+
+      function parseNseDate(dateStr?: string): { dateStr: string; iso: string } | null {
+        if (!dateStr) return null;
+        const clean = dateStr.trim();
+        // Match DD-Mon-YYYY (e.g. 14-Oct-2026 or 14-OCT-2026)
+        const dmyMatch = clean.match(/^(\d{1,2})[-/ ]([A-Za-z]{3})[-/ ](\d{2,4})$/);
+        if (dmyMatch) {
+          const day = dmyMatch[1].padStart(2, '0');
+          const monthNames: Record<string, string> = {
+            jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06',
+            jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12'
+          };
+          const month = monthNames[dmyMatch[2].toLowerCase()] || '01';
+          let year = dmyMatch[3];
+          if (year.length === 2) year = `20${year}`;
+          return {
+            dateStr: `${day} ${dmyMatch[2]} ${year}`,
+            iso: `${year}-${month}-${day}`
+          };
+        }
+        // Match YYYY-MM-DD
+        const ymdMatch = clean.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);
+        if (ymdMatch) {
+          const year = ymdMatch[1];
+          const month = ymdMatch[2].padStart(2, '0');
+          const day = ymdMatch[3].padStart(2, '0');
+          return {
+            dateStr: `${day}-${month}-${year}`,
+            iso: `${year}-${month}-${day}`
+          };
+        }
+        return null;
+      }
+
+      const parsedLiveIPOs: any[] = [];
+      const seenSymbols = new Set<string>();
+      const seenDedupKeys = new Set<string>();
+
+      for (const item of liveNseIssues) {
+        const symbol = (item.symbol || '').toUpperCase().trim();
+        const companyName = item.companyName || symbol;
+        if (!symbol && !companyName) continue;
+
+        const startParsed = parseNseDate(item.issueStartDate);
+        const endParsed = parseNseDate(item.issueEndDate);
+        const startIso = startParsed ? startParsed.iso : '';
+        const endIso = endParsed ? endParsed.iso : '';
+
+        // Deduplication by stable key (issuer/symbol and start date)
+        const dedupKey = `${symbol || companyName.toLowerCase().replace(/[^a-z0-9]/g, '')}_${startIso || 'pending'}`;
+        if (seenDedupKeys.has(dedupKey)) continue;
+        seenDedupKeys.add(dedupKey);
+        if (symbol) seenSymbols.add(symbol);
+
+        // Status calculation respecting Indian market timezone and cancellation/postponement flags
+        const rawStatus = (item.status || '').toLowerCase();
+        let status: 'UPCOMING' | 'OPEN NOW' | 'CLOSED' | 'LISTED' | 'CANCELLED' | 'POSTPONED' = 'UPCOMING';
+        if (rawStatus.includes('cancel') || rawStatus.includes('withdrawn')) {
+          status = 'CANCELLED';
+        } else if (rawStatus.includes('postpone') || rawStatus.includes('deferred')) {
+          status = 'POSTPONED';
+        } else if (rawStatus.includes('listed')) {
+          status = 'LISTED';
+        } else if (startIso && endIso) {
+          if (istDateStr >= startIso && istDateStr <= endIso) {
+            status = 'OPEN NOW';
+          } else if (istDateStr < startIso) {
+            status = 'UPCOMING';
+          } else {
+            status = 'CLOSED';
+          }
+        } else if (startIso) {
+          if (istDateStr < startIso) {
+            status = 'UPCOMING';
+          } else {
+            status = 'OPEN NOW';
+          }
+        } else {
+          status = 'UPCOMING';
+        }
+
+        let minPrice = 0;
+        let maxPrice = 0;
+        let priceBand = item.issuePrice || 'Disclosed in RHP';
+        if (item.issuePrice) {
+          const priceMatches = item.issuePrice.match(/\d+(\.\d+)?/g);
+          if (priceMatches && priceMatches.length >= 2) {
+            minPrice = parseFloat(priceMatches[0]);
+            maxPrice = parseFloat(priceMatches[1]);
+            priceBand = `₹${minPrice} – ₹${maxPrice}`;
+          } else if (priceMatches && priceMatches.length === 1) {
+            minPrice = parseFloat(priceMatches[0]);
+            maxPrice = minPrice;
+            priceBand = `₹${minPrice}`;
+          }
+        }
+
+        const subMultiple = item.noOfTime ? parseFloat(item.noOfTime) : undefined;
+        const roundedSub = subMultiple !== undefined && !isNaN(subMultiple) ? Math.round(subMultiple * 100) / 100 : undefined;
+        const isSme = item.series === 'SME' || item.isBse === '1';
+        const sharesOffered = item.noOfSharesOffered ? parseFloat(item.noOfSharesOffered) : 0;
+        const approxSizeCr = (sharesOffered > 0 && maxPrice > 0) ? Math.round((sharesOffered * maxPrice / 10000000) * 100) / 100 : 0;
+
+        parsedLiveIPOs.push({
+          id: `nse-${(symbol || companyName).toLowerCase().replace(/[^a-z0-9]/g, '')}`,
+          companyName,
+          symbol: symbol || 'UNLISTED',
+          exchange: isSme ? 'NSE SME' : 'NSE / BSE',
+          ipoType: isSme ? 'SME' : 'Mainboard',
+          dataStatus: 'LIVE_EXCHANGE_DATA',
+          sourceUrl: 'https://www.nseindia.com/market-data/all-upcoming-issues',
+          lastUpdated: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) + ' IST',
+          sector: isSme ? 'SME Emerging' : 'Diversified',
+          industry: isSme ? 'Specialized Manufacturing & Services' : 'Commercial Enterprises',
+          status,
+          openDate: startParsed ? startParsed.dateStr : (item.issueStartDate || 'Pending Notice'),
+          closeDate: endParsed ? endParsed.dateStr : (item.issueEndDate || 'Pending Notice'),
+          listingDate: 'T+3 Market Days from Close',
+          priceBand,
+          minPrice,
+          maxPrice,
+          issuePrice: maxPrice || minPrice,
+          issueSizeCr: approxSizeCr || 0,
+          freshIssueCr: approxSizeCr || 0,
+          ofsCr: 0,
+          lotSize: isSme ? 1200 : (maxPrice > 0 ? Math.max(1, Math.floor(14900 / maxPrice)) : 50),
+          minInvestment: isSme ? 120000 : 14900,
+          retailQuotaPct: 35,
+          website: 'https://www.nseindia.com',
+          businessSummary: `${companyName} public issue under Series ${item.series || 'EQ'} registered on National Stock Exchange of India. Prospectus filed with SEBI.`,
+          revenueYoYGrowthPct: 0,
+          annualRevenueCr: 0,
+          netProfitLossCr: 0,
+          profitMarginPct: 0,
+          debtToEquity: 0,
+          postIssuePe: 0,
+          peerAveragePe: 0,
+          promoterHoldingPostPct: 0,
+          strengths: [
+            `Active exchange issue verified on National Stock Exchange under symbol ${symbol || companyName}`,
+            `Subscription window: ${item.issueStartDate || 'TBD'} through ${item.issueEndDate || 'TBD'}`
+          ],
+          redFlags: [
+            'Market volatility and institutional subscription demand during bidding window'
+          ],
+          subscription: roundedSub ? { qib: 0, nii: 0, retail: 0, total: roundedSub } : undefined,
+          gmpAmount: undefined, // GMP is unofficial: shown only when an identifiable source provides a current timestamped observation
+          gmpPct: undefined,
+          gmpUpdated: undefined,
+          verdict: status === 'OPEN NOW' ? 'STRONG APPLY' : 'APPLY FOR LISTING GAINS',
+          verdictRationale: `Exchange issue registered on NSE. Current total subscription: ${roundedSub ? `${roundedSub}x` : 'Filing updates in progress'}.`
+        });
+      }
+
+      // Reference catalog for verified listed issues
+      const referenceCatalog = [
+        {
+          id: 'swiggy',
+          companyName: 'Swiggy Limited',
+          symbol: 'SWIGGY',
+          exchange: 'NSE / BSE',
+          ipoType: 'Mainboard',
+          dataStatus: 'REFERENCE_CATALOG',
+          sector: 'Consumer Discretionary',
+          industry: 'Hyperlocal Food Delivery & Quick Commerce',
+          status: 'LISTED',
+          openDate: '06 Nov 2024',
+          closeDate: '08 Nov 2024',
+          listingDate: '13 Nov 2024',
+          priceBand: '₹371 – ₹390',
+          minPrice: 371,
+          maxPrice: 390,
+          issuePrice: 390,
+          listingPrice: 412,
+          issueSizeCr: 11327,
+          freshIssueCr: 4499,
+          ofsCr: 6828,
+          lotSize: 38,
+          minInvestment: 14820,
+          retailQuotaPct: 10,
+          website: 'https://www.swiggy.com',
+          businessSummary: "Swiggy is one of India's leading consumer tech platforms, pioneering online food delivery and quick commerce via Instamart.",
+          revenueYoYGrowthPct: 36.1,
+          annualRevenueCr: 11247,
+          netProfitLossCr: -2350,
+          profitMarginPct: -20.89,
+          debtToEquity: 18.4,
+          postIssuePe: 0,
+          peerAveragePe: 85.4,
+          promoterHoldingPostPct: 0.0,
+          strengths: ['Rapid growth in Instamart dark stores', 'High brand recall across metro areas'],
+          redFlags: ['Historical net losses at filing', 'Intense quick commerce competition'],
+          verdict: 'HISTORICAL FILING',
+          verdictRationale: 'Statutory historical disclosure: Swiggy listed on NSE/BSE on 13 Nov 2024.'
+        },
+        {
+          id: 'hyundai',
+          companyName: 'Hyundai Motor India Limited',
+          symbol: 'HYUNDAI',
+          exchange: 'NSE / BSE',
+          ipoType: 'Mainboard',
+          dataStatus: 'REFERENCE_CATALOG',
+          sector: 'Consumer Cyclical',
+          industry: 'Automobile OEM & Electric Vehicles',
+          status: 'LISTED',
+          openDate: '15 Oct 2024',
+          closeDate: '17 Oct 2024',
+          listingDate: '22 Oct 2024',
+          priceBand: '₹1,865 – ₹1,960',
+          minPrice: 1865,
+          maxPrice: 1960,
+          issuePrice: 1960,
+          listingPrice: 1934,
+          issueSizeCr: 27870,
+          freshIssueCr: 0,
+          ofsCr: 27870,
+          lotSize: 7,
+          minInvestment: 13720,
+          retailQuotaPct: 35,
+          website: 'https://www.hyundai.com/in',
+          businessSummary: 'Hyundai Motor India is the second-largest passenger car OEM in India with ~15% market share.',
+          revenueYoYGrowthPct: 15.8,
+          annualRevenueCr: 69829,
+          netProfitLossCr: 6060,
+          profitMarginPct: 8.68,
+          debtToEquity: 0.1,
+          postIssuePe: 26.3,
+          peerAveragePe: 28.5,
+          promoterHoldingPostPct: 82.5,
+          strengths: ['Consistent profitability with ₹6,060 Cr PAT', 'Zero net debt balance sheet'],
+          redFlags: ['100% OFS component from Korean parent'],
+          verdict: 'HISTORICAL FILING',
+          verdictRationale: 'Statutory historical disclosure: Hyundai Motor India listed on 22 Oct 2024.'
+        },
+        {
+          id: 'ntpc-green',
+          companyName: 'NTPC Green Energy Limited',
+          symbol: 'NTPCGREEN',
+          exchange: 'NSE / BSE',
+          ipoType: 'Mainboard',
+          dataStatus: 'REFERENCE_CATALOG',
+          sector: 'Utilities & Renewables',
+          industry: 'Solar, Wind & Green Hydrogen Generation',
+          status: 'LISTED',
+          openDate: '19 Nov 2024',
+          closeDate: '22 Nov 2024',
+          listingDate: '27 Nov 2024',
+          priceBand: '₹102 – ₹108',
+          minPrice: 102,
+          maxPrice: 108,
+          issuePrice: 108,
+          listingPrice: 111.5,
+          issueSizeCr: 10000,
+          freshIssueCr: 10000,
+          ofsCr: 0,
+          lotSize: 138,
+          minInvestment: 14904,
+          retailQuotaPct: 10,
+          website: 'https://www.ngel.in',
+          businessSummary: 'NTPC Green Energy is the renewable energy arm of Maharatna PSU NTPC Limited.',
+          revenueYoYGrowthPct: 109.4,
+          annualRevenueCr: 1962,
+          netProfitLossCr: 344,
+          profitMarginPct: 17.53,
+          debtToEquity: 98.5,
+          postIssuePe: 60.5,
+          peerAveragePe: 45.2,
+          promoterHoldingPostPct: 89.0,
+          strengths: ['100% fresh issue proceeds', 'Long-term 25-year PPAs'],
+          redFlags: ['Capital intensive utility buildout'],
+          verdict: 'HISTORICAL FILING',
+          verdictRationale: 'Statutory historical disclosure: NTPC Green Energy listed on 27 Nov 2024.'
+        },
+        {
+          id: 'bajaj-housing',
+          companyName: 'Bajaj Housing Finance Limited',
+          symbol: 'BAJAJHFL',
+          exchange: 'NSE / BSE',
+          ipoType: 'Mainboard',
+          dataStatus: 'REFERENCE_CATALOG',
+          sector: 'Financial Services',
+          industry: 'Housing Finance Company (HFC)',
+          status: 'LISTED',
+          openDate: '09 Sep 2024',
+          closeDate: '11 Sep 2024',
+          listingDate: '16 Sep 2024',
+          priceBand: '₹66 – ₹70',
+          minPrice: 66,
+          maxPrice: 70,
+          issuePrice: 70,
+          listingPrice: 150,
+          issueSizeCr: 6560,
+          freshIssueCr: 3560,
+          ofsCr: 3000,
+          lotSize: 214,
+          minInvestment: 14980,
+          retailQuotaPct: 35,
+          website: 'https://www.bajajhousingfinance.in',
+          businessSummary: 'Bajaj Housing Finance is an upper-layer Non-Banking Financial Company offering prime retail mortgage loans.',
+          revenueYoYGrowthPct: 34.2,
+          annualRevenueCr: 7617,
+          netProfitLossCr: 1731,
+          profitMarginPct: 22.72,
+          debtToEquity: 580.0,
+          postIssuePe: 33.5,
+          peerAveragePe: 24.2,
+          promoterHoldingPostPct: 88.75,
+          strengths: ['Prestigious Bajaj Group pedigree', 'Low Gross NPA (<0.3%) in prime retail mortgage'],
+          redFlags: ['High balance sheet leverage inherent to housing finance'],
+          verdict: 'HISTORICAL FILING',
+          verdictRationale: 'Statutory historical disclosure: Bajaj Housing Finance listed on 16 Sep 2024.'
+        },
+        {
+          id: 'paramount-sme',
+          companyName: 'Paramount Dye Tec Limited',
+          symbol: 'PARAMOUNT',
+          exchange: 'NSE SME',
+          ipoType: 'SME',
+          dataStatus: 'REFERENCE_CATALOG',
+          sector: 'Industrials',
+          industry: 'Textile Yarn Dyeing & Recycled Fibers',
+          status: 'LISTED',
+          openDate: '03 Oct 2024',
+          closeDate: '07 Oct 2024',
+          listingDate: '10 Oct 2024',
+          priceBand: '₹111 – ₹117',
+          minPrice: 111,
+          maxPrice: 117,
+          issuePrice: 117,
+          listingPrice: 118,
+          issueSizeCr: 28.43,
+          freshIssueCr: 28.43,
+          ofsCr: 0,
+          lotSize: 1200,
+          minInvestment: 140400,
+          retailQuotaPct: 35,
+          website: 'https://www.paramountdyetec.com',
+          businessSummary: 'Paramount Dye Tec is a specialized yarn dyeing enterprise processing fibers for commercial garment manufacturers.',
+          revenueYoYGrowthPct: 18.2,
+          annualRevenueCr: 42.5,
+          netProfitLossCr: 4.8,
+          profitMarginPct: 11.29,
+          debtToEquity: 42.1,
+          postIssuePe: 14.8,
+          peerAveragePe: 21.0,
+          promoterHoldingPostPct: 69.5,
+          strengths: ['100% fresh issue funding capacity expansion', 'Healthy EBITDA margins'],
+          redFlags: ['SME segment with larger lot size and lower secondary liquidity'],
+          verdict: 'HISTORICAL FILING',
+          verdictRationale: 'Statutory historical disclosure: Paramount Dye Tec listed on NSE SME on 10 Oct 2024.'
+        }
+      ];
+
+      // Merge and deduplicate by symbol
+      const allIPOs = [...parsedLiveIPOs];
+      for (const ref of referenceCatalog) {
+        if (!seenSymbols.has(ref.symbol.toUpperCase())) {
+          allIPOs.push(ref);
+        }
+      }
+
+      return res.json({
+        count: allIPOs.length,
+        liveCount: parsedLiveIPOs.length,
+        dataStatus: parsedLiveIPOs.length > 0 ? 'LIVE_EXCHANGE_DATA' : (liveNseError ? 'UNAVAILABLE' : 'REFERENCE_CATALOG'),
+        ipos: allIPOs
+      });
+    } catch (e: any) {
+      console.error('[IPO Error]', e);
+      return res.status(500).json({ error: e.message || 'Failed to retrieve IPO dataset' });
+    }
+  });
+
   // --- API: Live Financial News & Sentiment Analysis ---
   app.get('/api/news/:ticker', async (req, res) => {
     try {
@@ -680,9 +1117,11 @@ async function startServer() {
         publisher: string;
         date: string;
         summary: string;
+        url: string;
         vaderScore: number;
-        finbertScore: number;
+        finbertScore: number | null;
         sentimentLabel: 'POSITIVE' | 'NEUTRAL' | 'NEGATIVE';
+        isCatalyst?: boolean;
       }> = [];
 
       // 1. Fetch genuine articles from Google News RSS & Economic Times RSS
@@ -704,11 +1143,14 @@ async function startServer() {
           const xml = await gNewsRes.text();
           const itemRegex = /<item>[\s\S]*?<title>(.*?)<\/title>[\s\S]*?<link>(.*?)<\/link>[\s\S]*?<pubDate>(.*?)<\/pubDate>[\s\S]*?<description>(.*?)<\/description>(?:[\s\S]*?<source[^>]*>(.*?)<\/source>)?/g;
           let match;
-          while ((match = itemRegex.exec(xml)) !== null && articles.length < 8) {
-            let rawTitle = match[1].replace(/<!\[CDATA\[(.*?)\]\]>/g, '$1').replace(/&amp;/g, '&').replace(/&#39;/g, "'").trim();
+          const seenTitles = new Set<string>();
+
+          while ((match = itemRegex.exec(xml)) !== null && articles.length < 12) {
+            let rawTitle = decodeHtml(match[1].replace(/<!\[CDATA\[(.*?)\]\]>/g, '$1')).trim();
+            const articleUrl = match[2].trim();
             const pubDate = match[3] ? new Date(match[3]).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Recent';
-            const rawDesc = match[4].replace(/<!\[CDATA\[(.*?)\]\]>/g, '$1').replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&#39;/g, "'").trim();
-            let publisher = match[5] ? match[5].replace(/<!\[CDATA\[(.*?)\]\]>/g, '$1').trim() : '';
+            const rawDesc = decodeHtml(match[4].replace(/<!\[CDATA\[(.*?)\]\]>/g, '$1').replace(/<[^>]+>/g, '')).trim();
+            let publisher = match[5] ? decodeHtml(match[5].replace(/<!\[CDATA\[(.*?)\]\]>/g, '$1')).trim() : '';
 
             // Clean title suffix like " - Livemint"
             if (!publisher && rawTitle.includes(' - ')) {
@@ -719,6 +1161,18 @@ async function startServer() {
               rawTitle = rawTitle.slice(0, -(publisher.length + 3)).trim();
             }
 
+            // Exclude generic automated quote pages (e.g. "Stock Price Today Live", "Share Price NSE")
+            const isGenericQuote = /share price today|stock price today|live updates.*share price|today's share price/i.test(rawTitle);
+            if (isGenericQuote) continue;
+
+            // Check if title is duplicate
+            const titleKey = rawTitle.toLowerCase().replace(/[^a-z0-9]/g, '');
+            if (seenTitles.has(titleKey)) continue;
+            seenTitles.add(titleKey);
+
+            // Corporate catalyst detection: earnings, contracts, regulatory, acquisitions, orders
+            const isCatalyst = /profit|revenue|loss|order|contract|deal|acquire|acquisition|merger|earnings|results|dividend|q[1-4]|expansion|sebi|regulatory|downgrade|upgrade|rating|guidance/i.test(rawTitle);
+
             const articleText = `${rawTitle} ${rawDesc}`;
             const { compound, label } = analyzeVaderSentiment(articleText);
 
@@ -727,9 +1181,11 @@ async function startServer() {
               publisher: publisher || 'Financial News',
               date: pubDate,
               summary: rawDesc.slice(0, 180) || rawTitle,
+              url: articleUrl,
               vaderScore: compound,
-              finbertScore: 0.0, // FinBERT PyTorch transformer runtime not connected in Node.js process
-              sentimentLabel: label
+              finbertScore: null, // FinBERT PyTorch transformer model service not deployed in Node.js process
+              sentimentLabel: label,
+              isCatalyst
             });
           }
         }
@@ -737,53 +1193,139 @@ async function startServer() {
         // Genuine network or timeout failure
       }
 
-      // DO NOT invent synthetic articles when live news is unavailable.
       const hasRealNews = articles.length > 0;
       const avgVader = hasRealNews
         ? Math.round((articles.reduce((a, b) => a + b.vaderScore, 0) / articles.length) * 100) / 100
         : 0.0;
-      // FinBERT transformer deep-learning model is unavailable in this environment
-      const avgFinbert = 0.0;
 
-      // DO NOT fabricate fake Reddit posts.
-      // Authentic Reddit social discussions are returned empty when OAuth / public feed is not connected.
-      const redditPosts: Array<{
-        title: string;
-        subreddit: string;
-        score: number;
-        numComments: number;
-        url: string;
-        date: string;
-        vaderScore: number;
-        finbertScore: number;
-        sentimentLabel: 'POSITIVE' | 'NEUTRAL' | 'NEGATIVE';
-      }> = [];
+      // 2. Query Genuine Reddit Community Discussions
+      let rawRedditPosts: any[] = [];
+      let redditStatus: 'SUCCESS' | 'AUTH_REQUIRED' | 'EMPTY' | 'RATE_LIMITED' | 'ERROR' = 'EMPTY';
+      let redditMessage = '';
+
+      const redditClientId = process.env.REDDIT_CLIENT_ID;
+      const redditClientSecret = process.env.REDDIT_CLIENT_SECRET;
+      const redditUserAgent = process.env.REDDIT_USER_AGENT || 'StockIntelligence/1.0';
+      const redditQuery = encodeURIComponent(`${cleanName} stock OR shares`);
+
+      if (redditClientId && redditClientSecret) {
+        try {
+          const auth = Buffer.from(`${redditClientId}:${redditClientSecret}`).toString('base64');
+          const tokenRes = await fetch('https://www.reddit.com/api/v1/access_token', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Basic ${auth}`,
+              'Content-Type': 'application/x-www-form-urlencoded',
+              'User-Agent': redditUserAgent
+            },
+            body: 'grant_type=client_credentials'
+          });
+          if (tokenRes.ok) {
+            const tokenData = await tokenRes.json();
+            const token = tokenData.access_token;
+            if (token) {
+              const rSearchRes = await fetch(
+                `https://oauth.reddit.com/r/IndianStreetBets+dalalstreetbets+stocks/search?q=${redditQuery}&sort=new&limit=25`,
+                {
+                  headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'User-Agent': redditUserAgent
+                  }
+                }
+              );
+              if (rSearchRes.ok) {
+                const rData = await rSearchRes.json();
+                rawRedditPosts = rData.data?.children?.map((c: any) => c.data) || [];
+                redditStatus = rawRedditPosts.length > 0 ? 'SUCCESS' : 'EMPTY';
+              }
+            }
+          }
+        } catch (err) {
+          console.warn('[Reddit OAuth API Error]', err);
+        }
+      }
+
+      // Public fallback if credentials not configured
+      if (rawRedditPosts.length === 0 && (!redditClientId || !redditClientSecret)) {
+        try {
+          const pUrl = `https://www.reddit.com/r/IndianStreetBets+dalalstreetbets/search.json?q=${redditQuery}&restrict_sr=1&sort=new&limit=25`;
+          const pRes = await fetch(pUrl, {
+            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
+          });
+          if (pRes.ok) {
+            const pData = await pRes.json();
+            rawRedditPosts = pData.data?.children?.map((c: any) => c.data) || [];
+            redditStatus = rawRedditPosts.length > 0 ? 'SUCCESS' : 'EMPTY';
+          } else if (pRes.status === 429) {
+            redditStatus = 'RATE_LIMITED';
+            redditMessage = 'Reddit public API rate limit reached. Set REDDIT_CLIENT_ID and REDDIT_CLIENT_SECRET in .env for authenticated access.';
+            console.info(`[Reddit Diagnostic] Rate limit reached for ${ticker}`);
+          } else {
+            redditStatus = 'AUTH_REQUIRED';
+            redditMessage = 'Reddit social feed unavailable. Add REDDIT_CLIENT_ID and REDDIT_CLIENT_SECRET in .env for live forum stream.';
+            console.info(`[Reddit Diagnostic] Public feed restricted (HTTP ${pRes.status}). Credentials required.`);
+          }
+        } catch (e: any) {
+          redditStatus = 'ERROR';
+          redditMessage = 'Reddit forum connection unavailable.';
+        }
+      }
+
+      // Parse Reddit posts
+      const redditPosts: any[] = [];
+      const seenReddit = new Set<string>();
+      for (const p of rawRedditPosts) {
+        if (!p.title) continue;
+        const pTitle = decodeHtml(p.title);
+        if (seenReddit.has(pTitle.toLowerCase())) continue;
+        seenReddit.add(pTitle.toLowerCase());
+
+        const { compound, label } = analyzeVaderSentiment(`${pTitle} ${p.selftext || ''}`);
+        redditPosts.push({
+          title: pTitle,
+          subreddit: p.subreddit_name_prefixed || `r/${p.subreddit || 'IndianStreetBets'}`,
+          score: p.score ?? 0,
+          numComments: p.num_comments ?? 0,
+          url: p.permalink ? `https://reddit.com${p.permalink}` : (p.url || ''),
+          date: p.created_utc ? new Date(p.created_utc * 1000).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Recent',
+          vaderScore: compound,
+          finbertScore: null,
+          sentimentLabel: label
+        });
+      }
+
+      const bullCount = redditPosts.filter(p => p.sentimentLabel === 'POSITIVE').length;
+      const bearCount = redditPosts.filter(p => p.sentimentLabel === 'NEGATIVE').length;
+      const rTotal = Math.max(1, redditPosts.length);
+      const socialBuzzScore = redditPosts.length > 0
+        ? Math.round((redditPosts.reduce((acc, p) => acc + p.vaderScore, 0) / redditPosts.length) * 100) / 100
+        : 0.0;
 
       const compositeScore = avgVader;
-
       let label: 'BULLISH' | 'NEUTRAL' | 'BEARISH' = 'NEUTRAL';
       if (hasRealNews) {
-        if (compositeScore >= 0.15) label = 'BULLISH';
-        else if (compositeScore <= -0.15) label = 'BEARISH';
+        if (compositeScore >= 0.05) label = 'BULLISH';
+        else if (compositeScore <= -0.05) label = 'BEARISH';
       }
 
       return res.json({
         ticker,
         overallScore: compositeScore,
         vaderCompound: avgVader,
-        finbertScore: avgFinbert,
+        finbertScore: null, // FinBERT PyTorch transformer model offline in Node.js
+        finbertStatus: 'UNAVAILABLE',
         newsCount: articles.length,
         label,
         dataStatus: hasRealNews ? 'LIVE' : 'UNAVAILABLE',
         articles,
         reddit: {
-          status: 'EMPTY',
-          message: 'Social sentiment data unavailable (Reddit API feed credentials required for live forum stream)',
-          postCount: 0,
-          posts: [],
-          socialBuzzScore: 0.0,
-          bullishPct: 0,
-          bearishPct: 0
+          status: redditPosts.length > 0 ? 'SUCCESS' : redditStatus,
+          message: redditPosts.length > 0 ? `${redditPosts.length} relevant discussions found on Reddit` : (redditMessage || 'Social sentiment data unavailable (Reddit API credentials required).'),
+          postCount: redditPosts.length,
+          posts: redditPosts,
+          socialBuzzScore,
+          bullishPct: redditPosts.length > 0 ? Math.round((bullCount / rTotal) * 100) : 0,
+          bearishPct: redditPosts.length > 0 ? Math.round((bearCount / rTotal) * 100) : 0
         }
       });
     } catch (e: any) {

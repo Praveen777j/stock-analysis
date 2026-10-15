@@ -90,8 +90,9 @@ export const NewsAndCatalystsPage: React.FC<NewsAndCatalystsPageProps> = ({
             </div>
           ) : (
             articles.map((art, idx) => {
-            const isPos = art.finbertScore > 0.15;
-            const isNeg = art.finbertScore < -0.15;
+            const isPos = art.sentimentLabel === 'POSITIVE' || (art.vaderScore !== undefined && art.vaderScore >= 0.05);
+            const isNeg = art.sentimentLabel === 'NEGATIVE' || (art.vaderScore !== undefined && art.vaderScore <= -0.05);
+            const scoreVal = art.vaderScore ?? 0;
             return (
               <div
                 key={idx}
@@ -113,10 +114,26 @@ export const NewsAndCatalystsPage: React.FC<NewsAndCatalystsPageProps> = ({
                       }`}>
                         {isPos ? 'BULLISH CATALYST' : isNeg ? 'BEARISH OVERHANG' : 'NEUTRAL DISCLOSURE'}
                       </span>
+                      {art.isCatalyst && (
+                        <span className="px-2 py-0.5 rounded text-[9px] font-mono font-bold bg-indigo-950 text-indigo-300 border border-indigo-800">
+                          Corporate Catalyst
+                        </span>
+                      )}
                     </div>
 
                     <h5 className="text-sm font-semibold text-slate-100 leading-snug pt-0.5">
-                      {art.title}
+                      {art.url ? (
+                        <a
+                          href={art.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="hover:text-emerald-400 hover:underline transition-colors"
+                        >
+                          {art.title}
+                        </a>
+                      ) : (
+                        art.title
+                      )}
                     </h5>
 
                     <p className="text-xs text-slate-300 leading-relaxed font-sans pt-0.5">
@@ -124,12 +141,12 @@ export const NewsAndCatalystsPage: React.FC<NewsAndCatalystsPageProps> = ({
                     </p>
                   </div>
 
-                  <div className="sm:text-right shrink-0 font-mono text-xs bg-slate-950/70 p-2.5 rounded-lg border border-slate-800">
-                    <span className="text-[10px] text-slate-500 uppercase block font-sans">Catalyst Bias</span>
+                  <div className="sm:text-right shrink-0 font-mono text-xs bg-slate-950/70 p-2.5 rounded-lg border border-slate-800 min-w-[120px]">
+                    <span className="text-[10px] text-slate-500 uppercase block font-sans">VADER Polarity</span>
                     <span className={`text-base font-bold ${
-                      art.finbertScore >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                      scoreVal >= 0 ? 'text-emerald-400' : 'text-rose-400'
                     }`}>
-                      {art.finbertScore >= 0 ? '+' : ''}{art.finbertScore.toFixed(2)}
+                      {scoreVal >= 0 ? '+' : ''}{scoreVal.toFixed(2)}
                     </span>
                     <div className="text-[10px] text-slate-400 mt-0.5 font-sans">
                       {isPos ? 'Positive Driver' : isNeg ? 'Downside Risk' : 'Routine Filing'}

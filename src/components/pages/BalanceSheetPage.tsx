@@ -743,8 +743,8 @@ export const BalanceSheetPage: React.FC<BalanceSheetPageProps> = ({
             </div>
             <ul className="text-xs text-slate-300 space-y-1.5 list-disc list-inside">
               <li>{funds.debtToEquity !== undefined ? `Debt-to-equity ratio reported at ${funds.debtToEquity.toFixed(1)}%.` : 'Debt-to-equity disclosure currently unavailable.'}</li>
-              <li>Strong operating cash flows support capital expenditure without dilutive equity funding.</li>
-              <li>Interest coverage cushion protects net margins against interest rate fluctuations.</li>
+              <li>{funds.operatingCashFlow && funds.operatingCashFlow !== 'N/A' ? `Operating cash flow reported at ${funds.operatingCashFlow}.` : 'Operating cash flow filing disclosures currently unavailable.'}</li>
+              <li>{funds.annualPnL && funds.annualPnL.length > 0 && funds.annualPnL[funds.annualPnL.length - 1].interest && funds.annualPnL[funds.annualPnL.length - 1].interest! > 0 ? `Interest coverage calculated at ${(funds.annualPnL[funds.annualPnL.length - 1].operatingProfit / funds.annualPnL[funds.annualPnL.length - 1].interest!).toFixed(2)}x.` : 'Interest coverage calculation unavailable from current filings.'}</li>
               <li>{funds.roe !== undefined ? `Return on equity (${funds.roe}%) capital efficiency.` : 'Return on equity filing details currently pending.'}</li>
             </ul>
           </div>
@@ -755,9 +755,9 @@ export const BalanceSheetPage: React.FC<BalanceSheetPageProps> = ({
               <span>Solvency & Margin Stress Test</span>
             </div>
             <ul className="text-xs text-slate-300 space-y-1.5 list-disc list-inside">
-              <li>Current ratio of {funds.currentRatio || '1.35'}x provides adequate short-term working capital cushion.</li>
-              <li>No immediate credit rating downgrade risk or covenant breach signals.</li>
-              <li>Institutional ownership: {shareholding ? `${((shareholding.fiiPct || 0) + (shareholding.diiPct || 0)).toFixed(1)}% institutional holding.` : 'Ownership filing details currently unavailable.'}</li>
+              <li>{funds.currentRatio !== undefined && funds.currentRatio !== null ? `Current ratio reported at ${funds.currentRatio.toFixed(2)}x.` : 'Current ratio disclosure currently unavailable.'}</li>
+              <li>Credit rating agency reviews and debt covenant compliance records are subject to statutory exchange filings.</li>
+              <li>{shareholding ? `Institutional ownership: ${((shareholding.fiiPct || 0) + (shareholding.diiPct || 0)).toFixed(1)}% institutional holding.` : 'Ownership filing details currently unavailable.'}</li>
             </ul>
           </div>
         </div>

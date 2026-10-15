@@ -108,13 +108,21 @@ export const PredictionTab: React.FC<PredictionTabProps> = ({ signal, quote }) =
             <div className="bg-slate-950/60 border border-slate-800/80 p-3 rounded-xl space-y-1">
               <div className="flex items-center justify-between">
                 <span className="text-slate-400 text-[11px]">2. FinBERT News</span>
-                <span className="text-[10px] text-emerald-400 font-bold">{Math.round(breakdown.finbert.weight * 100)}%</span>
+                <span className={`text-[10px] font-bold ${breakdown.finbert.weight > 0 ? 'text-emerald-400' : 'text-slate-500'}`}>{Math.round(breakdown.finbert.weight * 100)}%</span>
               </div>
-              <div className={`text-lg font-bold ${breakdown.finbert.score >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                {breakdown.finbert.score >= 0 ? '+' : ''}{breakdown.finbert.score.toFixed(2)}
+              <div className={`text-lg font-bold ${
+                breakdown.finbert.status === 'UNAVAILABLE' || breakdown.finbert.weight === 0
+                  ? 'text-slate-500'
+                  : breakdown.finbert.score >= 0 ? 'text-emerald-400' : 'text-rose-400'
+              }`}>
+                {breakdown.finbert.status === 'UNAVAILABLE' || breakdown.finbert.weight === 0
+                  ? 'Offline'
+                  : `${breakdown.finbert.score >= 0 ? '+' : ''}${breakdown.finbert.score.toFixed(2)}`}
               </div>
               <div className="text-[10px] text-slate-400">
-                Contrib: {breakdown.finbert.contribution >= 0 ? '+' : ''}{breakdown.finbert.contribution.toFixed(3)}
+                {breakdown.finbert.status === 'UNAVAILABLE' || breakdown.finbert.weight === 0
+                  ? 'Service not deployed'
+                  : `Contrib: ${breakdown.finbert.contribution >= 0 ? '+' : ''}${breakdown.finbert.contribution.toFixed(3)}`}
               </div>
             </div>
 

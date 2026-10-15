@@ -25,14 +25,18 @@ export const FinancialNewsPage: React.FC<FinancialNewsPageProps> = ({ sentiment,
   const [searchTerm, setSearchTerm] = useState('');
 
   const articles = sentiment.articles || [];
-  const posCount = articles.filter(a => a.finbertScore > 0.15).length;
-  const negCount = articles.filter(a => a.finbertScore < -0.15).length;
+  const posCount = articles.filter(a => a.sentimentLabel === 'POSITIVE' || a.vaderScore >= 0.05).length;
+  const negCount = articles.filter(a => a.sentimentLabel === 'NEGATIVE' || a.vaderScore <= -0.05).length;
   const neuCount = Math.max(0, articles.length - posCount - negCount);
 
   const filteredArticles = articles.filter(a => {
-    if (filterType === 'BULLISH' && a.finbertScore <= 0.15) return false;
-    if (filterType === 'BEARISH' && a.finbertScore >= -0.15) return false;
-    if (filterType === 'NEUTRAL' && (a.finbertScore > 0.15 || a.finbertScore < -0.15)) return false;
+    const isBull = a.sentimentLabel === 'POSITIVE' || a.vaderScore >= 0.05;
+    const isBear = a.sentimentLabel === 'NEGATIVE' || a.vaderScore <= -0.05;
+    const isNeu = !isBull && !isBear;
+
+    if (filterType === 'BULLISH' && !isBull) return false;
+    if (filterType === 'BEARISH' && !isBear) return false;
+    if (filterType === 'NEUTRAL' && !isNeu) return false;
     if (searchTerm.trim()) {
       const q = searchTerm.toLowerCase();
       return a.title.toLowerCase().includes(q) || a.summary.toLowerCase().includes(q) || a.publisher.toLowerCase().includes(q);
@@ -62,13 +66,13 @@ export const FinancialNewsPage: React.FC<FinancialNewsPageProps> = ({ sentiment,
           <div className="flex items-center gap-2 font-mono text-xs">
             <span className="text-slate-400">Institutional Tone:</span>
             <span className={`px-3 py-1.5 rounded-lg font-bold uppercase border ${
-              sentiment.finbertScore >= 0.15
+              sentiment.overallScore >= 0.10
                 ? 'bg-emerald-950 text-emerald-400 border-emerald-800'
-                : sentiment.finbertScore <= -0.15
+                : sentiment.overallScore <= -0.10
                 ? 'bg-rose-950 text-rose-400 border-rose-800'
                 : 'bg-slate-800 text-slate-300 border-slate-700'
             }`}>
-              {sentiment.finbertScore >= 0.15 ? 'BULLISH CONSENSUS' : sentiment.finbertScore <= -0.15 ? 'BEARISH OVERHANG' : 'NEUTRAL DISCLOSURES'}
+              {sentiment.newsCount === 0 ? 'NO ACTIVE DISCLOSURES' : sentiment.overallScore >= 0.10 ? 'BULLISH CONSENSUS' : sentiment.overallScore <= -0.10 ? 'BEARISH OVERHANG' : 'NEUTRAL DISCLOSURES'}
             </span>
           </div>
         </div>
@@ -94,13 +98,15 @@ export const FinancialNewsPage: React.FC<FinancialNewsPageProps> = ({ sentiment,
           </div>
 
           <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-3.5 space-y-1">
-            <span className="text-slate-400 text-[11px] block uppercase">FinBERT Media Score</span>
+            <span className="text-slate-400 text-[11px] block uppercase">VADER News Score</span>
             <div className={`text-2xl font-bold ${
-              sentiment.finbertScore >= 0 ? 'text-emerald-400' : 'text-rose-400'
+              sentiment.newsCount === 0 ? 'text-slate-500' : sentiment.vaderCompound >= 0 ? 'text-emerald-400' : 'text-rose-400'
             }`}>
-              {sentiment.finbertScore >= 0 ? '+' : ''}{sentiment.finbertScore.toFixed(2)}
+              {sentiment.newsCount === 0 ? 'N/A' : `${sentiment.vaderCompound >= 0 ? '+' : ''}${sentiment.vaderCompound.toFixed(2)}`}
             </div>
-            <div className="text-[10px] text-slate-500">Range: -1.00 to +1.00</div>
+            <div className="text-[10px] text-slate-500">
+              {sentiment.finbertStatus === 'UNAVAILABLE' || sentiment.finbertScore === null ? 'FinBERT Service: Offline' : `FinBERT: ${sentiment.finbertScore.toFixed(2)}`}
+            </div>
           </div>
         </div>
       </div>
@@ -189,8 +195,8 @@ export const FinancialNewsPage: React.FC<FinancialNewsPageProps> = ({ sentiment,
             </div>
           ) : (
             filteredArticles.map((art: NewsArticle, idx: number) => {
-              const isPos = art.finbertScore > 0.15;
-              const isNeg = art.finbertScore < -0.15;
+              const isPos = art.sentimentLabel === 'POSITIVE' || art.vaderScore >= 0.05;
+              const isNeg = art.sentimentLabel === 'NEGATIVE' || art.vaderScore <= -0.05;
               return (
                 <div
                   key={idx}
@@ -215,10 +221,27 @@ export const FinancialNewsPage: React.FC<FinancialNewsPageProps> = ({ sentiment,
                         }`}>
                           {isPos ? 'BULLISH CATALYST' : isNeg ? 'CAUTIONARY RISK' : 'ROUTINE DISCLOSURE'}
                         </span>
+                        {art.isCatalyst && (
+                          <span className="px-2 py-0.5 rounded text-[9px] font-mono font-bold bg-indigo-950 text-indigo-300 border border-indigo-800">
+                            Corporate Catalyst
+                          </span>
+                        )}
                       </div>
 
                       <h4 className="text-sm sm:text-base font-bold text-slate-100 leading-snug pt-0.5">
-                        {art.title}
+                        {art.url ? (
+                          <a
+                            href={art.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="hover:text-emerald-400 hover:underline transition-colors inline-flex items-baseline gap-1.5"
+                          >
+                            <span>{art.title}</span>
+                            <ExternalLink className="w-3.5 h-3.5 text-slate-500 shrink-0 inline" />
+                          </a>
+                        ) : (
+                          <span>{art.title}</span>
+                        )}
                       </h4>
 
                       <p className="text-xs text-slate-300 leading-relaxed font-sans pt-0.5">
@@ -233,11 +256,11 @@ export const FinancialNewsPage: React.FC<FinancialNewsPageProps> = ({ sentiment,
                     </div>
 
                     <div className="sm:text-right shrink-0 font-mono text-xs bg-slate-950/80 p-3 rounded-xl border border-slate-800 min-w-[120px]">
-                      <span className="text-[10px] text-slate-500 uppercase block font-sans">Semantic Score</span>
+                      <span className="text-[10px] text-slate-500 uppercase block font-sans">VADER Sentiment</span>
                       <span className={`text-lg font-bold ${
-                        art.finbertScore >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                        art.vaderScore >= 0 ? 'text-emerald-400' : 'text-rose-400'
                       }`}>
-                        {art.finbertScore >= 0 ? '+' : ''}{art.finbertScore.toFixed(2)}
+                        {art.vaderScore >= 0 ? '+' : ''}{art.vaderScore.toFixed(2)}
                       </span>
                       <div className="text-[10px] text-slate-400 mt-0.5 font-sans">
                         {isPos ? 'Expansion Event' : isNeg ? 'Headwind' : 'Neutral'}

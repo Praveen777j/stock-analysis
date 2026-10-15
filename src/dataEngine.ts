@@ -1695,7 +1695,8 @@ export async function fetchLiveNewsAndSentiment(
       const hasNews = articles.length > 0;
       return {
         vaderCompound: data.vaderCompound || 0.0,
-        finbertScore: data.finbertScore || 0.0,
+        finbertScore: (data.finbertScore !== undefined && data.finbertScore !== null) ? data.finbertScore : null,
+        finbertStatus: data.finbertStatus || (data.finbertScore !== null && data.finbertScore !== undefined ? 'LIVE' : 'UNAVAILABLE'),
         newsCount: articles.length,
         overallScore: data.overallScore || 0.0,
         label: data.label || 'NEUTRAL',
@@ -1721,7 +1722,8 @@ export function generateSentiment(
   // Never generates fabricated press headlines or fabricated Reddit posts.
   return {
     vaderCompound: 0.0,
-    finbertScore: 0.0,
+    finbertScore: null,
+    finbertStatus: 'UNAVAILABLE',
     newsCount: 0,
     overallScore: 0.0,
     label: 'NEUTRAL',
@@ -1819,7 +1821,8 @@ export function computeModelSignal(
   }
 
   // --- Unified Hybrid Model Synthesis (FinBERT + VADER + Technicals + ML) ---
-  const finbertScore = Math.max(-1, Math.min(1, sentiment.finbertScore));
+  const isFinbertLive = sentiment?.finbertStatus === 'LIVE' && sentiment?.finbertScore !== null;
+  const finbertScore = isFinbertLive ? Math.max(-1, Math.min(1, sentiment.finbertScore!)) : 0;
   const vaderScore = Math.max(-1, Math.min(1, sentiment.vaderCompound));
 
   // Technical component (-1.0 to +1.0)
@@ -1879,16 +1882,32 @@ export function computeModelSignal(
     ? Math.max(-1, Math.min(1, Math.round(fundScore * 100) / 100))
     : 0;
 
-  // If fundamental data is unavailable or has no valid metrics, exclude it from model scoring
-  // and re-normalize remaining weights so missing observations cannot create a bullish or bearish signal
+  // Re-normalize weights dynamically:
+  // If FinBERT is offline or fundamental statements are unavailable, exclude them
+  // and re-normalize remaining weights cleanly so the sum of active weights is always 100%.
   const hasFundData = hasValidFundamentalMetric;
-  const wTech = hasFundData ? 0.30 : 0.35;
-  const wFinbert = hasFundData ? 0.25 : 0.30;
-  const wVader = hasFundData ? 0.15 : 0.15;
-  const wFund = hasFundData ? 0.15 : 0.00;
-  const wMl = hasFundData ? 0.15 : 0.20;
+  let wTech: number;
+  let wFinbert: number;
+  let wVader: number;
+  let wFund: number;
+  let wMl: number;
 
-  const finbertContribution = Math.round(finbertScore * wFinbert * 100) / 100;
+  if (isFinbertLive) {
+    wTech = hasFundData ? 0.30 : 0.35;
+    wFinbert = hasFundData ? 0.25 : 0.30;
+    wVader = hasFundData ? 0.15 : 0.15;
+    wFund = hasFundData ? 0.15 : 0.00;
+    wMl = hasFundData ? 0.15 : 0.20;
+  } else {
+    // FinBERT transformer service unavailable: cleanly redistribute weight among verified live engines
+    wFinbert = 0.00;
+    wTech = hasFundData ? 0.40 : 0.45;
+    wVader = hasFundData ? 0.25 : 0.30;
+    wFund = hasFundData ? 0.15 : 0.00;
+    wMl = hasFundData ? 0.20 : 0.25;
+  }
+
+  const finbertContribution = isFinbertLive ? Math.round(finbertScore * wFinbert * 100) / 100 : 0;
   const vaderContribution = Math.round(vaderScore * wVader * 100) / 100;
   const techContribution = Math.round(techScore * wTech * 100) / 100;
   const fundContribution = hasFundData ? Math.round(fundScore * wFund * 100) / 100 : 0;
@@ -1960,10 +1979,10 @@ export function computeModelSignal(
     },
     {
       feature: 'News Sentiment Score',
-      value: sentiment.finbertScore,
-      impact: Math.round(finbertContribution * 1000) / 1000,
-      direction: finbertScore >= 0 ? 'POSITIVE' : 'NEGATIVE',
-      description: 'Semantic analysis of corporate news and financial disclosures'
+      value: isFinbertLive ? (sentiment.finbertScore ?? 0) : (sentiment.vaderCompound || 0),
+      impact: Math.round((isFinbertLive ? finbertContribution : vaderContribution) * 1000) / 1000,
+      direction: (isFinbertLive ? finbertScore : vaderScore) >= 0 ? 'POSITIVE' : 'NEGATIVE',
+      description: isFinbertLive ? 'FinBERT semantic analysis of corporate news' : 'VADER lexical analysis of corporate news and disclosures'
     },
     {
       feature: 'MACD Momentum Histogram',
@@ -2016,20 +2035,19 @@ export function computeModelSignal(
     }
   }
 
-  // 2. News Catalyst: STRICTLY ONLY if authentic articles were retrieved from the real news source
+  // 2. News Catalyst: STRICTLY ONLY if authentic corporate catalyst articles were retrieved
   const articles = sentiment?.articles || [];
-  if (articles.length > 0) {
-    const topArticle = articles.find(a => Math.abs(a.finbertScore) > 0.15) || articles[0];
-    if (topArticle && topArticle.title) {
-      catalysts.push({
-        source: 'NEWS_API',
-        title: topArticle.title,
-        category: `Verified Media: ${topArticle.publisher || 'Financial Press'}`,
-        impactScore: Math.round(Math.abs(topArticle.finbertScore || 0.25) * 100) / 100,
-        upsidePotential: topArticle.finbertScore > 0.15 ? 'Positive Press Tone' : topArticle.finbertScore < -0.15 ? 'Cautionary Press Tone' : 'Neutral Corporate Disclosure',
-        reasoning: `${topArticle.publisher || 'Media'} (${topArticle.date}): ${topArticle.summary ? topArticle.summary.slice(0, 150) : topArticle.title}`
-      });
-    }
+  const catalystArticle = articles.find(a => a.isCatalyst && Math.abs(a.vaderScore) >= 0.05) || articles.find(a => a.isCatalyst);
+  if (catalystArticle && catalystArticle.title) {
+    const artScore = catalystArticle.vaderScore;
+    catalysts.push({
+      source: 'NEWS_API',
+      title: catalystArticle.title,
+      category: `Corporate Disclosure: ${catalystArticle.publisher || 'Financial Press'}`,
+      impactScore: Math.round(Math.abs(artScore) * 100) / 100,
+      upsidePotential: artScore >= 0.05 ? 'Positive Catalyst' : artScore <= -0.05 ? 'Cautionary Overhang' : 'Corporate Filing',
+      reasoning: `${catalystArticle.publisher || 'Media'} (${catalystArticle.date}): ${catalystArticle.summary ? catalystArticle.summary.slice(0, 150) : catalystArticle.title}`
+    });
   }
 
   // 3. Reddit / Social Catalyst: STRICTLY ONLY if genuine social discussions were retrieved
@@ -2037,11 +2055,12 @@ export function computeModelSignal(
   if (redditPosts.length > 0) {
     const topReddit = redditPosts[0];
     if (topReddit && topReddit.title) {
+      const rScore = topReddit.vaderScore || 0;
       catalysts.push({
         source: 'REDDIT_SOCIAL',
         title: topReddit.title,
         category: `Retail Discussion: ${topReddit.subreddit}`,
-        impactScore: Math.round(Math.abs(topReddit.finbertScore || 0.25) * 100) / 100,
+        impactScore: Math.round(Math.abs(rScore) * 100) / 100,
         upsidePotential: `${topReddit.score} Upvotes / ${topReddit.numComments} Comments`,
         reasoning: `Retail discussion thread in ${topReddit.subreddit} on ${topReddit.date || 'recent date'}`
       });
@@ -2294,7 +2313,7 @@ export function computeModelSignal(
     unifiedScore,
     exactAction,
     breakdown: {
-      finbert: { score: finbertScore, weight: wFinbert, contribution: finbertContribution },
+      finbert: { score: finbertScore, weight: wFinbert, contribution: finbertContribution, status: isFinbertLive ? 'LIVE' : 'UNAVAILABLE' },
       vader: { score: vaderScore, weight: wVader, contribution: vaderContribution },
       technicals: { score: techScore, weight: wTech, contribution: techContribution },
       fundamentals: hasFundData ? { score: fundScore, weight: wFund, contribution: fundContribution } : undefined,
