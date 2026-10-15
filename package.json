@@ -13,7 +13,7 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "test": "tsx tests/audit_verification.ts && tsx tests/data_integrations.ts"
+    "test": "tsx tests/audit_verification.ts && tsx tests/data_integrations.ts && tsx tests/finbert_inference.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

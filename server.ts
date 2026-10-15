@@ -4,6 +4,7 @@ import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { runFinbertInference } from './src/finbertService';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1198,6 +1199,37 @@ async function startServer() {
         ? Math.round((articles.reduce((a, b) => a + b.vaderScore, 0) / articles.length) * 100) / 100
         : 0.0;
 
+      // 1b. Genuine FinBERT inference on financial news headlines via Hugging Face Inference API
+      let finbertScore: number | null = null;
+      let finbertStatus: 'LIVE' | 'UNAVAILABLE' = 'UNAVAILABLE';
+      let finbertDiagnostic: string | undefined = undefined;
+
+      if (hasRealNews) {
+        try {
+          const headlineTexts = articles.map(a => `${a.title}. ${a.summary}`.slice(0, 512));
+          const fbRes = await runFinbertInference(headlineTexts);
+          if (fbRes.status === 'LIVE' && fbRes.overallScore !== null) {
+            finbertStatus = 'LIVE';
+            finbertScore = fbRes.overallScore;
+            // Attach individual headline FinBERT scores and genuine labels
+            for (let i = 0; i < articles.length; i++) {
+              const item = fbRes.items[i];
+              if (item) {
+                articles[i].finbertScore = item.score;
+                articles[i].sentimentLabel = item.label;
+              }
+            }
+          } else {
+            finbertStatus = 'UNAVAILABLE';
+            finbertScore = null;
+            finbertDiagnostic = fbRes.diagnostics.message;
+          }
+        } catch (e: any) {
+          finbertStatus = 'UNAVAILABLE';
+          finbertScore = null;
+        }
+      }
+
       // 2. Query Genuine Reddit Community Discussions
       let rawRedditPosts: any[] = [];
       let redditStatus: 'SUCCESS' | 'AUTH_REQUIRED' | 'EMPTY' | 'RATE_LIMITED' | 'ERROR' = 'EMPTY';
@@ -1301,7 +1333,10 @@ async function startServer() {
         ? Math.round((redditPosts.reduce((acc, p) => acc + p.vaderScore, 0) / redditPosts.length) * 100) / 100
         : 0.0;
 
-      const compositeScore = avgVader;
+      const compositeScore = finbertStatus === 'LIVE' && finbertScore !== null
+        ? Math.round(((finbertScore * 0.6) + (avgVader * 0.4)) * 100) / 100
+        : avgVader;
+
       let label: 'BULLISH' | 'NEUTRAL' | 'BEARISH' = 'NEUTRAL';
       if (hasRealNews) {
         if (compositeScore >= 0.05) label = 'BULLISH';
@@ -1312,8 +1347,9 @@ async function startServer() {
         ticker,
         overallScore: compositeScore,
         vaderCompound: avgVader,
-        finbertScore: null, // FinBERT PyTorch transformer model offline in Node.js
-        finbertStatus: 'UNAVAILABLE',
+        finbertScore,
+        finbertStatus,
+        finbertDiagnostic,
         newsCount: articles.length,
         label,
         dataStatus: hasRealNews ? 'LIVE' : 'UNAVAILABLE',

@@ -135,6 +135,7 @@ export interface SentimentData {
   articles: NewsArticle[];
   reddit: RedditResult;
   dataStatus?: 'LIVE' | 'EMPTY' | 'UNAVAILABLE';
+  finbertDiagnostic?: string;
 }
 
 export interface AnnualFinancialRow {
