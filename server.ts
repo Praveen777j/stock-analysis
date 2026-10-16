@@ -5,6 +5,7 @@ import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { runFinbertInference } from './src/finbertService';
+import { extractCleanArticleData, deduplicateAndGroupNewsArticles } from './src/newsIntelligence';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1113,7 +1114,7 @@ async function startServer() {
         return { compound: rounded, label };
       }
 
-      const articles: Array<{
+      const rawFetchedArticles: Array<{
         title: string;
         publisher: string;
         date: string;
@@ -1122,10 +1123,9 @@ async function startServer() {
         vaderScore: number;
         finbertScore: number | null;
         sentimentLabel: 'POSITIVE' | 'NEUTRAL' | 'NEGATIVE';
-        isCatalyst?: boolean;
       }> = [];
 
-      // 1. Fetch genuine articles from Google News RSS & Economic Times RSS
+      // 1. Fetch genuine articles from Google News RSS with clean decoding & canonical URL extraction
       try {
         const queryTerm = encodeURIComponent(`${companyName} stock OR shares`);
         const c = new AbortController();
@@ -1146,53 +1146,54 @@ async function startServer() {
           let match;
           const seenTitles = new Set<string>();
 
-          while ((match = itemRegex.exec(xml)) !== null && articles.length < 12) {
-            let rawTitle = decodeHtml(match[1].replace(/<!\[CDATA\[(.*?)\]\]>/g, '$1')).trim();
-            const articleUrl = match[2].trim();
-            const pubDate = match[3] ? new Date(match[3]).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Recent';
-            const rawDesc = decodeHtml(match[4].replace(/<!\[CDATA\[(.*?)\]\]>/g, '$1').replace(/<[^>]+>/g, '')).trim();
-            let publisher = match[5] ? decodeHtml(match[5].replace(/<!\[CDATA\[(.*?)\]\]>/g, '$1')).trim() : '';
+          while ((match = itemRegex.exec(xml)) !== null && rawFetchedArticles.length < 12) {
+            const rawTitleTag = match[1];
+            const rawLinkTag = match[2];
+            const rawPubDateTag = match[3];
+            const rawDescTag = match[4];
+            const rawSourceTag = match[5];
 
-            // Clean title suffix like " - Livemint"
-            if (!publisher && rawTitle.includes(' - ')) {
-              const parts = rawTitle.split(' - ');
-              publisher = parts[parts.length - 1].trim();
-              rawTitle = parts.slice(0, -1).join(' - ').trim();
-            } else if (publisher && rawTitle.endsWith(` - ${publisher}`)) {
-              rawTitle = rawTitle.slice(0, -(publisher.length + 3)).trim();
-            }
+            const pubDate = rawPubDateTag
+              ? new Date(rawPubDateTag).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+              : 'Recent';
+
+            // Extract canonical title, valid URL, decoded summary and publisher without raw HTML
+            const cleaned = extractCleanArticleData(rawTitleTag, rawLinkTag, rawDescTag, rawSourceTag);
 
             // Exclude generic automated quote pages (e.g. "Stock Price Today Live", "Share Price NSE")
-            const isGenericQuote = /share price today|stock price today|live updates.*share price|today's share price/i.test(rawTitle);
+            const isGenericQuote = /share price today|stock price today|live updates.*share price|today's share price/i.test(cleaned.title);
             if (isGenericQuote) continue;
 
             // Check if title is duplicate
-            const titleKey = rawTitle.toLowerCase().replace(/[^a-z0-9]/g, '');
+            const titleKey = cleaned.title.toLowerCase().replace(/[^a-z0-9]/g, '');
             if (seenTitles.has(titleKey)) continue;
             seenTitles.add(titleKey);
 
-            // Corporate catalyst detection: earnings, contracts, regulatory, acquisitions, orders
-            const isCatalyst = /profit|revenue|loss|order|contract|deal|acquire|acquisition|merger|earnings|results|dividend|q[1-4]|expansion|sebi|regulatory|downgrade|upgrade|rating|guidance/i.test(rawTitle);
-
-            const articleText = `${rawTitle} ${rawDesc}`;
+            const articleText = `${cleaned.title} ${cleaned.summary}`;
             const { compound, label } = analyzeVaderSentiment(articleText);
 
-            articles.push({
-              title: rawTitle,
-              publisher: publisher || 'Financial News',
+            rawFetchedArticles.push({
+              title: cleaned.title,
+              publisher: cleaned.publisher,
               date: pubDate,
-              summary: rawDesc.slice(0, 180) || rawTitle,
-              url: articleUrl,
+              summary: cleaned.summary,
+              url: cleaned.url,
               vaderScore: compound,
-              finbertScore: null, // FinBERT PyTorch transformer model service not deployed in Node.js process
-              sentimentLabel: label,
-              isCatalyst
+              finbertScore: null,
+              sentimentLabel: label
             });
           }
         }
       } catch (_) {
         // Genuine network or timeout failure
       }
+
+      // Group corporate events and separate stories count from distinct corporate events count
+      const groupedData = deduplicateAndGroupNewsArticles(rawFetchedArticles);
+      const articles = groupedData.articles;
+      const distinctEventsCount = groupedData.distinctEventsCount;
+      const expansionCatalystsCount = groupedData.expansionCatalystsCount;
+      const cautionaryOverhangsCount = groupedData.cautionaryOverhangsCount;
 
       const hasRealNews = articles.length > 0;
       const avgVader = hasRealNews
@@ -1203,6 +1204,7 @@ async function startServer() {
       let finbertScore: number | null = null;
       let finbertStatus: 'LIVE' | 'UNAVAILABLE' = 'UNAVAILABLE';
       let finbertDiagnostic: string | undefined = undefined;
+      let finbertReason: 'MISSING_TOKEN' | 'EMPTY_INPUT' | 'AUTH_ERROR' | 'RATE_LIMITED' | 'UNSUPPORTED_ENDPOINT' | 'MODEL_LOADING' | 'MODEL_UNAVAILABLE' | 'TIMEOUT' | 'NETWORK_ERROR' | 'MALFORMED_RESPONSE' | 'SERVICE_UNAVAILABLE' | undefined = undefined;
 
       if (hasRealNews) {
         try {
@@ -1211,6 +1213,8 @@ async function startServer() {
           if (fbRes.status === 'LIVE' && fbRes.overallScore !== null) {
             finbertStatus = 'LIVE';
             finbertScore = fbRes.overallScore;
+            finbertDiagnostic = fbRes.diagnostics.message;
+            finbertReason = undefined;
             // Attach individual headline FinBERT scores and genuine labels
             for (let i = 0; i < articles.length; i++) {
               const item = fbRes.items[i];
@@ -1223,10 +1227,13 @@ async function startServer() {
             finbertStatus = 'UNAVAILABLE';
             finbertScore = null;
             finbertDiagnostic = fbRes.diagnostics.message;
+            finbertReason = fbRes.diagnostics.reason || 'MISSING_TOKEN';
           }
         } catch (e: any) {
           finbertStatus = 'UNAVAILABLE';
           finbertScore = null;
+          finbertDiagnostic = 'FinBERT inference service exception: ' + (e?.message || 'Error');
+          finbertReason = 'SERVICE_UNAVAILABLE';
         }
       }
 
@@ -1350,7 +1357,11 @@ async function startServer() {
         finbertScore,
         finbertStatus,
         finbertDiagnostic,
+        finbertReason,
         newsCount: articles.length,
+        distinctEventsCount,
+        expansionCatalystsCount,
+        cautionaryOverhangsCount,
         label,
         dataStatus: hasRealNews ? 'LIVE' : 'UNAVAILABLE',
         articles,

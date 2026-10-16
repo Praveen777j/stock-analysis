@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { SentimentData, StockQuote, NewsArticle } from '../../types';
+import { cleanHtmlText, isValidArticleUrl } from '../../newsIntelligence';
 import {
   Newspaper,
   CheckCircle2,
@@ -25,6 +26,26 @@ export const FinancialNewsPage: React.FC<FinancialNewsPageProps> = ({ sentiment,
   const [searchTerm, setSearchTerm] = useState('');
 
   const articles = sentiment.articles || [];
+
+  // Compute distinct corporate events and expansion catalysts
+  const distinctExpansionEvents = new Set<string>();
+  const distinctRiskEvents = new Set<string>();
+  const distinctTotalEvents = new Set<string>();
+
+  articles.forEach(a => {
+    if (a.corporateEventType === 'EXPANSION' && a.corporateEventId) {
+      distinctExpansionEvents.add(a.corporateEventId);
+      distinctTotalEvents.add(a.corporateEventId);
+    } else if (a.corporateEventType === 'RISK' && a.corporateEventId) {
+      distinctRiskEvents.add(a.corporateEventId);
+      distinctTotalEvents.add(a.corporateEventId);
+    }
+  });
+
+  const distinctExpansionCount = sentiment.expansionCatalystsCount ?? distinctExpansionEvents.size;
+  const distinctRiskCount = sentiment.cautionaryOverhangsCount ?? distinctRiskEvents.size;
+  const distinctEventsCount = sentiment.distinctEventsCount ?? distinctTotalEvents.size;
+
   const posCount = articles.filter(a => a.sentimentLabel === 'POSITIVE' || a.vaderScore >= 0.05).length;
   const negCount = articles.filter(a => a.sentimentLabel === 'NEGATIVE' || a.vaderScore <= -0.05).length;
   const neuCount = Math.max(0, articles.length - posCount - negCount);
@@ -39,7 +60,10 @@ export const FinancialNewsPage: React.FC<FinancialNewsPageProps> = ({ sentiment,
     if (filterType === 'NEUTRAL' && !isNeu) return false;
     if (searchTerm.trim()) {
       const q = searchTerm.toLowerCase();
-      return a.title.toLowerCase().includes(q) || a.summary.toLowerCase().includes(q) || a.publisher.toLowerCase().includes(q);
+      const cleanTitle = cleanHtmlText(a.title).toLowerCase();
+      const cleanSummary = cleanHtmlText(a.summary).toLowerCase();
+      const cleanPub = cleanHtmlText(a.publisher).toLowerCase();
+      return cleanTitle.includes(q) || cleanSummary.includes(q) || cleanPub.includes(q);
     }
     return true;
   });
@@ -82,19 +106,19 @@ export const FinancialNewsPage: React.FC<FinancialNewsPageProps> = ({ sentiment,
           <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-3.5 space-y-1">
             <span className="text-slate-400 text-[11px] block uppercase">Indexed Stories</span>
             <div className="text-2xl font-bold text-slate-100">{articles.length}</div>
-            <div className="text-[10px] text-slate-500">Verified Press Outlets</div>
+            <div className="text-[10px] text-slate-500">{distinctEventsCount} Corporate Events</div>
           </div>
 
           <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-3.5 space-y-1">
             <span className="text-slate-400 text-[11px] block uppercase">Expansion Catalysts</span>
-            <div className="text-2xl font-bold text-emerald-400">+{posCount}</div>
-            <div className="text-[10px] text-slate-500">Positive Revenue & Orders</div>
+            <div className="text-2xl font-bold text-emerald-400">+{distinctExpansionCount}</div>
+            <div className="text-[10px] text-slate-500">{distinctExpansionCount} Distinct Business Events</div>
           </div>
 
           <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-3.5 space-y-1">
             <span className="text-slate-400 text-[11px] block uppercase">Cautionary Overhangs</span>
-            <div className="text-2xl font-bold text-rose-400">{negCount}</div>
-            <div className="text-[10px] text-slate-500">Risks & Margin Pressure</div>
+            <div className="text-2xl font-bold text-rose-400">{distinctRiskCount}</div>
+            <div className="text-[10px] text-slate-500">{distinctRiskCount} Distinct Corporate Risks</div>
           </div>
 
           <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-3.5 space-y-1">
@@ -104,8 +128,10 @@ export const FinancialNewsPage: React.FC<FinancialNewsPageProps> = ({ sentiment,
             }`}>
               {sentiment.newsCount === 0 ? 'N/A' : `${sentiment.vaderCompound >= 0 ? '+' : ''}${sentiment.vaderCompound.toFixed(2)}`}
             </div>
-            <div className="text-[10px] text-slate-500">
-              {sentiment.finbertStatus === 'UNAVAILABLE' || sentiment.finbertScore === null ? 'FinBERT Service: Offline' : `FinBERT: ${sentiment.finbertScore.toFixed(2)}`}
+            <div className="text-[10px] text-slate-500" title={sentiment.finbertDiagnostic || undefined}>
+              {sentiment.finbertStatus === 'LIVE' && sentiment.finbertScore !== null
+                ? `FinBERT: ${sentiment.finbertScore >= 0 ? '+' : ''}${sentiment.finbertScore.toFixed(2)}`
+                : `FinBERT: Offline (${sentiment.finbertReason ? sentiment.finbertReason.replace(/_/g, ' ') : 'No HF_TOKEN'})`}
             </div>
           </div>
         </div>
@@ -197,6 +223,11 @@ export const FinancialNewsPage: React.FC<FinancialNewsPageProps> = ({ sentiment,
             filteredArticles.map((art: NewsArticle, idx: number) => {
               const isPos = art.sentimentLabel === 'POSITIVE' || art.vaderScore >= 0.05;
               const isNeg = art.sentimentLabel === 'NEGATIVE' || art.vaderScore <= -0.05;
+              const cleanTitle = cleanHtmlText(art.title);
+              const cleanSummary = cleanHtmlText(art.summary);
+              const cleanPublisher = cleanHtmlText(art.publisher);
+              const isUrlValid = isValidArticleUrl(art.url);
+
               return (
                 <div
                   key={idx}
@@ -206,51 +237,75 @@ export const FinancialNewsPage: React.FC<FinancialNewsPageProps> = ({ sentiment,
                     <div className="space-y-1.5 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="px-2.5 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-800 text-emerald-400 border border-slate-700">
-                          {art.publisher}
+                          {cleanPublisher}
                         </span>
                         <span className="text-xs text-slate-400 font-mono flex items-center gap-1">
                           <Clock className="w-3 h-3 text-slate-500" />
                           {art.date}
                         </span>
                         <span className={`px-2.5 py-0.5 rounded text-[10px] font-mono font-bold uppercase border ${
-                          isPos
+                          art.corporateEventType === 'EXPANSION' || (isPos && art.isCatalyst)
                             ? 'bg-emerald-950 text-emerald-400 border-emerald-800'
-                            : isNeg
+                            : art.corporateEventType === 'RISK' || (isNeg && art.isCatalyst)
                             ? 'bg-rose-950 text-rose-400 border-rose-800'
+                            : isPos
+                            ? 'bg-emerald-950/60 text-emerald-300 border-emerald-800/60'
+                            : isNeg
+                            ? 'bg-rose-950/60 text-rose-300 border-rose-800/60'
                             : 'bg-slate-800 text-slate-300 border-slate-700'
                         }`}>
-                          {isPos ? 'BULLISH CATALYST' : isNeg ? 'CAUTIONARY RISK' : 'ROUTINE DISCLOSURE'}
+                          {art.corporateEventType === 'EXPANSION'
+                            ? 'EXPANSION CATALYST'
+                            : art.corporateEventType === 'RISK'
+                            ? 'CAUTIONARY RISK'
+                            : isPos
+                            ? 'POSITIVE SENTIMENT'
+                            : isNeg
+                            ? 'BEARISH CONCERN'
+                            : 'ROUTINE DISCLOSURE'}
                         </span>
-                        {art.isCatalyst && (
+                        {art.corporateEventTitle ? (
+                          <span className="px-2 py-0.5 rounded text-[9px] font-mono font-bold bg-indigo-950 text-indigo-300 border border-indigo-800">
+                            Event: {cleanHtmlText(art.corporateEventTitle)}
+                          </span>
+                        ) : art.isCatalyst ? (
                           <span className="px-2 py-0.5 rounded text-[9px] font-mono font-bold bg-indigo-950 text-indigo-300 border border-indigo-800">
                             Corporate Catalyst
                           </span>
-                        )}
+                        ) : null}
                       </div>
 
                       <h4 className="text-sm sm:text-base font-bold text-slate-100 leading-snug pt-0.5">
-                        {art.url ? (
+                        {isUrlValid ? (
                           <a
                             href={art.url}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="hover:text-emerald-400 hover:underline transition-colors inline-flex items-baseline gap-1.5"
                           >
-                            <span>{art.title}</span>
+                            <span>{cleanTitle}</span>
                             <ExternalLink className="w-3.5 h-3.5 text-slate-500 shrink-0 inline" />
                           </a>
                         ) : (
-                          <span>{art.title}</span>
+                          <span>{cleanTitle}</span>
                         )}
                       </h4>
 
                       <p className="text-xs text-slate-300 leading-relaxed font-sans pt-0.5">
-                        {art.summary}
+                        {cleanSummary}
                       </p>
 
                       <div className="pt-1 flex items-center gap-3 text-[11px] text-slate-400 font-mono">
                         <span>Impact: <strong className={isPos ? 'text-emerald-400' : isNeg ? 'text-rose-400' : 'text-slate-300'}>
-                          {isPos ? 'Revenue & Valuation Boost' : isNeg ? 'Operational Cost Pressure' : 'Informational Filing'}
+                          {art.corporateEventType === 'EXPANSION'
+                            ? 'Corporate Expansion & Valuation Driver'
+                            : art.corporateEventType === 'RISK'
+                            ? 'Operational & Regulatory Risk'
+                            : isPos
+                            ? 'Revenue & Valuation Boost'
+                            : isNeg
+                            ? 'Operational Cost Pressure'
+                            : 'Informational Filing'}
                         </strong></span>
                       </div>
                     </div>

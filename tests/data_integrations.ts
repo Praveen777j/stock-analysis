@@ -2,6 +2,14 @@ import assert from 'node:assert';
 import { IPODetails, StockQuote, SentimentData, NewsArticle } from '../src/types';
 import { UPCOMING_IPOS_CATALOG, searchIPOs, getIPOById } from '../src/ipoCatalog';
 import { computeModelSignal, extractFundamentals } from '../src/dataEngine';
+import {
+  decodeHtml,
+  cleanHtmlText,
+  isValidArticleUrl,
+  extractCleanArticleData,
+  classifyCorporateEvent,
+  deduplicateAndGroupNewsArticles
+} from '../src/newsIntelligence';
 
 console.log('--- STARTING PRODUCTION DATA INTEGRATION VERIFICATION TESTS ---\n');
 
@@ -312,50 +320,133 @@ console.log('✓ Reddit error conditions (403, 429, empty) return honest diagnos
 // ==============================================================================
 console.log('\n[Test Suite 4] Testing Financial News Clean HTML Decoding, Canonical URLs & Catalysts...');
 
-function decodeHtml(html: string): string {
-  return html
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&apos;/g, "'")
-    .replace(/&#x27;/g, "'")
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&nbsp;/g, ' ')
-    .trim();
-}
-
+// A. HTML Entity Decoding & Raw Tag Stripping
 const rawRssTitle = 'Reliance Industries &quot;Record Quarterly Profit&quot; &amp; Expansion Announced';
 const cleanedTitle = decodeHtml(rawRssTitle);
 assert.strictEqual(cleanedTitle, 'Reliance Industries "Record Quarterly Profit" & Expansion Announced', 'HTML entities must be cleanly unescaped');
-console.log('✓ RSS raw HTML entities unescaped into clean readable headlines.');
 
-// Canonical URL validation
+// Verify that literal `<a href="...">` strings and encoded tags are stripped
+const rawRssDescWithAnchor = '&lt;a href="https://news.google.com/rss/articles/CBMi123" target="_blank"&gt;Reliance Industries Net Profit Surges 15% to New Record&lt;/a&gt;&amp;nbsp;&amp;nbsp;&lt;font color="#6f6f6f"&gt;Moneycontrol&lt;/font&gt;';
+const rawRssTitleWithAnchor = '&lt;a href="https://news.google.com/rss/articles/CBMi123"&gt;Reliance Industries Net Profit Surges 15% to New Record - Moneycontrol&lt;/a&gt;';
+
+const parsedArticleData = extractCleanArticleData(
+  rawRssTitleWithAnchor,
+  'https://news.google.com/rss/articles/CBMi123',
+  rawRssDescWithAnchor,
+  'Moneycontrol'
+);
+
+assert(!parsedArticleData.title.includes('<a') && !parsedArticleData.title.includes('href='), 'Title must never contain raw HTML tags');
+assert.strictEqual(parsedArticleData.title, 'Reliance Industries Net Profit Surges 15% to New Record', 'Title must be cleanly extracted without markup or publisher suffix');
+assert(!parsedArticleData.summary.includes('<a') && !parsedArticleData.summary.includes('href='), 'Summary must never display raw HTML links');
+assert.strictEqual(parsedArticleData.publisher, 'Moneycontrol');
+assert.strictEqual(parsedArticleData.url, 'https://news.google.com/rss/articles/CBMi123');
+console.log('✓ RSS raw HTML tags and entities cleanly stripped into pure readable headlines and summaries.');
+
+// B. Canonical URL validation
 const validUrl = 'https://economictimes.indiatimes.com/markets/stocks/news/reliance-profit-surges/articleshow/12345.cms';
 const invalidUrl = '<a href="https://example.com">Click here</a>';
-function isValidArticleUrl(url: string): boolean {
-  return /^https?:\/\/[^\s<>"]+$/.test(url);
-}
 assert(isValidArticleUrl(validUrl), 'Canonical HTTP/HTTPS article URL must be valid');
 assert(!isValidArticleUrl(invalidUrl), 'Raw HTML anchor tags must be rejected as invalid URLs');
+assert(!isValidArticleUrl('javascript:alert(1)'), 'Dangerous protocols must be rejected');
 console.log('✓ Canonical article URL validation verified.');
 
-// Generic quote page filtering vs genuine catalyst detection
-const genericQuoteTitle = 'Reliance Share Price Today Live Updates: Reliance Industries Stock Price';
-const earningsCatalystTitle = 'Reliance Industries Q3 Net Profit Surges 18% to Record High, Major Deal Signed';
+// C. Corporate Event Deduplication: Jio Platforms IPO across multiple publishers
+const rawJioArticles = [
+  {
+    title: "Reliance's Jio Platforms plans $5B mega IPO in 2026",
+    publisher: 'The Economic Times',
+    date: '12 Oct 2026',
+    summary: 'Valuation expected at $100 billion with global bankers shortlisted.',
+    url: 'https://economictimes.com/jio1',
+    vaderScore: 0.35,
+    finbertScore: null,
+    sentimentLabel: 'POSITIVE' as const
+  },
+  {
+    title: 'Jio Platforms IPO: Valuation could top $100 billion, bankers say',
+    publisher: 'Livemint',
+    date: '12 Oct 2026',
+    summary: 'Reliance gears up for India largest public listing.',
+    url: 'https://livemint.com/jio2',
+    vaderScore: 0.28,
+    finbertScore: null,
+    sentimentLabel: 'POSITIVE' as const
+  },
+  {
+    title: 'Reliance Industries lines up Jio Platforms public listing for late 2026',
+    publisher: 'Moneycontrol',
+    date: '13 Oct 2026',
+    summary: 'Draft prospectus expected in coming quarters.',
+    url: 'https://moneycontrol.com/jio3',
+    vaderScore: 0.25,
+    finbertScore: null,
+    sentimentLabel: 'POSITIVE' as const
+  },
+  {
+    title: 'Reliance Jio prepares for landmark IPO in late 2026',
+    publisher: 'Reuters',
+    date: '13 Oct 2026',
+    summary: 'Bankers mandated for landmark primary market listing.',
+    url: 'https://reuters.com/jio4',
+    vaderScore: 0.30,
+    finbertScore: null,
+    sentimentLabel: 'POSITIVE' as const
+  }
+];
 
-function isGenericQuotePage(title: string): boolean {
-  return /share price today|stock price today|live updates.*share price|today's share price/i.test(title);
-}
+const groupedJio = deduplicateAndGroupNewsArticles(rawJioArticles);
+assert.strictEqual(groupedJio.articles.length, 4, 'All 4 publisher articles must be retained for user reading');
+assert.strictEqual(groupedJio.distinctEventsCount, 1, '4 publisher reports of Jio IPO must resolve to exactly 1 distinct corporate event');
+assert.strictEqual(groupedJio.expansionCatalystsCount, 1, 'Jio IPO must be counted as exactly 1 expansion catalyst, not 4 separate catalysts');
+assert.strictEqual(groupedJio.expansionArticlesCount, 4, 'All 4 articles must be associated with the expansion event');
+assert.strictEqual(groupedJio.articles[0].corporateEventId, 'jio-ipo-listing');
+console.log('✓ Multi-publisher coverage of Jio Platforms IPO deduplicated to 1 distinct corporate expansion catalyst.');
 
-function isCorporateCatalyst(title: string): boolean {
-  return /profit|revenue|loss|order|contract|deal|acquire|acquisition|merger|earnings|results|dividend|q[1-4]|expansion|sebi|regulatory|downgrade|upgrade|rating|guidance/i.test(title);
-}
+// D. Evidence of Business Event vs Routine Market Noise / Opinion
+const marketNoiseArticle = {
+  title: 'Reliance Industries shares rise 3.5% on crossing key technical indicator, multiple block deals',
+  summary: 'Shares gained during intraday trading on technical signals.',
+  vaderScore: 0.25,
+  sentimentLabel: 'POSITIVE' as const
+};
+const brokerOpinionArticle = {
+  title: 'Reliance Industries Prediction for Tomorrow: 9 Oct 2026 - Univest',
+  summary: 'Brokerage suggests buy the dip amid market volatility.',
+  vaderScore: 0.20,
+  sentimentLabel: 'POSITIVE' as const
+};
+const sharePriceListicle = {
+  title: 'Reliance Industries - 12 Nifty stocks that are down up to 35% from 52-week highs',
+  summary: 'List of index stocks down from recent highs.',
+  vaderScore: -0.15,
+  sentimentLabel: 'NEGATIVE' as const
+};
+const genuineContractWin = {
+  title: 'Reliance secures ₹12,000 Cr green energy infrastructure contract with Gujarat government',
+  summary: 'Major contract awarded for greenfield solar and hydrogen plant.',
+  vaderScore: 0.45,
+  sentimentLabel: 'POSITIVE' as const
+};
+const genuineRegulatoryRisk = {
+  title: 'SEBI issues show-cause notice and statutory penalty regarding regulatory compliance',
+  summary: 'Capital markets regulator initiates enforcement investigation.',
+  vaderScore: -0.40,
+  sentimentLabel: 'NEGATIVE' as const
+};
 
-assert(isGenericQuotePage(genericQuoteTitle), 'Generic quote title must be flagged and filtered out');
-assert(!isGenericQuotePage(earningsCatalystTitle), 'Genuine earnings story must not be filtered out');
-assert(isCorporateCatalyst(earningsCatalystTitle), 'Earnings and deals must be recognized as corporate catalysts');
-console.log('✓ Generic automated quote pages excluded while genuine catalysts are correctly identified.');
+const cMarket = classifyCorporateEvent(marketNoiseArticle.title, marketNoiseArticle.summary, marketNoiseArticle.vaderScore, marketNoiseArticle.sentimentLabel);
+const cBroker = classifyCorporateEvent(brokerOpinionArticle.title, brokerOpinionArticle.summary, brokerOpinionArticle.vaderScore, brokerOpinionArticle.sentimentLabel);
+const cListicle = classifyCorporateEvent(sharePriceListicle.title, sharePriceListicle.summary, sharePriceListicle.vaderScore, sharePriceListicle.sentimentLabel);
+const cContract = classifyCorporateEvent(genuineContractWin.title, genuineContractWin.summary, genuineContractWin.vaderScore, genuineContractWin.sentimentLabel);
+const cReg = classifyCorporateEvent(genuineRegulatoryRisk.title, genuineRegulatoryRisk.summary, genuineRegulatoryRisk.vaderScore, genuineRegulatoryRisk.sentimentLabel);
+
+assert.strictEqual(cMarket.isExpansionCatalyst, false, 'Routine share price moves must NOT be counted as expansion catalysts');
+assert.strictEqual(cBroker.isExpansionCatalyst, false, 'Brokerage opinions and tomorrow predictions must NOT be counted as expansion catalysts');
+assert.strictEqual(cListicle.isCautionaryRisk, false, 'Routine price drawdowns/listicles must NOT be classified as corporate risk events (no invented events)');
+assert.strictEqual(cContract.isExpansionCatalyst, true, 'Genuine multi-thousand crore contract win must be recognized as expansion catalyst');
+assert.strictEqual(cReg.isCautionaryRisk, true, 'Genuine SEBI penalty must be recognized as cautionary risk');
+console.log('✓ Business expansion events accurately separated from routine share price movements, broker opinions, and invented risks.');
 
 
 // ==============================================================================

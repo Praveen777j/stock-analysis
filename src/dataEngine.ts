@@ -1697,12 +1697,17 @@ export async function fetchLiveNewsAndSentiment(
         vaderCompound: data.vaderCompound || 0.0,
         finbertScore: (data.finbertScore !== undefined && data.finbertScore !== null) ? data.finbertScore : null,
         finbertStatus: data.finbertStatus || (data.finbertScore !== null && data.finbertScore !== undefined ? 'LIVE' : 'UNAVAILABLE'),
+        finbertDiagnostic: data.finbertDiagnostic,
+        finbertReason: data.finbertReason,
         newsCount: articles.length,
         overallScore: data.overallScore || 0.0,
         label: data.label || 'NEUTRAL',
         articles,
         reddit: redditRes,
-        dataStatus: hasNews ? 'LIVE' : 'UNAVAILABLE'
+        dataStatus: hasNews ? 'LIVE' : 'UNAVAILABLE',
+        distinctEventsCount: data.distinctEventsCount,
+        expansionCatalystsCount: data.expansionCatalystsCount,
+        cautionaryOverhangsCount: data.cautionaryOverhangsCount
       };
     }
   } catch (e) {

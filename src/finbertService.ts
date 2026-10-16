@@ -35,7 +35,7 @@ export interface FinbertInferenceResult {
     endpoint: string;
     model: string;
     articlesAnalyzed: number;
-    reason?: 'MISSING_TOKEN' | 'EMPTY_INPUT' | 'MODEL_LOADING' | 'AUTH_ERROR' | 'RATE_LIMITED' | 'TIMEOUT' | 'NETWORK_ERROR' | 'MALFORMED_RESPONSE' | 'SERVICE_UNAVAILABLE';
+    reason?: 'MISSING_TOKEN' | 'EMPTY_INPUT' | 'MODEL_LOADING' | 'MODEL_UNAVAILABLE' | 'AUTH_ERROR' | 'RATE_LIMITED' | 'UNSUPPORTED_ENDPOINT' | 'TIMEOUT' | 'NETWORK_ERROR' | 'MALFORMED_RESPONSE' | 'SERVICE_UNAVAILABLE';
     message?: string;
   };
 }
@@ -316,6 +316,21 @@ export async function runFinbertInference(
             articlesAnalyzed: 0,
             reason: 'AUTH_ERROR',
             message: `Hugging Face authentication failed (HTTP ${status}). Check HF_TOKEN validity.`
+          }
+        };
+      }
+
+      if (status === 404 || status === 405) {
+        return {
+          status: 'UNAVAILABLE',
+          overallScore: null,
+          items: headlines.map(() => null),
+          diagnostics: {
+            endpoint,
+            model: FINBERT_MODEL_NAME,
+            articlesAnalyzed: 0,
+            reason: 'UNSUPPORTED_ENDPOINT',
+            message: `Configured Hugging Face inference endpoint or model path unsupported (HTTP ${status}).`
           }
         };
       }

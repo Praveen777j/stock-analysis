@@ -101,6 +101,9 @@ export interface NewsArticle {
   sentimentLabel?: 'POSITIVE' | 'NEUTRAL' | 'NEGATIVE';
   url?: string;
   isCatalyst?: boolean;
+  corporateEventId?: string;
+  corporateEventTitle?: string;
+  corporateEventType?: 'EXPANSION' | 'RISK' | 'ROUTINE';
 }
 
 export interface RedditPost {
@@ -136,6 +139,10 @@ export interface SentimentData {
   reddit: RedditResult;
   dataStatus?: 'LIVE' | 'EMPTY' | 'UNAVAILABLE';
   finbertDiagnostic?: string;
+  finbertReason?: 'MISSING_TOKEN' | 'EMPTY_INPUT' | 'AUTH_ERROR' | 'RATE_LIMITED' | 'UNSUPPORTED_ENDPOINT' | 'MODEL_LOADING' | 'MODEL_UNAVAILABLE' | 'TIMEOUT' | 'NETWORK_ERROR' | 'MALFORMED_RESPONSE' | 'SERVICE_UNAVAILABLE';
+  distinctEventsCount?: number;
+  expansionCatalystsCount?: number;
+  cautionaryOverhangsCount?: number;
 }
 
 export interface AnnualFinancialRow {

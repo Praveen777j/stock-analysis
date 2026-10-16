@@ -1,5 +1,6 @@
 import React from 'react';
 import { SentimentData, StockQuote, StockFundamentals } from '../../types';
+import { cleanHtmlText, isValidArticleUrl } from '../../newsIntelligence';
 import {
   Newspaper,
   Building2,
@@ -8,7 +9,9 @@ import {
   TrendingUp,
   TrendingDown,
   CheckCircle2,
-  AlertTriangle
+  AlertTriangle,
+  ExternalLink,
+  Clock
 } from 'lucide-react';
 
 interface NewsAndCatalystsPageProps {
@@ -93,6 +96,11 @@ export const NewsAndCatalystsPage: React.FC<NewsAndCatalystsPageProps> = ({
             const isPos = art.sentimentLabel === 'POSITIVE' || (art.vaderScore !== undefined && art.vaderScore >= 0.05);
             const isNeg = art.sentimentLabel === 'NEGATIVE' || (art.vaderScore !== undefined && art.vaderScore <= -0.05);
             const scoreVal = art.vaderScore ?? 0;
+            const cleanTitle = cleanHtmlText(art.title);
+            const cleanSummary = cleanHtmlText(art.summary);
+            const cleanPublisher = cleanHtmlText(art.publisher);
+            const isUrlValid = isValidArticleUrl(art.url);
+
             return (
               <div
                 key={idx}
@@ -102,42 +110,59 @@ export const NewsAndCatalystsPage: React.FC<NewsAndCatalystsPageProps> = ({
                   <div className="space-y-1 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-800 text-emerald-400 border border-slate-700">
-                        {art.publisher}
+                        {cleanPublisher}
                       </span>
                       <span className="text-xs text-slate-400 font-mono">{art.date}</span>
                       <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase border ${
-                        isPos
+                        art.corporateEventType === 'EXPANSION' || (isPos && art.isCatalyst)
                           ? 'bg-emerald-950 text-emerald-400 border-emerald-800'
-                          : isNeg
+                          : art.corporateEventType === 'RISK' || (isNeg && art.isCatalyst)
                           ? 'bg-rose-950 text-rose-400 border-rose-800'
+                          : isPos
+                          ? 'bg-emerald-950/60 text-emerald-300 border-emerald-800/60'
+                          : isNeg
+                          ? 'bg-rose-950/60 text-rose-300 border-rose-800/60'
                           : 'bg-slate-800 text-slate-300 border-slate-700'
                       }`}>
-                        {isPos ? 'BULLISH CATALYST' : isNeg ? 'BEARISH OVERHANG' : 'NEUTRAL DISCLOSURE'}
+                        {art.corporateEventType === 'EXPANSION'
+                          ? 'EXPANSION CATALYST'
+                          : art.corporateEventType === 'RISK'
+                          ? 'CAUTIONARY RISK'
+                          : isPos
+                          ? 'BULLISH CATALYST'
+                          : isNeg
+                          ? 'BEARISH OVERHANG'
+                          : 'NEUTRAL DISCLOSURE'}
                       </span>
-                      {art.isCatalyst && (
+                      {art.corporateEventTitle ? (
+                        <span className="px-2 py-0.5 rounded text-[9px] font-mono font-bold bg-indigo-950 text-indigo-300 border border-indigo-800">
+                          Event: {cleanHtmlText(art.corporateEventTitle)}
+                        </span>
+                      ) : art.isCatalyst ? (
                         <span className="px-2 py-0.5 rounded text-[9px] font-mono font-bold bg-indigo-950 text-indigo-300 border border-indigo-800">
                           Corporate Catalyst
                         </span>
-                      )}
+                      ) : null}
                     </div>
 
                     <h5 className="text-sm font-semibold text-slate-100 leading-snug pt-0.5">
-                      {art.url ? (
+                      {isUrlValid ? (
                         <a
                           href={art.url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="hover:text-emerald-400 hover:underline transition-colors"
+                          className="hover:text-emerald-400 hover:underline transition-colors inline-flex items-baseline gap-1"
                         >
-                          {art.title}
+                          <span>{cleanTitle}</span>
+                          <ExternalLink className="w-3 h-3 text-slate-500 inline shrink-0" />
                         </a>
                       ) : (
-                        art.title
+                        <span>{cleanTitle}</span>
                       )}
                     </h5>
 
                     <p className="text-xs text-slate-300 leading-relaxed font-sans pt-0.5">
-                      {art.summary}
+                      {cleanSummary}
                     </p>
                   </div>
 
@@ -149,7 +174,15 @@ export const NewsAndCatalystsPage: React.FC<NewsAndCatalystsPageProps> = ({
                       {scoreVal >= 0 ? '+' : ''}{scoreVal.toFixed(2)}
                     </span>
                     <div className="text-[10px] text-slate-400 mt-0.5 font-sans">
-                      {isPos ? 'Positive Driver' : isNeg ? 'Downside Risk' : 'Routine Filing'}
+                      {art.corporateEventType === 'EXPANSION'
+                        ? 'Expansion Driver'
+                        : art.corporateEventType === 'RISK'
+                        ? 'Downside Risk'
+                        : isPos
+                        ? 'Positive Driver'
+                        : isNeg
+                        ? 'Downside Risk'
+                        : 'Routine Filing'}
                     </div>
                   </div>
                 </div>

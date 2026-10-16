@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { SentimentData, StockQuote, RedditPost } from '../../types';
+import { cleanHtmlText, isValidArticleUrl } from '../../newsIntelligence';
 import {
   Newspaper,
   MessageSquare,
@@ -259,6 +260,11 @@ export const SentimentTab: React.FC<SentimentTabProps> = ({ sentiment, quote }) 
               sentiment.articles.map((art, idx) => {
               const isPositiveArticle = art.sentimentLabel === 'POSITIVE' || art.vaderScore >= 0.05;
               const isNegativeArticle = art.sentimentLabel === 'NEGATIVE' || art.vaderScore <= -0.05;
+              const cleanTitle = cleanHtmlText(art.title);
+              const cleanSummary = cleanHtmlText(art.summary);
+              const cleanPublisher = cleanHtmlText(art.publisher);
+              const isUrlValid = isValidArticleUrl(art.url);
+
               return (
                 <div
                   key={idx}
@@ -268,43 +274,59 @@ export const SentimentTab: React.FC<SentimentTabProps> = ({ sentiment, quote }) 
                     <div className="space-y-1 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-800 text-emerald-400 border border-slate-700">
-                          {art.publisher}
+                          {cleanPublisher}
                         </span>
                         <span className="text-xs text-slate-400 font-mono">{art.date}</span>
                         <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase border ${
-                          isPositiveArticle
+                          art.corporateEventType === 'EXPANSION' || (isPositiveArticle && art.isCatalyst)
                             ? 'bg-emerald-950/80 text-emerald-400 border-emerald-800'
-                            : isNegativeArticle
+                            : art.corporateEventType === 'RISK' || (isNegativeArticle && art.isCatalyst)
                             ? 'bg-rose-950/80 text-rose-400 border-rose-800'
+                            : isPositiveArticle
+                            ? 'bg-emerald-950/60 text-emerald-300 border-emerald-800/60'
+                            : isNegativeArticle
+                            ? 'bg-rose-950/60 text-rose-300 border-rose-800/60'
                             : 'bg-slate-800 text-slate-300 border-slate-700'
                         }`}>
-                          {isPositiveArticle ? 'BULLISH IMPACT' : isNegativeArticle ? 'BEARISH CONCERN' : 'NEUTRAL DISCLOSURE'}
+                          {art.corporateEventType === 'EXPANSION'
+                            ? 'EXPANSION CATALYST'
+                            : art.corporateEventType === 'RISK'
+                            ? 'CAUTIONARY RISK'
+                            : isPositiveArticle
+                            ? 'BULLISH IMPACT'
+                            : isNegativeArticle
+                            ? 'BEARISH CONCERN'
+                            : 'NEUTRAL DISCLOSURE'}
                         </span>
-                        {art.isCatalyst && (
+                        {art.corporateEventTitle ? (
+                          <span className="px-2 py-0.5 rounded text-[9px] font-mono font-bold bg-indigo-950 text-indigo-300 border border-indigo-800">
+                            Event: {cleanHtmlText(art.corporateEventTitle)}
+                          </span>
+                        ) : art.isCatalyst ? (
                           <span className="px-2 py-0.5 rounded text-[9px] font-mono font-bold bg-indigo-950 text-indigo-300 border border-indigo-800">
                             Corporate Catalyst
                           </span>
-                        )}
+                        ) : null}
                       </div>
 
                       <h5 className="text-sm font-semibold text-slate-100 leading-snug pt-0.5">
-                        {art.url ? (
+                        {isUrlValid ? (
                           <a
                             href={art.url}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="hover:text-emerald-400 hover:underline transition-colors inline-flex items-baseline gap-1"
                           >
-                            <span>{art.title}</span>
+                            <span>{cleanTitle}</span>
                             <ExternalLink className="w-3 h-3 text-slate-500 inline shrink-0" />
                           </a>
                         ) : (
-                          <span>{art.title}</span>
+                          <span>{cleanTitle}</span>
                         )}
                       </h5>
 
                       <p className="text-xs text-slate-300 leading-relaxed pt-0.5 font-sans">
-                        {art.summary}
+                        {cleanSummary}
                       </p>
                     </div>
 
@@ -316,7 +338,15 @@ export const SentimentTab: React.FC<SentimentTabProps> = ({ sentiment, quote }) 
                         {art.vaderScore >= 0 ? '+' : ''}{art.vaderScore.toFixed(2)}
                       </span>
                       <div className="text-[10px] text-slate-400 mt-0.5 font-sans">
-                        {isPositiveArticle ? 'Positive Catalyst' : isNegativeArticle ? 'Downside Risk' : 'Neutral Event'}
+                        {art.corporateEventType === 'EXPANSION'
+                          ? 'Expansion Driver'
+                          : art.corporateEventType === 'RISK'
+                          ? 'Downside Risk'
+                          : isPositiveArticle
+                          ? 'Positive Catalyst'
+                          : isNegativeArticle
+                          ? 'Downside Risk'
+                          : 'Neutral Event'}
                       </div>
                     </div>
                   </div>

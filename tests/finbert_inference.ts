@@ -255,6 +255,15 @@ async function testHttpErrors() {
   assert.strictEqual(res429.diagnostics.reason, 'RATE_LIMITED');
   console.log('✓ HTTP 429 correctly flagged as RATE_LIMITED.');
 
+  // HTTP 404 Unsupported Endpoint
+  const mock404Fetch: typeof fetch = async () => {
+    return new Response(JSON.stringify({ error: 'Not Found' }), { status: 404 });
+  };
+  const res404 = await runFinbertInference(['Headline'], { token: 'hf_token', fetchFn: mock404Fetch });
+  assert.strictEqual(res404.status, 'UNAVAILABLE');
+  assert.strictEqual(res404.diagnostics.reason, 'UNSUPPORTED_ENDPOINT');
+  console.log('✓ HTTP 404 correctly flagged as UNSUPPORTED_ENDPOINT.');
+
   // HTTP 503 Model Loading
   const mock503Fetch: typeof fetch = async () => {
     return new Response(JSON.stringify({ error: 'Model ProsusAI/finbert is currently loading', estimated_time: 20 }), { status: 503 });
