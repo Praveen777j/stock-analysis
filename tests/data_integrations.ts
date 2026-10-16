@@ -448,6 +448,96 @@ assert.strictEqual(cContract.isExpansionCatalyst, true, 'Genuine multi-thousand 
 assert.strictEqual(cReg.isCautionaryRisk, true, 'Genuine SEBI penalty must be recognized as cautionary risk');
 console.log('✓ Business expansion events accurately separated from routine share price movements, broker opinions, and invented risks.');
 
+// E. 12-Story Audit Consistency Test: Distinct Events vs Article Sentiment Counts
+const sample12Stories = [
+  // 3 Multi-publisher articles covering the SAME Jio Platforms IPO event (bullish sentiment)
+  {
+    title: "Reliance's Jio Platforms plans $5B mega IPO in late 2026",
+    publisher: 'The Economic Times',
+    date: '12 Oct 2026',
+    summary: 'Valuation expected at $100 billion with global bankers shortlisted.',
+    url: 'https://economictimes.com/jio-ipo-1',
+    vaderScore: 0.35,
+    finbertScore: null,
+    sentimentLabel: 'POSITIVE' as const
+  },
+  {
+    title: 'Jio Platforms IPO: Valuation could top $100 billion, bankers say',
+    publisher: 'Livemint',
+    date: '12 Oct 2026',
+    summary: 'Reliance gears up for India largest public listing.',
+    url: 'https://livemint.com/jio-ipo-2',
+    vaderScore: 0.28,
+    finbertScore: null,
+    sentimentLabel: 'POSITIVE' as const
+  },
+  {
+    title: 'Reliance Industries lines up Jio Platforms public listing for late 2026',
+    publisher: 'Moneycontrol',
+    date: '13 Oct 2026',
+    summary: 'Draft prospectus expected in coming quarters for telecom giant.',
+    url: 'https://moneycontrol.com/jio-ipo-3',
+    vaderScore: 0.25,
+    finbertScore: null,
+    sentimentLabel: 'POSITIVE' as const
+  },
+  // 1 Broker opinion / buy target (bullish sentiment, NOT a corporate event)
+  {
+    title: 'Reliance Industries Target Raised to ₹3,400: Brokerage Report',
+    publisher: 'CNBC-TV18',
+    date: '13 Oct 2026',
+    summary: 'Analysts suggest buy the dip on attractive valuations and upside target.',
+    url: 'https://cnbctv18.com/rel-target',
+    vaderScore: 0.22,
+    finbertScore: null,
+    sentimentLabel: 'POSITIVE' as const
+  },
+  // 1 Negative share price drawdown listicle (negative sentiment, NOT a corporate risk event)
+  {
+    title: 'Reliance Industries among 12 Nifty stocks down up to 15% from 52-week highs',
+    publisher: 'Financial Express',
+    date: '14 Oct 2026',
+    summary: 'Routine market pullbacks across large-cap heavyweights.',
+    url: 'https://financialexpress.com/rel-drawdown',
+    vaderScore: -0.18,
+    finbertScore: null,
+    sentimentLabel: 'NEGATIVE' as const
+  },
+  // 7 Routine neutral news articles
+  ...Array.from({ length: 7 }, (_, i) => ({
+    title: `Reliance Industries operational routine filing and trading disclosure #${i + 1}`,
+    publisher: 'Business Standard',
+    date: '14 Oct 2026',
+    summary: `Routine compliance filing and index rebalancing updates #${i + 1}.`,
+    url: `https://businessstandard.com/rel-disclosure-${i + 1}`,
+    vaderScore: 0.01,
+    finbertScore: null,
+    sentimentLabel: 'NEUTRAL' as const
+  }))
+];
+
+const processed12 = deduplicateAndGroupNewsArticles(sample12Stories);
+assert.strictEqual(processed12.articles.length, 12, 'Must index all 12 stories');
+assert.strictEqual(processed12.distinctEventsCount, 1, 'Only the Jio IPO is a distinct corporate event (count = 1)');
+assert.strictEqual(processed12.expansionCatalystsCount, 1, 'Only 1 corporate expansion catalyst (+1)');
+assert.strictEqual(processed12.cautionaryOverhangsCount, 0, 'No corporate risk events invented from routine price drawdown (count = 0)');
+
+const posStories = processed12.articles.filter(a => a.sentimentLabel === 'POSITIVE' || a.vaderScore >= 0.05).length;
+const negStories = processed12.articles.filter(a => a.sentimentLabel === 'NEGATIVE' || a.vaderScore <= -0.05).length;
+const neuStories = processed12.articles.length - posStories - negStories;
+
+assert.strictEqual(posStories, 4, 'Must count exactly 4 bullish stories');
+assert.strictEqual(negStories, 1, 'Must count exactly 1 risk/caution story');
+assert.strictEqual(neuStories, 7, 'Must count exactly 7 neutral stories');
+
+// Verify that no raw HTML tags or entities exist in any titles, summaries, or URLs
+for (const art of processed12.articles) {
+  assert(!art.title.includes('<') && !art.title.includes('>'), `Title must not have raw HTML: ${art.title}`);
+  assert(!art.summary.includes('<') && !art.summary.includes('>'), `Summary must not have raw HTML: ${art.summary}`);
+  assert(isValidArticleUrl(art.url), `URL must be canonical: ${art.url}`);
+}
+console.log('✓ 12-story count consistency verified: 12 indexed stories, 1 distinct corporate event, +1 expansion catalyst, 0 cautionary overhangs, 4 bullish, 1 risk/caution, and 7 neutral stories.');
+
 
 // ==============================================================================
 // 5. FINBERT HONEST STATUS & VADER SENTIMENT TESTS

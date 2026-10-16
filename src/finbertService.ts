@@ -35,7 +35,7 @@ export interface FinbertInferenceResult {
     endpoint: string;
     model: string;
     articlesAnalyzed: number;
-    reason?: 'MISSING_TOKEN' | 'EMPTY_INPUT' | 'MODEL_LOADING' | 'MODEL_UNAVAILABLE' | 'AUTH_ERROR' | 'RATE_LIMITED' | 'UNSUPPORTED_ENDPOINT' | 'TIMEOUT' | 'NETWORK_ERROR' | 'MALFORMED_RESPONSE' | 'SERVICE_UNAVAILABLE';
+    reason?: 'MISSING_TOKEN' | 'INVALID_CREDENTIALS' | 'INSUFFICIENT_ACCESS' | 'EMPTY_INPUT' | 'MODEL_LOADING' | 'MODEL_UNAVAILABLE' | 'AUTH_ERROR' | 'RATE_LIMITED' | 'UNSUPPORTED_ENDPOINT' | 'TIMEOUT' | 'NETWORK_ERROR' | 'MALFORMED_RESPONSE' | 'SERVICE_UNAVAILABLE';
     message?: string;
   };
 }
@@ -127,7 +127,9 @@ export async function runFinbertInference(
   headlines: string[],
   options: FinbertOptions = {}
 ): Promise<FinbertInferenceResult> {
-  const token = (options.token ?? process.env.HF_TOKEN ?? '').trim();
+  const rawToken = options.token !== undefined ? options.token : (process.env.HF_TOKEN ?? '');
+  // Sanitize: strip surrounding single/double quotes, trailing carriage returns, newlines, and whitespace
+  const token = (rawToken || '').replace(/["'\r\n]/g, '').trim();
   const endpoint = options.endpoint || process.env.HF_INFERENCE_ENDPOINT || PRIMARY_FINBERT_ENDPOINT;
   const timeoutMs = options.timeoutMs ?? 7000;
   const maxRetries = options.maxRetries ?? 1;
@@ -144,7 +146,23 @@ export async function runFinbertInference(
         model: FINBERT_MODEL_NAME,
         articlesAnalyzed: 0,
         reason: 'MISSING_TOKEN',
-        message: 'Hugging Face API token (HF_TOKEN) is not configured. FinBERT is marked as UNAVAILABLE.'
+        message: 'Hugging Face API token (HF_TOKEN) is not configured in the deployment environment. FinBERT is marked as UNAVAILABLE.'
+      }
+    };
+  }
+
+  // 2. Token Format Validation (without revealing token content)
+  if (!token.startsWith('hf_')) {
+    return {
+      status: 'UNAVAILABLE',
+      overallScore: null,
+      items: headlines.map(() => null),
+      diagnostics: {
+        endpoint,
+        model: FINBERT_MODEL_NAME,
+        articlesAnalyzed: 0,
+        reason: 'INVALID_CREDENTIALS',
+        message: 'Hugging Face API token format is invalid (expected personal access token starting with "hf_"). Verify HF_TOKEN in Render.'
       }
     };
   }
@@ -305,7 +323,7 @@ export async function runFinbertInference(
         errBody = '';
       }
 
-      if (status === 401 || status === 403) {
+      if (status === 401) {
         return {
           status: 'UNAVAILABLE',
           overallScore: null,
@@ -314,8 +332,23 @@ export async function runFinbertInference(
             endpoint,
             model: FINBERT_MODEL_NAME,
             articlesAnalyzed: 0,
-            reason: 'AUTH_ERROR',
-            message: `Hugging Face authentication failed (HTTP ${status}). Check HF_TOKEN validity.`
+            reason: 'INVALID_CREDENTIALS',
+            message: 'Hugging Face authentication failed (HTTP 401: Invalid credentials). Verify that HF_TOKEN is valid and active in Render.'
+          }
+        };
+      }
+
+      if (status === 403) {
+        return {
+          status: 'UNAVAILABLE',
+          overallScore: null,
+          items: headlines.map(() => null),
+          diagnostics: {
+            endpoint,
+            model: FINBERT_MODEL_NAME,
+            articlesAnalyzed: 0,
+            reason: 'INSUFFICIENT_ACCESS',
+            message: 'Hugging Face access denied (HTTP 403: Insufficient access). Ensure your Hugging Face token has "Make calls to the serverless Inference API" permission.'
           }
         };
       }

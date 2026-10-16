@@ -1204,7 +1204,7 @@ async function startServer() {
       let finbertScore: number | null = null;
       let finbertStatus: 'LIVE' | 'UNAVAILABLE' = 'UNAVAILABLE';
       let finbertDiagnostic: string | undefined = undefined;
-      let finbertReason: 'MISSING_TOKEN' | 'EMPTY_INPUT' | 'AUTH_ERROR' | 'RATE_LIMITED' | 'UNSUPPORTED_ENDPOINT' | 'MODEL_LOADING' | 'MODEL_UNAVAILABLE' | 'TIMEOUT' | 'NETWORK_ERROR' | 'MALFORMED_RESPONSE' | 'SERVICE_UNAVAILABLE' | undefined = undefined;
+      let finbertReason: 'MISSING_TOKEN' | 'INVALID_CREDENTIALS' | 'INSUFFICIENT_ACCESS' | 'EMPTY_INPUT' | 'AUTH_ERROR' | 'RATE_LIMITED' | 'UNSUPPORTED_ENDPOINT' | 'MODEL_LOADING' | 'MODEL_UNAVAILABLE' | 'TIMEOUT' | 'NETWORK_ERROR' | 'MALFORMED_RESPONSE' | 'SERVICE_UNAVAILABLE' | undefined = undefined;
 
       if (hasRealNews) {
         try {

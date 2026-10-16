@@ -114,9 +114,9 @@ export const NewsAndCatalystsPage: React.FC<NewsAndCatalystsPageProps> = ({
                       </span>
                       <span className="text-xs text-slate-400 font-mono">{art.date}</span>
                       <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase border ${
-                        art.corporateEventType === 'EXPANSION' || (isPos && art.isCatalyst)
+                        art.corporateEventType === 'EXPANSION'
                           ? 'bg-emerald-950 text-emerald-400 border-emerald-800'
-                          : art.corporateEventType === 'RISK' || (isNeg && art.isCatalyst)
+                          : art.corporateEventType === 'RISK'
                           ? 'bg-rose-950 text-rose-400 border-rose-800'
                           : isPos
                           ? 'bg-emerald-950/60 text-emerald-300 border-emerald-800/60'
@@ -129,10 +129,10 @@ export const NewsAndCatalystsPage: React.FC<NewsAndCatalystsPageProps> = ({
                           : art.corporateEventType === 'RISK'
                           ? 'CAUTIONARY RISK'
                           : isPos
-                          ? 'BULLISH CATALYST'
+                          ? 'POSITIVE SENTIMENT'
                           : isNeg
-                          ? 'BEARISH OVERHANG'
-                          : 'NEUTRAL DISCLOSURE'}
+                          ? 'BEARISH CONCERN'
+                          : 'ROUTINE DISCLOSURE'}
                       </span>
                       {art.corporateEventTitle ? (
                         <span className="px-2 py-0.5 rounded text-[9px] font-mono font-bold bg-indigo-950 text-indigo-300 border border-indigo-800">

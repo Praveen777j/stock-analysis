@@ -139,7 +139,7 @@ export interface SentimentData {
   reddit: RedditResult;
   dataStatus?: 'LIVE' | 'EMPTY' | 'UNAVAILABLE';
   finbertDiagnostic?: string;
-  finbertReason?: 'MISSING_TOKEN' | 'EMPTY_INPUT' | 'AUTH_ERROR' | 'RATE_LIMITED' | 'UNSUPPORTED_ENDPOINT' | 'MODEL_LOADING' | 'MODEL_UNAVAILABLE' | 'TIMEOUT' | 'NETWORK_ERROR' | 'MALFORMED_RESPONSE' | 'SERVICE_UNAVAILABLE';
+  finbertReason?: 'MISSING_TOKEN' | 'INVALID_CREDENTIALS' | 'INSUFFICIENT_ACCESS' | 'EMPTY_INPUT' | 'AUTH_ERROR' | 'RATE_LIMITED' | 'UNSUPPORTED_ENDPOINT' | 'MODEL_LOADING' | 'MODEL_UNAVAILABLE' | 'TIMEOUT' | 'NETWORK_ERROR' | 'MALFORMED_RESPONSE' | 'SERVICE_UNAVAILABLE';
   distinctEventsCount?: number;
   expansionCatalystsCount?: number;
   cautionaryOverhangsCount?: number;

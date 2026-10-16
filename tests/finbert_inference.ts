@@ -243,8 +243,17 @@ async function testHttpErrors() {
   };
   const res401 = await runFinbertInference(['Headline'], { token: 'hf_invalid', fetchFn: mock401Fetch });
   assert.strictEqual(res401.status, 'UNAVAILABLE');
-  assert.strictEqual(res401.diagnostics.reason, 'AUTH_ERROR');
-  console.log('✓ HTTP 401 correctly flagged as AUTH_ERROR.');
+  assert.strictEqual(res401.diagnostics.reason, 'INVALID_CREDENTIALS');
+  console.log('✓ HTTP 401 correctly flagged as INVALID_CREDENTIALS.');
+
+  // HTTP 403 Forbidden / Insufficient Access
+  const mock403Fetch: typeof fetch = async () => {
+    return new Response(JSON.stringify({ error: 'Forbidden: Insufficient permissions.' }), { status: 403 });
+  };
+  const res403 = await runFinbertInference(['Headline'], { token: 'hf_token_no_perm', fetchFn: mock403Fetch });
+  assert.strictEqual(res403.status, 'UNAVAILABLE');
+  assert.strictEqual(res403.diagnostics.reason, 'INSUFFICIENT_ACCESS');
+  console.log('✓ HTTP 403 correctly flagged as INSUFFICIENT_ACCESS.');
 
   // HTTP 429 Rate Limit
   const mock429Fetch: typeof fetch = async () => {

@@ -158,7 +158,7 @@ export const FinancialNewsPage: React.FC<FinancialNewsPageProps> = ({ sentiment,
                 : 'bg-slate-900 border border-slate-800 text-slate-300 hover:text-slate-100'
             }`}
           >
-            Bullish Catalysts ({posCount})
+            Bullish Stories ({posCount})
           </button>
           <button
             onClick={() => setFilterType('BEARISH')}
@@ -168,7 +168,7 @@ export const FinancialNewsPage: React.FC<FinancialNewsPageProps> = ({ sentiment,
                 : 'bg-slate-900 border border-slate-800 text-slate-300 hover:text-slate-100'
             }`}
           >
-            Risks & Cautions ({negCount})
+            Risk / Caution ({negCount})
           </button>
           <button
             onClick={() => setFilterType('NEUTRAL')}
