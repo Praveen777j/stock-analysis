@@ -273,6 +273,16 @@ async function testHttpErrors() {
   assert.strictEqual(res404.diagnostics.reason, 'UNSUPPORTED_ENDPOINT');
   console.log('✓ HTTP 404 correctly flagged as UNSUPPORTED_ENDPOINT.');
 
+  // HTTP 500 Provider/Server Error
+  const mock500Fetch: typeof fetch = async () => {
+    return new Response(JSON.stringify({ error: 'Internal Server Error' }), { status: 500 });
+  };
+  const res500 = await runFinbertInference(['Headline'], { token: 'hf_token', fetchFn: mock500Fetch });
+  assert.strictEqual(res500.status, 'UNAVAILABLE');
+  assert.strictEqual(res500.diagnostics.reason, 'SERVICE_UNAVAILABLE');
+  assert(res500.diagnostics.message?.includes('HTTP 500'), 'Diagnostic message must mention HTTP 500');
+  console.log('✓ HTTP 500 correctly flagged as SERVICE_UNAVAILABLE.');
+
   // HTTP 503 Model Loading
   const mock503Fetch: typeof fetch = async () => {
     return new Response(JSON.stringify({ error: 'Model ProsusAI/finbert is currently loading', estimated_time: 20 }), { status: 503 });
@@ -281,6 +291,35 @@ async function testHttpErrors() {
   assert.strictEqual(res503.status, 'UNAVAILABLE');
   assert.strictEqual(res503.diagnostics.reason, 'MODEL_LOADING');
   console.log('✓ HTTP 503 correctly flagged as MODEL_LOADING without crashing.');
+
+  // Automatic Endpoint Fallback Test (Router 404 -> Legacy 200)
+  const fallbackCalls: string[] = [];
+  const mockFallbackFetch: typeof fetch = async (url: any) => {
+    fallbackCalls.push(String(url));
+    if (String(url).includes('router.huggingface.co')) {
+      return new Response(JSON.stringify({ error: 'Router path not found' }), { status: 404 });
+    }
+    // Legacy endpoint succeeds
+    return new Response(JSON.stringify([
+      [{ label: 'positive', score: 0.85 }, { label: 'neutral', score: 0.10 }, { label: 'negative', score: 0.05 }]
+    ]), { status: 200 });
+  };
+  const resFallback = await runFinbertInference(['Reliance quarterly profits rise'], { token: 'hf_valid_token', fetchFn: mockFallbackFetch });
+  assert.strictEqual(resFallback.status, 'LIVE', 'Fallback to legacy endpoint must succeed when router returns 404');
+  assert.strictEqual(fallbackCalls.length, 2, 'Must have attempted primary router endpoint first, then legacy endpoint');
+  assert(fallbackCalls[0].includes('router.huggingface.co'), 'First call must be router endpoint');
+  assert(fallbackCalls[1].includes('api-inference.huggingface.co'), 'Second call must be legacy endpoint');
+  console.log('✓ Automatic fallback from router to legacy inference endpoint verified.');
+
+  // Secret Redaction Test (Token and Authorization header must NEVER leak)
+  const leakyToken = 'hf_secret1234567890abcdef';
+  const mockLeakyFetch: typeof fetch = async () => {
+    return new Response(`Error: Access denied for Bearer ${leakyToken} on endpoint`, { status: 403 });
+  };
+  const resRedacted = await runFinbertInference(['Headline'], { token: leakyToken, fetchFn: mockLeakyFetch });
+  assert(!resRedacted.diagnostics.message?.includes(leakyToken), 'Token must NEVER be exposed in diagnostic messages');
+  assert(resRedacted.diagnostics.message?.includes('[REDACTED]'), 'Secrets must be safely replaced with [REDACTED]');
+  console.log('✓ Strict secret redaction verified (HF_TOKEN never exposed in error bodies or diagnostics).');
 }
 
 // ==============================================================================

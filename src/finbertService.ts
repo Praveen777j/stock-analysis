@@ -53,13 +53,44 @@ export const LEGACY_FINBERT_ENDPOINT = 'https://api-inference.huggingface.co/mod
 export const FINBERT_MODEL_NAME = 'ProsusAI/finbert';
 
 /**
+ * Safely extracts error details from Hugging Face responses without ever exposing secrets.
+ */
+export function extractSafeErrorMessage(rawBody: string, token: string = ''): string {
+  if (!rawBody) return '';
+  let msg = '';
+  try {
+    const parsed = JSON.parse(rawBody);
+    if (parsed && typeof parsed === 'object') {
+      if (typeof parsed.error === 'string') {
+        msg = parsed.error;
+      } else if (Array.isArray(parsed.error)) {
+        msg = parsed.error.join(', ');
+      } else if (typeof parsed.message === 'string') {
+        msg = parsed.message;
+      }
+    }
+  } catch {
+    if (!rawBody.includes('<html') && !rawBody.includes('<!DOCTYPE')) {
+      msg = rawBody.slice(0, 160).trim();
+    }
+  }
+
+  // Ensure any token or authorization header pattern is strictly redacted
+  if (token && token.length > 5 && msg.includes(token)) {
+    msg = msg.split(token).join('[REDACTED]');
+  }
+  msg = msg.replace(/Bearer\s+[a-zA-Z0-9_\-\.]+/gi, 'Bearer [REDACTED]');
+  msg = msg.replace(/hf_[a-zA-Z0-9_\-\.]+/gi, 'hf_[REDACTED]');
+  return msg.trim();
+}
+
+/**
  * Parses raw classification output from Hugging Face FinBERT model.
- * Handles both single classification arrays and nested batch arrays.
+ * Handles single classification objects, 1D arrays, and nested batch arrays.
  */
 export function parseFinbertItem(data: any): FinbertItemResult | null {
   if (!data) return null;
 
-  // Sometimes wrapped in a single-element array: [[{ label, score }, ...]]
   let list: any[] | null = null;
   if (Array.isArray(data)) {
     if (data.length > 0 && Array.isArray(data[0])) {
@@ -67,6 +98,8 @@ export function parseFinbertItem(data: any): FinbertItemResult | null {
     } else if (data.length > 0 && typeof data[0] === 'object' && 'label' in data[0]) {
       list = data;
     }
+  } else if (typeof data === 'object' && 'label' in data) {
+    list = [data];
   }
 
   if (!list || list.length === 0) return null;
@@ -130,7 +163,11 @@ export async function runFinbertInference(
   const rawToken = options.token !== undefined ? options.token : (process.env.HF_TOKEN ?? '');
   // Sanitize: strip surrounding single/double quotes, trailing carriage returns, newlines, and whitespace
   const token = (rawToken || '').replace(/["'\r\n]/g, '').trim();
-  const endpoint = options.endpoint || process.env.HF_INFERENCE_ENDPOINT || PRIMARY_FINBERT_ENDPOINT;
+  const configuredEndpoint = options.endpoint || process.env.HF_INFERENCE_ENDPOINT;
+  let currentEndpoint = configuredEndpoint || PRIMARY_FINBERT_ENDPOINT;
+  const canFallbackToLegacy = !configuredEndpoint && currentEndpoint === PRIMARY_FINBERT_ENDPOINT;
+  let fallbackAttempted = false;
+
   const timeoutMs = options.timeoutMs ?? 7000;
   const maxRetries = options.maxRetries ?? 1;
   const fetchFn = options.fetchFn || fetch;
@@ -142,7 +179,7 @@ export async function runFinbertInference(
       overallScore: null,
       items: headlines.map(() => null),
       diagnostics: {
-        endpoint,
+        endpoint: currentEndpoint,
         model: FINBERT_MODEL_NAME,
         articlesAnalyzed: 0,
         reason: 'MISSING_TOKEN',
@@ -158,7 +195,7 @@ export async function runFinbertInference(
       overallScore: null,
       items: headlines.map(() => null),
       diagnostics: {
-        endpoint,
+        endpoint: currentEndpoint,
         model: FINBERT_MODEL_NAME,
         articlesAnalyzed: 0,
         reason: 'INVALID_CREDENTIALS',
@@ -167,7 +204,7 @@ export async function runFinbertInference(
     };
   }
 
-  // 2. Empty Input Check
+  // 3. Empty Input Check
   const cleanHeadlines = headlines.map(h => (h || '').trim()).filter(h => h.length > 0);
   if (cleanHeadlines.length === 0) {
     return {
@@ -175,7 +212,7 @@ export async function runFinbertInference(
       overallScore: null,
       items: headlines.map(() => null),
       diagnostics: {
-        endpoint,
+        endpoint: currentEndpoint,
         model: FINBERT_MODEL_NAME,
         articlesAnalyzed: 0,
         reason: 'EMPTY_INPUT',
@@ -184,7 +221,7 @@ export async function runFinbertInference(
     };
   }
 
-  // 3. Inference call with timeout and limited retry
+  // 4. Inference call with timeout and limited retry
   let attempt = 0;
   while (attempt <= maxRetries) {
     attempt++;
@@ -196,12 +233,13 @@ export async function runFinbertInference(
       // Limit batch size to 10 articles to ensure low latency and high reliability
       const batchToSend = headlines.slice(0, 10).map(h => (h || '').slice(0, 512));
 
-      const response = await fetchFn(endpoint, {
+      const response = await fetchFn(currentEndpoint, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
-          'User-Agent': 'NexusStockDashboard/1.0'
+          'User-Agent': 'NexusStockDashboard/1.0',
+          'x-wait-for-model': 'true'
         },
         body: JSON.stringify({ inputs: batchToSend }),
         signal: controller.signal
@@ -219,7 +257,7 @@ export async function runFinbertInference(
             overallScore: null,
             items: headlines.map(() => null),
             diagnostics: {
-              endpoint,
+              endpoint: currentEndpoint,
               model: FINBERT_MODEL_NAME,
               articlesAnalyzed: 0,
               reason: 'MALFORMED_RESPONSE',
@@ -243,7 +281,7 @@ export async function runFinbertInference(
               overallScore: null,
               items: headlines.map(() => null),
               diagnostics: {
-                endpoint,
+                endpoint: currentEndpoint,
                 model: FINBERT_MODEL_NAME,
                 articlesAnalyzed: 0,
                 reason: errMsg.toLowerCase().includes('loading') ? 'MODEL_LOADING' : 'SERVICE_UNAVAILABLE',
@@ -257,7 +295,7 @@ export async function runFinbertInference(
             overallScore: null,
             items: headlines.map(() => null),
             diagnostics: {
-              endpoint,
+              endpoint: currentEndpoint,
               model: FINBERT_MODEL_NAME,
               articlesAnalyzed: 0,
               reason: 'MALFORMED_RESPONSE',
@@ -271,16 +309,26 @@ export async function runFinbertInference(
         let scoreSum = 0;
         let scoreCount = 0;
 
-        for (let i = 0; i < headlines.length; i++) {
-          if (i < json.length) {
-            const parsed = parseFinbertItem(json[i]);
-            parsedItems.push(parsed);
-            if (parsed) {
-              scoreSum += parsed.score;
-              scoreCount++;
+        // Check if json is a 1D classification array for a single headline: [{ label, score }, ...]
+        if (headlines.length === 1 && json.length > 0 && typeof json[0] === 'object' && !Array.isArray(json[0]) && 'label' in json[0]) {
+          const parsed = parseFinbertItem(json);
+          parsedItems.push(parsed);
+          if (parsed) {
+            scoreSum += parsed.score;
+            scoreCount++;
+          }
+        } else {
+          for (let i = 0; i < headlines.length; i++) {
+            if (i < json.length) {
+              const parsed = parseFinbertItem(json[i]);
+              parsedItems.push(parsed);
+              if (parsed) {
+                scoreSum += parsed.score;
+                scoreCount++;
+              }
+            } else {
+              parsedItems.push(null);
             }
-          } else {
-            parsedItems.push(null);
           }
         }
 
@@ -290,7 +338,7 @@ export async function runFinbertInference(
             overallScore: null,
             items: headlines.map(() => null),
             diagnostics: {
-              endpoint,
+              endpoint: currentEndpoint,
               model: FINBERT_MODEL_NAME,
               articlesAnalyzed: 0,
               reason: 'MALFORMED_RESPONSE',
@@ -306,7 +354,7 @@ export async function runFinbertInference(
           overallScore: overall,
           items: parsedItems,
           diagnostics: {
-            endpoint,
+            endpoint: currentEndpoint,
             model: FINBERT_MODEL_NAME,
             articlesAnalyzed: scoreCount,
             message: `Successfully classified ${scoreCount} headlines with genuine FinBERT model.`
@@ -322,6 +370,15 @@ export async function runFinbertInference(
       } catch {
         errBody = '';
       }
+      const safeDetail = extractSafeErrorMessage(errBody, token);
+      const detailSuffix = safeDetail ? ` Detail: "${safeDetail}".` : '';
+
+      // Automatic fallback to legacy endpoint on 404/405/502/504 if using default router
+      if (canFallbackToLegacy && !fallbackAttempted && (status === 404 || status === 405 || status === 502 || status === 504)) {
+        fallbackAttempted = true;
+        currentEndpoint = LEGACY_FINBERT_ENDPOINT;
+        continue;
+      }
 
       if (status === 401) {
         return {
@@ -329,11 +386,11 @@ export async function runFinbertInference(
           overallScore: null,
           items: headlines.map(() => null),
           diagnostics: {
-            endpoint,
+            endpoint: currentEndpoint,
             model: FINBERT_MODEL_NAME,
             articlesAnalyzed: 0,
             reason: 'INVALID_CREDENTIALS',
-            message: 'Hugging Face authentication failed (HTTP 401: Invalid credentials). Verify that HF_TOKEN is valid and active in Render.'
+            message: `Hugging Face authentication failed (HTTP 401: Invalid credentials).${detailSuffix} Verify that HF_TOKEN is valid, active, and configured in Render.`
           }
         };
       }
@@ -344,11 +401,11 @@ export async function runFinbertInference(
           overallScore: null,
           items: headlines.map(() => null),
           diagnostics: {
-            endpoint,
+            endpoint: currentEndpoint,
             model: FINBERT_MODEL_NAME,
             articlesAnalyzed: 0,
             reason: 'INSUFFICIENT_ACCESS',
-            message: 'Hugging Face access denied (HTTP 403: Insufficient access). Ensure your Hugging Face token has "Make calls to the serverless Inference API" permission.'
+            message: `Hugging Face access denied (HTTP 403: Insufficient permissions).${detailSuffix} ProsusAI/finbert is hosted on Hugging Face Serverless Inference, which requires the "Make calls to the serverless Inference API" permission (or a classic "Read" token). The "Make calls to Inference Providers" permission alone is only for third-party LLMs and does not cover hub models like FinBERT.`
           }
         };
       }
@@ -359,11 +416,11 @@ export async function runFinbertInference(
           overallScore: null,
           items: headlines.map(() => null),
           diagnostics: {
-            endpoint,
+            endpoint: currentEndpoint,
             model: FINBERT_MODEL_NAME,
             articlesAnalyzed: 0,
             reason: 'UNSUPPORTED_ENDPOINT',
-            message: `Configured Hugging Face inference endpoint or model path unsupported (HTTP ${status}).`
+            message: `Configured Hugging Face inference endpoint unsupported (HTTP ${status}).${detailSuffix} Checked: ${currentEndpoint}.`
           }
         };
       }
@@ -374,18 +431,18 @@ export async function runFinbertInference(
           overallScore: null,
           items: headlines.map(() => null),
           diagnostics: {
-            endpoint,
+            endpoint: currentEndpoint,
             model: FINBERT_MODEL_NAME,
             articlesAnalyzed: 0,
             reason: 'RATE_LIMITED',
-            message: 'Hugging Face API rate limit reached.'
+            message: `Hugging Face API rate limit reached (HTTP 429).${detailSuffix} Free tier serverless request quota exceeded; retry later or upgrade account.`
           }
         };
       }
 
       if (status === 503) {
-        // Model loading state
-        if (attempt <= maxRetries) {
+        const isModelLoading = safeDetail.toLowerCase().includes('loading') || errBody.toLowerCase().includes('loading');
+        if (isModelLoading && attempt <= maxRetries) {
           await new Promise(r => setTimeout(r, 2000));
           continue;
         }
@@ -394,11 +451,26 @@ export async function runFinbertInference(
           overallScore: null,
           items: headlines.map(() => null),
           diagnostics: {
-            endpoint,
+            endpoint: currentEndpoint,
             model: FINBERT_MODEL_NAME,
             articlesAnalyzed: 0,
-            reason: 'MODEL_LOADING',
-            message: 'Hugging Face model is currently loading (HTTP 503).'
+            reason: isModelLoading ? 'MODEL_LOADING' : 'SERVICE_UNAVAILABLE',
+            message: `Hugging Face model serverless state (HTTP 503: ${isModelLoading ? 'Model Loading' : 'Service Unavailable'}).${detailSuffix}`
+          }
+        };
+      }
+
+      if (status >= 500 && status < 600) {
+        return {
+          status: 'UNAVAILABLE',
+          overallScore: null,
+          items: headlines.map(() => null),
+          diagnostics: {
+            endpoint: currentEndpoint,
+            model: FINBERT_MODEL_NAME,
+            articlesAnalyzed: 0,
+            reason: 'SERVICE_UNAVAILABLE',
+            message: `Hugging Face provider/server error (HTTP ${status}).${detailSuffix}`
           }
         };
       }
@@ -408,11 +480,11 @@ export async function runFinbertInference(
         overallScore: null,
         items: headlines.map(() => null),
         diagnostics: {
-          endpoint,
+          endpoint: currentEndpoint,
           model: FINBERT_MODEL_NAME,
           articlesAnalyzed: 0,
           reason: 'SERVICE_UNAVAILABLE',
-          message: `Hugging Face inference service error (HTTP ${status}).`
+          message: `Hugging Face inference service error (HTTP ${status}).${detailSuffix}`
         }
       };
 
@@ -427,7 +499,7 @@ export async function runFinbertInference(
         overallScore: null,
         items: headlines.map(() => null),
         diagnostics: {
-          endpoint,
+          endpoint: currentEndpoint,
           model: FINBERT_MODEL_NAME,
           articlesAnalyzed: 0,
           reason: isTimeout ? 'TIMEOUT' : 'NETWORK_ERROR',
@@ -444,7 +516,7 @@ export async function runFinbertInference(
     overallScore: null,
     items: headlines.map(() => null),
     diagnostics: {
-      endpoint,
+      endpoint: currentEndpoint,
       model: FINBERT_MODEL_NAME,
       articlesAnalyzed: 0,
       reason: 'SERVICE_UNAVAILABLE',
