@@ -292,24 +292,60 @@ async function testHttpErrors() {
   assert.strictEqual(res503.diagnostics.reason, 'MODEL_LOADING');
   console.log('✓ HTTP 503 correctly flagged as MODEL_LOADING without crashing.');
 
-  // Automatic Endpoint Fallback Test (Router 404 -> Legacy 200)
+  // Automatic Endpoint Fallback Test (Primary Router 404 -> Secondary Router 200)
   const fallbackCalls: string[] = [];
   const mockFallbackFetch: typeof fetch = async (url: any) => {
     fallbackCalls.push(String(url));
-    if (String(url).includes('router.huggingface.co')) {
-      return new Response(JSON.stringify({ error: 'Router path not found' }), { status: 404 });
+    if (String(url).includes('/hf-inference/models/')) {
+      return new Response(JSON.stringify({ error: 'Primary router path not found' }), { status: 404 });
     }
-    // Legacy endpoint succeeds
+    // Secondary router endpoint succeeds
     return new Response(JSON.stringify([
       [{ label: 'positive', score: 0.85 }, { label: 'neutral', score: 0.10 }, { label: 'negative', score: 0.05 }]
     ]), { status: 200 });
   };
   const resFallback = await runFinbertInference(['Reliance quarterly profits rise'], { token: 'hf_valid_token', fetchFn: mockFallbackFetch });
-  assert.strictEqual(resFallback.status, 'LIVE', 'Fallback to legacy endpoint must succeed when router returns 404');
-  assert.strictEqual(fallbackCalls.length, 2, 'Must have attempted primary router endpoint first, then legacy endpoint');
-  assert(fallbackCalls[0].includes('router.huggingface.co'), 'First call must be router endpoint');
-  assert(fallbackCalls[1].includes('api-inference.huggingface.co'), 'Second call must be legacy endpoint');
-  console.log('✓ Automatic fallback from router to legacy inference endpoint verified.');
+  assert.strictEqual(resFallback.status, 'LIVE', 'Fallback to secondary router endpoint must succeed when primary returns 404');
+  assert.strictEqual(fallbackCalls.length, 2, 'Must have attempted primary router endpoint first, then secondary endpoint');
+  assert(fallbackCalls[0].includes('/hf-inference/models/'), 'First call must be primary router endpoint');
+  assert(fallbackCalls[1].includes('/models/'), 'Second call must be secondary router endpoint');
+  console.log('✓ Automatic fallback from primary to secondary inference router verified.');
+
+  // Network Error: DNS resolution failure (ENOTFOUND)
+  const mockDnsFailFetch: typeof fetch = async () => {
+    const err: any = new TypeError('fetch failed');
+    err.cause = { code: 'ENOTFOUND', syscall: 'getaddrinfo', hostname: 'router.huggingface.co' };
+    throw err;
+  };
+  const resDns = await runFinbertInference(['Headline'], { token: 'hf_valid', fetchFn: mockDnsFailFetch });
+  assert.strictEqual(resDns.status, 'UNAVAILABLE');
+  assert.strictEqual(resDns.diagnostics.reason, 'NETWORK_ERROR');
+  assert(resDns.diagnostics.message?.includes('DNS resolution failed (ENOTFOUND)'), 'Message must indicate DNS resolution failure');
+  console.log('✓ DNS resolution failure (ENOTFOUND) correctly flagged as NETWORK_ERROR with precise diagnostic.');
+
+  // Network Error: Connection Refused (ECONNREFUSED)
+  const mockConnRefusedFetch: typeof fetch = async () => {
+    const err: any = new TypeError('fetch failed');
+    err.cause = { code: 'ECONNREFUSED', syscall: 'connect' };
+    throw err;
+  };
+  const resRefused = await runFinbertInference(['Headline'], { token: 'hf_valid', fetchFn: mockConnRefusedFetch });
+  assert.strictEqual(resRefused.status, 'UNAVAILABLE');
+  assert.strictEqual(resRefused.diagnostics.reason, 'NETWORK_ERROR');
+  assert(resRefused.diagnostics.message?.includes('Connection refused (ECONNREFUSED)'), 'Message must indicate connection refused');
+  console.log('✓ Connection refused (ECONNREFUSED) correctly flagged with precise diagnostic.');
+
+  // HTTP 403 No-Fallback Test: Must NOT attempt fallback on 403
+  const calls403: string[] = [];
+  const mock403NoFallback: typeof fetch = async (url: any) => {
+    calls403.push(String(url));
+    return new Response(JSON.stringify({ error: 'Forbidden: Insufficient permissions.' }), { status: 403 });
+  };
+  const res403NoFallback = await runFinbertInference(['Headline'], { token: 'hf_no_perm', fetchFn: mock403NoFallback });
+  assert.strictEqual(res403NoFallback.status, 'UNAVAILABLE');
+  assert.strictEqual(res403NoFallback.diagnostics.reason, 'INSUFFICIENT_ACCESS');
+  assert.strictEqual(calls403.length, 1, 'HTTP 403 must NOT trigger fallback to other endpoints; must fail fast and report INSUFFICIENT_ACCESS');
+  console.log('✓ HTTP 403 correctly prevents fallbacks and reports INSUFFICIENT_ACCESS directly.');
 
   // Secret Redaction Test (Token and Authorization header must NEVER leak)
   const leakyToken = 'hf_secret1234567890abcdef';

@@ -4,7 +4,7 @@ import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { runFinbertInference } from './src/finbertService';
+import { runFinbertInference, PRIMARY_FINBERT_ENDPOINT, logSafeBackendDiagnostic } from './src/finbertService';
 import { extractCleanArticleData, deduplicateAndGroupNewsArticles } from './src/newsIntelligence';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -1009,6 +1009,52 @@ async function startServer() {
       console.error('[IPO Error]', e);
       return res.status(500).json({ error: e.message || 'Failed to retrieve IPO dataset' });
     }
+  });
+
+  // --- Protected Backend-Only Diagnostic Route: Live FinBERT Probe ---
+  // Evaluates one small live FinBERT inference probe using a fixed, harmless sentence.
+  // Throttled to 1 probe per 15s; protected by optional ADMIN_KEY or DIAGNOSTIC_KEY env var.
+  let lastDiagnosticProbe = 0;
+  const HARMLESS_FINBERT_TEST_SENTENCE = 'Operating profit margins expanded by 18% during the recent quarter.';
+
+  app.get('/api/finbert/diagnostic', async (req, res) => {
+    const adminKey = process.env.ADMIN_KEY || process.env.DIAGNOSTIC_KEY;
+    const reqKey = (req.headers['x-diagnostic-key'] as string) || (req.query.key as string);
+
+    if (adminKey && reqKey !== adminKey) {
+      return res.status(401).json({
+        error: 'Unauthorized. Provide valid x-diagnostic-key header or key query param.'
+      });
+    }
+
+    const now = Date.now();
+    if (now - lastDiagnosticProbe < 15_000) {
+      const waitSec = Math.ceil((15_000 - (now - lastDiagnosticProbe)) / 1000);
+      return res.status(429).json({
+        error: `Diagnostic probe throttled to protect Hugging Face quota. Wait ${waitSec}s.`
+      });
+    }
+    lastDiagnosticProbe = now;
+
+    const rawToken = process.env.HF_TOKEN || process.env.HUGGINGFACE_API_KEY || process.env.HUGGING_FACE_HUB_TOKEN || '';
+    const cleanToken = rawToken.replace(/["'\r\n]/g, '').trim();
+    const tokenConfigured = Boolean(cleanToken);
+    const tokenPrefixValid = cleanToken.startsWith('hf_');
+
+    const result = await runFinbertInference([HARMLESS_FINBERT_TEST_SENTENCE]);
+
+    return res.json({
+      timestamp: new Date().toISOString(),
+      liveStatus: result.status,
+      reason: result.diagnostics.reason || (result.status === 'LIVE' ? 'NONE' : 'UNAVAILABLE'),
+      message: result.diagnostics.message,
+      overallScore: result.overallScore,
+      endpointChecked: result.diagnostics.endpoint,
+      modelName: result.diagnostics.model,
+      tokenConfigured,
+      tokenPrefixValid,
+      probeSentence: HARMLESS_FINBERT_TEST_SENTENCE
+    });
   });
 
   // --- API: Live Financial News & Sentiment Analysis ---

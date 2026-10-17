@@ -49,14 +49,50 @@ export interface FinbertOptions {
 }
 
 export const PRIMARY_FINBERT_ENDPOINT = 'https://router.huggingface.co/hf-inference/models/ProsusAI/finbert';
-export const INFERENCE_ROUTER_ENDPOINT = 'https://router.huggingface.co/models/ProsusAI/finbert';
+export const SECONDARY_FINBERT_ENDPOINT = 'https://router.huggingface.co/models/ProsusAI/finbert';
+export const INFERENCE_ROUTER_ENDPOINT = SECONDARY_FINBERT_ENDPOINT;
 export const LEGACY_FINBERT_ENDPOINT = 'https://api-inference.huggingface.co/models/ProsusAI/finbert';
 export const FINBERT_MODEL_NAME = 'ProsusAI/finbert';
 
 export const CANDIDATE_FINBERT_ENDPOINTS = [
   PRIMARY_FINBERT_ENDPOINT,
-  LEGACY_FINBERT_ENDPOINT
+  SECONDARY_FINBERT_ENDPOINT
 ];
+
+/**
+ * Safe backend diagnostic logger that records status, elapsed time, and provider responses
+ * without ever exposing authorization tokens, secrets, or sensitive news text.
+ */
+export function logSafeBackendDiagnostic(info: {
+  endpoint: string;
+  httpStatus?: number | string;
+  elapsedMs: number;
+  reason?: string;
+  providerMessage?: string;
+  status: 'LIVE' | 'UNAVAILABLE';
+  articlesCount?: number;
+}): void {
+  let safePath = info.endpoint;
+  try {
+    const parsed = new URL(info.endpoint);
+    safePath = `${parsed.origin}${parsed.pathname}`;
+  } catch {
+    safePath = info.endpoint.replace(/[?#].*$/, '');
+  }
+
+  const logParts = [
+    `[FinBERT Backend Diagnostic]`,
+    `status=${info.status}`,
+    info.httpStatus !== undefined ? `httpStatus=${info.httpStatus}` : null,
+    info.reason ? `reason=${info.reason}` : null,
+    `elapsed=${info.elapsedMs}ms`,
+    `endpoint=${safePath}`,
+    info.articlesCount !== undefined ? `articles=${info.articlesCount}` : null,
+    info.providerMessage ? `msg="${info.providerMessage.slice(0, 140).replace(/["\r\n]/g, ' ').trim()}"` : null
+  ].filter(Boolean);
+
+  console.info(logParts.join(' | '));
+}
 
 /**
  * Safely extracts error details from Hugging Face responses without ever exposing secrets.
@@ -171,7 +207,15 @@ export async function runFinbertInference(
     : (process.env.HF_TOKEN || process.env.HUGGINGFACE_API_KEY || process.env.HUGGING_FACE_HUB_TOKEN || '');
   // Sanitize: strip surrounding single/double quotes, trailing carriage returns, newlines, and whitespace
   const token = (rawToken || '').replace(/["'\r\n]/g, '').trim();
-  const configuredEndpoint = options.endpoint || process.env.HF_INFERENCE_ENDPOINT;
+  const rawConfigured = (options.endpoint || process.env.HF_INFERENCE_ENDPOINT || '').trim();
+  let configuredEndpoint: string | undefined = undefined;
+  if (rawConfigured) {
+    if (!rawConfigured.startsWith('http://') && !rawConfigured.startsWith('https://')) {
+      configuredEndpoint = `https://${rawConfigured.replace(/^\/+/, '')}`;
+    } else {
+      configuredEndpoint = rawConfigured;
+    }
+  }
   const endpointsToTry = configuredEndpoint ? [configuredEndpoint] : [...CANDIDATE_FINBERT_ENDPOINTS];
   const primaryEndpoint = endpointsToTry[0] || PRIMARY_FINBERT_ENDPOINT;
 
@@ -240,13 +284,15 @@ export async function runFinbertInference(
       attempt++;
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), timeoutMs);
+      const reqStart = Date.now();
 
+      let response: Response;
       try {
         // Hugging Face accepts { inputs: string[] } or { inputs: string }
         // Limit batch size to 10 articles to ensure low latency and high reliability
         const batchToSend = headlines.slice(0, 10).map(h => (h || '').slice(0, 512));
 
-        const response = await fetchFn(currentEndpoint, {
+        response = await fetchFn(currentEndpoint, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -257,141 +303,89 @@ export async function runFinbertInference(
           body: JSON.stringify({ inputs: batchToSend }),
           signal: controller.signal
         });
-
+      } catch (fetchErr: any) {
         clearTimeout(timer);
-
-        if (response.ok) {
-          let json: any;
-          try {
-            json = await response.json();
-          } catch {
-            lastFailureResult = {
-              status: 'UNAVAILABLE',
-              overallScore: null,
-              items: headlines.map(() => null),
-              diagnostics: {
-                endpoint: currentEndpoint,
-                model: FINBERT_MODEL_NAME,
-                articlesAnalyzed: 0,
-                reason: 'MALFORMED_RESPONSE',
-                message: 'Hugging Face inference returned non-JSON body.'
-              }
-            };
-            break;
-          }
-
-          // Validate response format
-          if (!Array.isArray(json)) {
-            // Check if HF returned an error object like { error: "..." }
-            if (json && typeof json === 'object' && json.error) {
-              const errMsg = String(json.error);
-              if (errMsg.toLowerCase().includes('loading') && attempt <= maxRetries) {
-                // Wait briefly for model warmup and retry
-                await new Promise(r => setTimeout(r, 2000));
-                continue;
-              }
-              lastFailureResult = {
-                status: 'UNAVAILABLE',
-                overallScore: null,
-                items: headlines.map(() => null),
-                diagnostics: {
-                  endpoint: currentEndpoint,
-                  model: FINBERT_MODEL_NAME,
-                  articlesAnalyzed: 0,
-                  reason: errMsg.toLowerCase().includes('loading') ? 'MODEL_LOADING' : 'SERVICE_UNAVAILABLE',
-                  message: `Hugging Face inference error: ${errMsg}`
-                }
-              };
-              break;
-            }
-
-            lastFailureResult = {
-              status: 'UNAVAILABLE',
-              overallScore: null,
-              items: headlines.map(() => null),
-              diagnostics: {
-                endpoint: currentEndpoint,
-                model: FINBERT_MODEL_NAME,
-                articlesAnalyzed: 0,
-                reason: 'MALFORMED_RESPONSE',
-                message: 'Expected array response from Hugging Face inference pipeline.'
-              }
-            };
-            break;
-          }
-
-          // Parse individual items
-          const parsedItems: Array<FinbertItemResult | null> = [];
-          let scoreSum = 0;
-          let scoreCount = 0;
-
-          // Check if json is a 1D classification array for a single headline: [{ label, score }, ...]
-          if (headlines.length === 1 && json.length > 0 && typeof json[0] === 'object' && !Array.isArray(json[0]) && 'label' in json[0]) {
-            const parsed = parseFinbertItem(json);
-            parsedItems.push(parsed);
-            if (parsed) {
-              scoreSum += parsed.score;
-              scoreCount++;
-            }
-          } else {
-            for (let i = 0; i < headlines.length; i++) {
-              if (i < json.length) {
-                const parsed = parseFinbertItem(json[i]);
-                parsedItems.push(parsed);
-                if (parsed) {
-                  scoreSum += parsed.score;
-                  scoreCount++;
-                }
-              } else {
-                parsedItems.push(null);
-              }
-            }
-          }
-
-          if (scoreCount === 0) {
-            lastFailureResult = {
-              status: 'UNAVAILABLE',
-              overallScore: null,
-              items: headlines.map(() => null),
-              diagnostics: {
-                endpoint: currentEndpoint,
-                model: FINBERT_MODEL_NAME,
-                articlesAnalyzed: 0,
-                reason: 'MALFORMED_RESPONSE',
-                message: 'Could not parse sentiment probabilities from inference output.'
-              }
-            };
-            break;
-          }
-
-          const overall = Math.round((scoreSum / scoreCount) * 100) / 100;
-
-          return {
-            status: 'LIVE',
-            overallScore: overall,
-            items: parsedItems,
-            diagnostics: {
-              endpoint: currentEndpoint,
-              model: FINBERT_MODEL_NAME,
-              articlesAnalyzed: scoreCount,
-              message: `Successfully classified ${scoreCount} headlines with genuine FinBERT model.`
-            }
-          };
+        const elapsedMs = Date.now() - reqStart;
+        const isTimeout = fetchErr?.name === 'AbortError' || fetchErr?.message?.includes('aborted');
+        if (attempt <= maxRetries && isTimeout) {
+          continue;
         }
 
-        // Handle non-OK HTTP status codes
-        const status = response.status;
-        let errBody = '';
+        let hostName = 'endpoint';
         try {
-          errBody = await response.text();
+          hostName = new URL(currentEndpoint).hostname;
         } catch {
-          errBody = '';
+          hostName = currentEndpoint;
         }
-        const safeDetail = extractSafeErrorMessage(errBody, token);
-        const detailSuffix = safeDetail ? ` Upstream message: "${safeDetail}".` : '';
 
-        // If candidate endpoint returns 403, 404, 405, 410, 502, or 504 and next candidate exists, try next candidate
-        if (hasNextEndpoint && (status === 404 || status === 405 || status === 410 || status === 403 || status === 502 || status === 504)) {
+        const causeCode = fetchErr?.cause?.code || fetchErr?.code || '';
+        const causeMsg = fetchErr?.cause?.message || fetchErr?.message || '';
+
+        const diagnosticReason: FinbertInferenceResult['diagnostics']['reason'] = isTimeout ? 'TIMEOUT' : 'NETWORK_ERROR';
+        let diagnosticMessage = '';
+
+        if (isTimeout) {
+          diagnosticMessage = `FinBERT inference request timed out after ${timeoutMs}ms.`;
+        } else if (causeCode === 'ENOTFOUND') {
+          diagnosticMessage = `DNS resolution failed (ENOTFOUND) for host "${hostName}". ${
+            hostName.includes('api-inference') ? 'api-inference.huggingface.co is decommissioned; use router.huggingface.co.' : 'Verify network connectivity and HF_INFERENCE_ENDPOINT.'
+          }`;
+        } else if (causeCode === 'ECONNREFUSED') {
+          diagnosticMessage = `Connection refused (ECONNREFUSED) by host "${hostName}".`;
+        } else if (causeCode === 'ECONNRESET') {
+          diagnosticMessage = `Connection reset by peer (ECONNRESET) reaching host "${hostName}".`;
+        } else if (causeCode === 'ETIMEDOUT') {
+          diagnosticMessage = `Socket connect timed out (ETIMEDOUT) reaching host "${hostName}".`;
+        } else if (causeMsg.toLowerCase().includes('certificate') || causeCode.includes('CERT_')) {
+          diagnosticMessage = `TLS/SSL certificate validation error for host "${hostName}".`;
+        } else {
+          diagnosticMessage = `FinBERT inference network connection failed: ${causeMsg.slice(0, 100)}`;
+        }
+
+        logSafeBackendDiagnostic({
+          endpoint: currentEndpoint,
+          httpStatus: causeCode || (isTimeout ? 'TIMEOUT' : 'NETWORK_ERR'),
+          elapsedMs,
+          reason: diagnosticReason,
+          providerMessage: diagnosticMessage,
+          status: 'UNAVAILABLE',
+          articlesCount: headlines.length
+        });
+
+        lastFailureResult = {
+          status: 'UNAVAILABLE',
+          overallScore: null,
+          items: headlines.map(() => null),
+          diagnostics: {
+            endpoint: currentEndpoint,
+            model: FINBERT_MODEL_NAME,
+            articlesAnalyzed: 0,
+            reason: diagnosticReason,
+            message: diagnosticMessage
+          }
+        };
+        break;
+      }
+
+      clearTimeout(timer);
+      const elapsedMs = Date.now() - reqStart;
+
+      // Handle successful HTTP 200 response
+      if (response.ok) {
+        let json: any;
+        try {
+          json = await response.json();
+        } catch {
+          const msg = 'Hugging Face inference returned non-JSON body.';
+          logSafeBackendDiagnostic({
+            endpoint: currentEndpoint,
+            httpStatus: response.status,
+            elapsedMs,
+            reason: 'MALFORMED_RESPONSE',
+            providerMessage: msg,
+            status: 'UNAVAILABLE',
+            articlesCount: headlines.length
+          });
           lastFailureResult = {
             status: 'UNAVAILABLE',
             overallScore: null,
@@ -400,80 +394,57 @@ export async function runFinbertInference(
               endpoint: currentEndpoint,
               model: FINBERT_MODEL_NAME,
               articlesAnalyzed: 0,
-              reason: status === 403 ? 'INSUFFICIENT_ACCESS' : status === 404 || status === 405 ? 'UNSUPPORTED_ENDPOINT' : 'SERVICE_UNAVAILABLE',
-              message: `Hugging Face endpoint returned HTTP ${status}.${detailSuffix} Attempting fallback.`
+              reason: 'MALFORMED_RESPONSE',
+              message: msg
             }
           };
-          break; // Move to next candidate endpoint in endpointsToTry
+          break;
         }
 
-        if (status === 401) {
-          return {
-            status: 'UNAVAILABLE',
-            overallScore: null,
-            items: headlines.map(() => null),
-            diagnostics: {
+        // Validate response format
+        if (!Array.isArray(json)) {
+          if (json && typeof json === 'object' && json.error) {
+            const errMsg = String(json.error);
+            if (errMsg.toLowerCase().includes('loading') && attempt <= maxRetries) {
+              await new Promise(r => setTimeout(r, 2000));
+              continue;
+            }
+            const safeErrMsg = extractSafeErrorMessage(errMsg, token);
+            logSafeBackendDiagnostic({
               endpoint: currentEndpoint,
-              model: FINBERT_MODEL_NAME,
-              articlesAnalyzed: 0,
-              reason: 'INVALID_CREDENTIALS',
-              message: `Hugging Face authentication failed (HTTP 401: Invalid credentials).${detailSuffix} Verify that HF_TOKEN is valid, active, and configured in Render.`
-            }
-          };
-        }
-
-        if (status === 403) {
-          return {
-            status: 'UNAVAILABLE',
-            overallScore: null,
-            items: headlines.map(() => null),
-            diagnostics: {
-              endpoint: currentEndpoint,
-              model: FINBERT_MODEL_NAME,
-              articlesAnalyzed: 0,
-              reason: 'INSUFFICIENT_ACCESS',
-              message: `Hugging Face inference request forbidden (HTTP 403: Insufficient permissions or provider access).${detailSuffix} Endpoint: ${currentEndpoint}. Model: ${FINBERT_MODEL_NAME}.`
-            }
-          };
-        }
-
-        if (status === 404 || status === 405) {
-          return {
-            status: 'UNAVAILABLE',
-            overallScore: null,
-            items: headlines.map(() => null),
-            diagnostics: {
-              endpoint: currentEndpoint,
-              model: FINBERT_MODEL_NAME,
-              articlesAnalyzed: 0,
-              reason: 'UNSUPPORTED_ENDPOINT',
-              message: `Configured Hugging Face inference endpoint unsupported (HTTP ${status}).${detailSuffix} Checked: ${currentEndpoint}.`
-            }
-          };
-        }
-
-        if (status === 429) {
-          return {
-            status: 'UNAVAILABLE',
-            overallScore: null,
-            items: headlines.map(() => null),
-            diagnostics: {
-              endpoint: currentEndpoint,
-              model: FINBERT_MODEL_NAME,
-              articlesAnalyzed: 0,
-              reason: 'RATE_LIMITED',
-              message: `Hugging Face API rate limit reached (HTTP 429).${detailSuffix} Free tier request quota exceeded; retry later or upgrade account.`
-            }
-          };
-        }
-
-        if (status === 503) {
-          const isModelLoading = safeDetail.toLowerCase().includes('loading') || errBody.toLowerCase().includes('loading');
-          if (isModelLoading && attempt <= maxRetries) {
-            await new Promise(r => setTimeout(r, 2000));
-            continue;
+              httpStatus: response.status,
+              elapsedMs,
+              reason: errMsg.toLowerCase().includes('loading') ? 'MODEL_LOADING' : 'SERVICE_UNAVAILABLE',
+              providerMessage: safeErrMsg,
+              status: 'UNAVAILABLE',
+              articlesCount: headlines.length
+            });
+            lastFailureResult = {
+              status: 'UNAVAILABLE',
+              overallScore: null,
+              items: headlines.map(() => null),
+              diagnostics: {
+                endpoint: currentEndpoint,
+                model: FINBERT_MODEL_NAME,
+                articlesAnalyzed: 0,
+                reason: errMsg.toLowerCase().includes('loading') ? 'MODEL_LOADING' : 'SERVICE_UNAVAILABLE',
+                message: `Hugging Face inference error: ${safeErrMsg}`
+              }
+            };
+            break;
           }
-          return {
+
+          const msg = 'Expected array response from Hugging Face inference pipeline.';
+          logSafeBackendDiagnostic({
+            endpoint: currentEndpoint,
+            httpStatus: response.status,
+            elapsedMs,
+            reason: 'MALFORMED_RESPONSE',
+            providerMessage: msg,
+            status: 'UNAVAILABLE',
+            articlesCount: headlines.length
+          });
+          lastFailureResult = {
             status: 'UNAVAILABLE',
             overallScore: null,
             items: headlines.map(() => null),
@@ -481,14 +452,56 @@ export async function runFinbertInference(
               endpoint: currentEndpoint,
               model: FINBERT_MODEL_NAME,
               articlesAnalyzed: 0,
-              reason: isModelLoading ? 'MODEL_LOADING' : 'SERVICE_UNAVAILABLE',
-              message: `Hugging Face model serverless state (HTTP 503: ${isModelLoading ? 'Model Loading' : 'Service Unavailable'}).${detailSuffix}`
+              reason: 'MALFORMED_RESPONSE',
+              message: msg
             }
           };
+          break;
         }
 
-        if (status >= 500 && status < 600) {
-          return {
+        // Parse individual items
+        const parsedItems: Array<FinbertItemResult | null> = [];
+        let scoreSum = 0;
+        let scoreCount = 0;
+
+        // Check if json is a 1D classification array: [{ label, score }, ...]
+        if (json.length > 0 && typeof json[0] === 'object' && !Array.isArray(json[0]) && 'label' in json[0]) {
+          const parsed = parseFinbertItem(json);
+          parsedItems.push(parsed);
+          if (parsed) {
+            scoreSum += parsed.score;
+            scoreCount++;
+          }
+          for (let i = 1; i < headlines.length; i++) {
+            parsedItems.push(null);
+          }
+        } else {
+          for (let i = 0; i < headlines.length; i++) {
+            if (i < json.length) {
+              const parsed = parseFinbertItem(json[i]);
+              parsedItems.push(parsed);
+              if (parsed) {
+                scoreSum += parsed.score;
+                scoreCount++;
+              }
+            } else {
+              parsedItems.push(null);
+            }
+          }
+        }
+
+        if (scoreCount === 0) {
+          const msg = 'Could not parse sentiment probabilities from inference output.';
+          logSafeBackendDiagnostic({
+            endpoint: currentEndpoint,
+            httpStatus: response.status,
+            elapsedMs,
+            reason: 'MALFORMED_RESPONSE',
+            providerMessage: msg,
+            status: 'UNAVAILABLE',
+            articlesCount: headlines.length
+          });
+          lastFailureResult = {
             status: 'UNAVAILABLE',
             overallScore: null,
             items: headlines.map(() => null),
@@ -496,12 +509,203 @@ export async function runFinbertInference(
               endpoint: currentEndpoint,
               model: FINBERT_MODEL_NAME,
               articlesAnalyzed: 0,
-              reason: 'SERVICE_UNAVAILABLE',
-              message: `Hugging Face provider/server error (HTTP ${status}).${detailSuffix}`
+              reason: 'MALFORMED_RESPONSE',
+              message: msg
             }
           };
+          break;
         }
 
+        const overall = Math.round((scoreSum / scoreCount) * 100) / 100;
+        const successMsg = `Successfully classified ${scoreCount} headlines with genuine FinBERT model.`;
+        logSafeBackendDiagnostic({
+          endpoint: currentEndpoint,
+          httpStatus: 200,
+          elapsedMs,
+          status: 'LIVE',
+          articlesCount: scoreCount,
+          providerMessage: successMsg
+        });
+
+        return {
+          status: 'LIVE',
+          overallScore: overall,
+          items: parsedItems,
+          diagnostics: {
+            endpoint: currentEndpoint,
+            model: FINBERT_MODEL_NAME,
+            articlesAnalyzed: scoreCount,
+            message: successMsg
+          }
+        };
+      }
+
+      // Handle non-OK HTTP status codes
+      const status = response.status;
+      let errBody = '';
+      try {
+        errBody = await response.text();
+      } catch {
+        errBody = '';
+      }
+      const safeDetail = extractSafeErrorMessage(errBody, token);
+      const detailSuffix = safeDetail ? ` Upstream message: "${safeDetail}".` : '';
+
+      // If candidate endpoint returns 404, 405, 410, 502, or 504 and next candidate exists, try next candidate
+      // NOTE: 401 and 403 must NEVER fallback as they are credential/permission errors.
+      if (hasNextEndpoint && (status === 404 || status === 405 || status === 410 || status === 502 || status === 504)) {
+        logSafeBackendDiagnostic({
+          endpoint: currentEndpoint,
+          httpStatus: status,
+          elapsedMs,
+          reason: (status === 404 || status === 405 || status === 410) ? 'UNSUPPORTED_ENDPOINT' : 'SERVICE_UNAVAILABLE',
+          providerMessage: `HTTP ${status}.${detailSuffix} Attempting fallback.`,
+          status: 'UNAVAILABLE'
+        });
+        lastFailureResult = {
+          status: 'UNAVAILABLE',
+          overallScore: null,
+          items: headlines.map(() => null),
+          diagnostics: {
+            endpoint: currentEndpoint,
+            model: FINBERT_MODEL_NAME,
+            articlesAnalyzed: 0,
+            reason: (status === 404 || status === 405 || status === 410) ? 'UNSUPPORTED_ENDPOINT' : 'SERVICE_UNAVAILABLE',
+            message: `Hugging Face endpoint returned HTTP ${status}.${detailSuffix} Attempting fallback.`
+          }
+        };
+        break; // Move to next candidate endpoint in endpointsToTry
+      }
+
+      if (status === 401) {
+        logSafeBackendDiagnostic({
+          endpoint: currentEndpoint,
+          httpStatus: 401,
+          elapsedMs,
+          reason: 'INVALID_CREDENTIALS',
+          providerMessage: safeDetail || 'Invalid credentials',
+          status: 'UNAVAILABLE'
+        });
+        return {
+          status: 'UNAVAILABLE',
+          overallScore: null,
+          items: headlines.map(() => null),
+          diagnostics: {
+            endpoint: currentEndpoint,
+            model: FINBERT_MODEL_NAME,
+            articlesAnalyzed: 0,
+            reason: 'INVALID_CREDENTIALS',
+            message: `Hugging Face authentication failed (HTTP 401: Invalid credentials).${detailSuffix} Verify that HF_TOKEN is valid, active, and configured in Render.`
+          }
+        };
+      }
+
+      if (status === 403) {
+        logSafeBackendDiagnostic({
+          endpoint: currentEndpoint,
+          httpStatus: 403,
+          elapsedMs,
+          reason: 'INSUFFICIENT_ACCESS',
+          providerMessage: safeDetail || 'Insufficient access',
+          status: 'UNAVAILABLE'
+        });
+        return {
+          status: 'UNAVAILABLE',
+          overallScore: null,
+          items: headlines.map(() => null),
+          diagnostics: {
+            endpoint: currentEndpoint,
+            model: FINBERT_MODEL_NAME,
+            articlesAnalyzed: 0,
+            reason: 'INSUFFICIENT_ACCESS',
+            message: `Hugging Face inference request forbidden (HTTP 403: Insufficient Access).${detailSuffix} Verify token permissions: ensure your HF_TOKEN has "Make calls to Inference Providers" or "Read" access in Hugging Face settings.`
+          }
+        };
+      }
+
+      if (status === 404 || status === 405 || status === 410) {
+        logSafeBackendDiagnostic({
+          endpoint: currentEndpoint,
+          httpStatus: status,
+          elapsedMs,
+          reason: 'UNSUPPORTED_ENDPOINT',
+          providerMessage: safeDetail || 'Unsupported endpoint',
+          status: 'UNAVAILABLE'
+        });
+        return {
+          status: 'UNAVAILABLE',
+          overallScore: null,
+          items: headlines.map(() => null),
+          diagnostics: {
+            endpoint: currentEndpoint,
+            model: FINBERT_MODEL_NAME,
+            articlesAnalyzed: 0,
+            reason: 'UNSUPPORTED_ENDPOINT',
+            message: `Configured Hugging Face inference endpoint unsupported (HTTP ${status}).${detailSuffix} Checked: ${currentEndpoint}.`
+          }
+        };
+      }
+
+      if (status === 429) {
+        logSafeBackendDiagnostic({
+          endpoint: currentEndpoint,
+          httpStatus: 429,
+          elapsedMs,
+          reason: 'RATE_LIMITED',
+          providerMessage: safeDetail || 'Rate limit reached',
+          status: 'UNAVAILABLE'
+        });
+        return {
+          status: 'UNAVAILABLE',
+          overallScore: null,
+          items: headlines.map(() => null),
+          diagnostics: {
+            endpoint: currentEndpoint,
+            model: FINBERT_MODEL_NAME,
+            articlesAnalyzed: 0,
+            reason: 'RATE_LIMITED',
+            message: `Hugging Face API rate limit reached (HTTP 429).${detailSuffix} Free tier request quota exceeded; retry later or upgrade account.`
+          }
+        };
+      }
+
+      if (status === 503) {
+        const isModelLoading = safeDetail.toLowerCase().includes('loading') || errBody.toLowerCase().includes('loading');
+        if (isModelLoading && attempt <= maxRetries) {
+          await new Promise(r => setTimeout(r, 2000));
+          continue;
+        }
+        logSafeBackendDiagnostic({
+          endpoint: currentEndpoint,
+          httpStatus: 503,
+          elapsedMs,
+          reason: isModelLoading ? 'MODEL_LOADING' : 'SERVICE_UNAVAILABLE',
+          providerMessage: safeDetail || (isModelLoading ? 'Model Loading' : 'Service Unavailable'),
+          status: 'UNAVAILABLE'
+        });
+        return {
+          status: 'UNAVAILABLE',
+          overallScore: null,
+          items: headlines.map(() => null),
+          diagnostics: {
+            endpoint: currentEndpoint,
+            model: FINBERT_MODEL_NAME,
+            articlesAnalyzed: 0,
+            reason: isModelLoading ? 'MODEL_LOADING' : 'SERVICE_UNAVAILABLE',
+            message: `Hugging Face model serverless state (HTTP 503: ${isModelLoading ? 'Model Loading' : 'Service Unavailable'}).${detailSuffix}`
+          }
+        };
+      }
+
+      if (status >= 500 && status < 600) {
+        logSafeBackendDiagnostic({
+          endpoint: currentEndpoint,
+          httpStatus: status,
+          elapsedMs,
+          reason: 'SERVICE_UNAVAILABLE',
+          providerMessage: safeDetail || `Server error HTTP ${status}`,
+          status: 'UNAVAILABLE'
+        });
         return {
           status: 'UNAVAILABLE',
           overallScore: null,
@@ -511,32 +715,31 @@ export async function runFinbertInference(
             model: FINBERT_MODEL_NAME,
             articlesAnalyzed: 0,
             reason: 'SERVICE_UNAVAILABLE',
-            message: `Hugging Face inference service error (HTTP ${status}).${detailSuffix}`
+            message: `Hugging Face provider/server error (HTTP ${status}).${detailSuffix}`
           }
         };
-
-      } catch (err: any) {
-        clearTimeout(timer);
-        const isTimeout = err?.name === 'AbortError' || err?.message?.includes('aborted');
-        if (attempt <= maxRetries && isTimeout) {
-          continue;
-        }
-        lastFailureResult = {
-          status: 'UNAVAILABLE',
-          overallScore: null,
-          items: headlines.map(() => null),
-          diagnostics: {
-            endpoint: currentEndpoint,
-            model: FINBERT_MODEL_NAME,
-            articlesAnalyzed: 0,
-            reason: isTimeout ? 'TIMEOUT' : 'NETWORK_ERROR',
-            message: isTimeout
-              ? `FinBERT inference request timed out after ${timeoutMs}ms.`
-              : 'FinBERT inference network connection failed.'
-          }
-        };
-        break;
       }
+
+      logSafeBackendDiagnostic({
+        endpoint: currentEndpoint,
+        httpStatus: status,
+        elapsedMs,
+        reason: 'SERVICE_UNAVAILABLE',
+        providerMessage: safeDetail || `Inference error HTTP ${status}`,
+        status: 'UNAVAILABLE'
+      });
+      return {
+        status: 'UNAVAILABLE',
+        overallScore: null,
+        items: headlines.map(() => null),
+        diagnostics: {
+          endpoint: currentEndpoint,
+          model: FINBERT_MODEL_NAME,
+          articlesAnalyzed: 0,
+          reason: 'SERVICE_UNAVAILABLE',
+          message: `Hugging Face inference service error (HTTP ${status}).${detailSuffix}`
+        }
+      };
     }
   }
 
