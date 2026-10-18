@@ -128,9 +128,19 @@ export const FinancialNewsPage: React.FC<FinancialNewsPageProps> = ({ sentiment,
             }`}>
               {sentiment.newsCount === 0 ? 'N/A' : `${sentiment.vaderCompound >= 0 ? '+' : ''}${sentiment.vaderCompound.toFixed(2)}`}
             </div>
-            <div className="text-[10px] text-slate-500" title={sentiment.finbertDiagnostic || undefined}>
+            <div
+              className="text-[10px] text-slate-500"
+              title={
+                sentiment.finbertDiagnostic ||
+                (sentiment.finbertReason === 'CREDITS_EXHAUSTED'
+                  ? 'Hugging Face Inference Provider credits exhausted (HTTP 402). Active VADER sentiment fallback engaged.'
+                  : undefined)
+              }
+            >
               {sentiment.finbertStatus === 'LIVE' && sentiment.finbertScore !== null
                 ? `FinBERT: ${sentiment.finbertScore >= 0 ? '+' : ''}${sentiment.finbertScore.toFixed(2)}`
+                : sentiment.finbertReason === 'CREDITS_EXHAUSTED'
+                ? 'FinBERT: Offline (Credits Exhausted — VADER Fallback Active)'
                 : `FinBERT: Offline (${sentiment.finbertReason ? sentiment.finbertReason.replace(/_/g, ' ') : 'No HF_TOKEN'})`}
             </div>
           </div>

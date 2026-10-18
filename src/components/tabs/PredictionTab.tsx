@@ -121,7 +121,7 @@ export const PredictionTab: React.FC<PredictionTabProps> = ({ signal, quote }) =
               </div>
               <div className="text-[10px] text-slate-400">
                 {breakdown.finbert.status === 'UNAVAILABLE' || breakdown.finbert.weight === 0
-                  ? 'Service not deployed'
+                  ? 'Offline (VADER fallback active)'
                   : `Contrib: ${breakdown.finbert.contribution >= 0 ? '+' : ''}${breakdown.finbert.contribution.toFixed(3)}`}
               </div>
             </div>

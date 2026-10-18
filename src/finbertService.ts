@@ -35,7 +35,7 @@ export interface FinbertInferenceResult {
     endpoint: string;
     model: string;
     articlesAnalyzed: number;
-    reason?: 'MISSING_TOKEN' | 'INVALID_CREDENTIALS' | 'INSUFFICIENT_ACCESS' | 'EMPTY_INPUT' | 'MODEL_LOADING' | 'MODEL_UNAVAILABLE' | 'AUTH_ERROR' | 'RATE_LIMITED' | 'UNSUPPORTED_ENDPOINT' | 'TIMEOUT' | 'NETWORK_ERROR' | 'MALFORMED_RESPONSE' | 'SERVICE_UNAVAILABLE';
+    reason?: 'MISSING_TOKEN' | 'INVALID_CREDENTIALS' | 'INSUFFICIENT_ACCESS' | 'CREDITS_EXHAUSTED' | 'EMPTY_INPUT' | 'MODEL_LOADING' | 'MODEL_UNAVAILABLE' | 'AUTH_ERROR' | 'RATE_LIMITED' | 'UNSUPPORTED_ENDPOINT' | 'TIMEOUT' | 'NETWORK_ERROR' | 'MALFORMED_RESPONSE' | 'SERVICE_UNAVAILABLE';
     message?: string;
   };
 }
@@ -46,6 +46,7 @@ export interface FinbertOptions {
   timeoutMs?: number;
   maxRetries?: number;
   fetchFn?: typeof fetch;
+  forceProbe?: boolean;
 }
 
 export const PRIMARY_FINBERT_ENDPOINT = 'https://router.huggingface.co/hf-inference/models/ProsusAI/finbert';
@@ -58,6 +59,36 @@ export const CANDIDATE_FINBERT_ENDPOINTS = [
   PRIMARY_FINBERT_ENDPOINT,
   SECONDARY_FINBERT_ENDPOINT
 ];
+
+/**
+ * Cooldown duration when Hugging Face provider credits are exhausted.
+ * Prevents bombarding Hugging Face on every page render or article index.
+ */
+export const CREDITS_EXHAUSTED_COOLDOWN_MS = 5 * 60 * 1000;
+
+let creditsExhaustedUntil = 0;
+let lastCreditsExhaustedMessage = '';
+let lastExhaustedTokenHash = '';
+
+export function isCreditsExhausted(): boolean {
+  return Date.now() < creditsExhaustedUntil;
+}
+
+export function getCreditsExhaustedRemainingSec(): number {
+  return Math.max(0, Math.ceil((creditsExhaustedUntil - Date.now()) / 1000));
+}
+
+export function recordCreditsExhaustion(message: string, token: string = ''): void {
+  creditsExhaustedUntil = Date.now() + CREDITS_EXHAUSTED_COOLDOWN_MS;
+  lastCreditsExhaustedMessage = message;
+  lastExhaustedTokenHash = token ? `${token.slice(0, 6)}...${token.slice(-4)}` : '';
+}
+
+export function resetCreditsExhaustionCooldown(): void {
+  creditsExhaustedUntil = 0;
+  lastCreditsExhaustedMessage = '';
+  lastExhaustedTokenHash = '';
+}
 
 /**
  * Safe backend diagnostic logger that records status, elapsed time, and provider responses
@@ -268,6 +299,30 @@ export async function runFinbertInference(
         articlesAnalyzed: 0,
         reason: 'EMPTY_INPUT',
         message: 'No headline text supplied for FinBERT inference.'
+      }
+    };
+  }
+
+  // 3b. Provider Credits Exhaustion Circuit-Breaker:
+  // Prevents repeatedly bombarding Hugging Face on every page render or article indexing when credits are exhausted.
+  const currentTokenHash = token ? `${token.slice(0, 6)}...${token.slice(-4)}` : '';
+  if (currentTokenHash && lastExhaustedTokenHash && currentTokenHash !== lastExhaustedTokenHash) {
+    // Token was changed or updated; clear cooldown immediately
+    resetCreditsExhaustionCooldown();
+  }
+
+  if (!options.forceProbe && isCreditsExhausted()) {
+    const remainingSec = getCreditsExhaustedRemainingSec();
+    return {
+      status: 'UNAVAILABLE',
+      overallScore: null,
+      items: headlines.map(() => null),
+      diagnostics: {
+        endpoint: primaryEndpoint,
+        model: FINBERT_MODEL_NAME,
+        articlesAnalyzed: 0,
+        reason: 'CREDITS_EXHAUSTED',
+        message: `Hugging Face Inference Provider credits exhausted (HTTP 402). Probe throttle active (${remainingSec}s remaining). VADER sentiment fallback engaged. Trigger deliberate retry via /api/finbert/diagnostic.`
       }
     };
   }
@@ -516,6 +571,7 @@ export async function runFinbertInference(
           break;
         }
 
+        resetCreditsExhaustionCooldown();
         const overall = Math.round((scoreSum / scoreCount) * 100) / 100;
         const successMsg = `Successfully classified ${scoreCount} headlines with genuine FinBERT model.`;
         logSafeBackendDiagnostic({
@@ -552,7 +608,7 @@ export async function runFinbertInference(
       const detailSuffix = safeDetail ? ` Upstream message: "${safeDetail}".` : '';
 
       // If candidate endpoint returns 404, 405, 410, 502, or 504 and next candidate exists, try next candidate
-      // NOTE: 401 and 403 must NEVER fallback as they are credential/permission errors.
+      // NOTE: 401, 402, and 403 must NEVER fallback as they are credential/credit/permission errors.
       if (hasNextEndpoint && (status === 404 || status === 405 || status === 410 || status === 502 || status === 504)) {
         logSafeBackendDiagnostic({
           endpoint: currentEndpoint,
@@ -596,6 +652,31 @@ export async function runFinbertInference(
             articlesAnalyzed: 0,
             reason: 'INVALID_CREDENTIALS',
             message: `Hugging Face authentication failed (HTTP 401: Invalid credentials).${detailSuffix} Verify that HF_TOKEN is valid, active, and configured in Render.`
+          }
+        };
+      }
+
+      if (status === 402 || safeDetail.toLowerCase().includes('no remaining credits') || safeDetail.toLowerCase().includes('purchase pre-paid credits')) {
+        recordCreditsExhaustion(safeDetail, token);
+        logSafeBackendDiagnostic({
+          endpoint: currentEndpoint,
+          httpStatus: 402,
+          elapsedMs,
+          reason: 'CREDITS_EXHAUSTED',
+          providerMessage: safeDetail || 'No remaining credits',
+          status: 'UNAVAILABLE',
+          articlesCount: headlines.length
+        });
+        return {
+          status: 'UNAVAILABLE',
+          overallScore: null,
+          items: headlines.map(() => null),
+          diagnostics: {
+            endpoint: currentEndpoint,
+            model: FINBERT_MODEL_NAME,
+            articlesAnalyzed: 0,
+            reason: 'CREDITS_EXHAUSTED',
+            message: `Hugging Face Inference Provider credits exhausted (HTTP 402).${detailSuffix} Pre-paid credits are required to continue using Inference Providers. Active VADER sentiment engine engaged as fallback.`
           }
         };
       }

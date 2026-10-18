@@ -246,6 +246,42 @@ async function testHttpErrors() {
   assert.strictEqual(res401.diagnostics.reason, 'INVALID_CREDENTIALS');
   console.log('✓ HTTP 401 correctly flagged as INVALID_CREDENTIALS.');
 
+  // HTTP 402 Payment Required / Credits Exhausted
+  const calls402: string[] = [];
+  const mock402Fetch: typeof fetch = async (url: any) => {
+    calls402.push(String(url));
+    return new Response(JSON.stringify({ error: 'You have no remaining credits. Purchase pre-paid credits to continue using Inference Providers.' }), { status: 402 });
+  };
+  const res402 = await runFinbertInference(['Headline'], { token: 'hf_valid_token_402', fetchFn: mock402Fetch, forceProbe: true });
+  assert.strictEqual(res402.status, 'UNAVAILABLE');
+  assert.strictEqual(res402.diagnostics.reason, 'CREDITS_EXHAUSTED');
+  assert.strictEqual(calls402.length, 1, 'HTTP 402 must fail immediately without falling back to alternate endpoints for the same model');
+  assert(res402.diagnostics.message?.includes('credits exhausted') || res402.diagnostics.message?.includes('HTTP 402'), 'Must mention credits exhausted');
+  console.log('✓ HTTP 402 correctly flagged as CREDITS_EXHAUSTED without retrying alternate endpoints.');
+
+  // Circuit breaker: Subsequent calls within cooldown do NOT invoke network
+  const callsThrottle: string[] = [];
+  const mockThrottledFetch: typeof fetch = async (url: any) => {
+    callsThrottle.push(String(url));
+    return new Response(JSON.stringify({ error: 'Should not be called' }), { status: 500 });
+  };
+  const resThrottled = await runFinbertInference(['Another headline'], { token: 'hf_valid_token_402', fetchFn: mockThrottledFetch, forceProbe: false });
+  assert.strictEqual(resThrottled.status, 'UNAVAILABLE');
+  assert.strictEqual(resThrottled.diagnostics.reason, 'CREDITS_EXHAUSTED');
+  assert.strictEqual(callsThrottle.length, 0, 'Must NOT invoke network when credits are exhausted and cooldown is active');
+  console.log('✓ Circuit breaker successfully prevented repeated probes to Hugging Face during credit exhaustion cooldown.');
+
+  // Recovery when deliberate probe (forceProbe: true) succeeds
+  const mockRecoveryFetch: typeof fetch = async () => {
+    return new Response(JSON.stringify([
+      [{ label: 'positive', score: 0.88 }, { label: 'neutral', score: 0.08 }, { label: 'negative', score: 0.04 }]
+    ]), { status: 200 });
+  };
+  const resRecovered = await runFinbertInference(['Deliberate recovery test'], { token: 'hf_valid_token_402', fetchFn: mockRecoveryFetch, forceProbe: true });
+  assert.strictEqual(resRecovered.status, 'LIVE');
+  assert.strictEqual(resRecovered.overallScore, 0.84);
+  console.log('✓ Recovery verified: Deliberate retry with restored credits restores FinBERT to LIVE status.');
+
   // HTTP 403 Forbidden / Insufficient Access
   const mock403Fetch: typeof fetch = async () => {
     return new Response(JSON.stringify({ error: 'Forbidden: Insufficient permissions.' }), { status: 403 });
@@ -471,6 +507,115 @@ const totalUnavailWeights = signalUnavail.breakdown.finbert.weight +
   console.log(`✓ UNAVAILABLE FinBERT correctly de-allocated to 0% weight. VADER absorbed weight to 25%. Total weights sum to 100%.`);
 }
 
+// ==============================================================================
+// 8. VADER FALLBACK LABELLING, CONFIDENCE HONESTY & MISSING SENTIMENT
+// ==============================================================================
+function testSentimentFallbackAndHonesty() {
+  console.log('\n[Test 8] Testing VADER Fallback Labelling, Missing Sentiment & Honest Confidence...');
+
+  const dummyTech: TechnicalIndicators = {
+    rsi: 58.0,
+    macd: 2.0,
+    macdSignal: 1.5,
+    macdHist: 0.5,
+    ema20: 105.0,
+    ema50: 100.0,
+    atr: 2.0,
+    volatility20d: 0.15
+  };
+
+  const dummyQuote: StockQuote = {
+    ticker: 'INFY.NS',
+    companyName: 'Infosys Limited',
+    price: 1800,
+    change: 12,
+    changePct: 0.67,
+    high52w: 2000,
+    low52w: 1300,
+    volume: 500000,
+    currency: 'INR',
+    exchange: 'NSE',
+    country: 'IN',
+    sector: 'Technology',
+    lastUpdated: new Date().toISOString(),
+    dataStatus: 'LIVE',
+    fundamentals: {
+      profitMarginPct: 15.0,
+      debtToEquity: 10.0,
+      revenueGrowthYoY: '+8.5%',
+      dataStatus: 'LIVE_PROVIDER_DATA',
+      annualPnL: []
+    }
+  };
+
+  // 1. When FinBERT is offline with CREDITS_EXHAUSTED, VADER is explicitly labelled as fallback
+  const creditsExhaustedSentiment: SentimentData = {
+    overallScore: 0.40,
+    vaderCompound: 0.40,
+    finbertScore: null,
+    finbertStatus: 'UNAVAILABLE',
+    finbertReason: 'CREDITS_EXHAUSTED',
+    sentimentMethod: 'VADER_FALLBACK',
+    newsCount: 3,
+    label: 'BULLISH',
+    articles: [
+      {
+        title: 'Company Wins Expansion Contract',
+        publisher: 'Mint',
+        date: 'Today',
+        summary: 'Major project win',
+        url: 'https://example.com/mint',
+        vaderScore: 0.40,
+        finbertScore: null,
+        sentimentLabel: 'POSITIVE'
+      }
+    ],
+    reddit: { status: 'EMPTY', postCount: 0, message: '', posts: [] }
+  };
+
+  const sigVaderFallback = computeModelSignal(dummyTech, creditsExhaustedSentiment, dummyQuote);
+  assert.strictEqual(sigVaderFallback.breakdown.finbert.status, 'UNAVAILABLE');
+  assert.strictEqual(sigVaderFallback.breakdown.finbert.weight, 0.0);
+  assert(sigVaderFallback.breakdown.vader.weight > 0.15, 'VADER must absorb news weight as fallback');
+  assert(!sigVaderFallback.topContributions.find(c => c.feature.includes('FinBERT') && c.impact > 0), 'Must NOT claim FinBERT impact');
+  const newsFeature = sigVaderFallback.topContributions.find(c => c.feature.includes('News Sentiment'));
+  assert(newsFeature?.feature.includes('VADER Fallback'), 'Feature must be clearly labelled as VADER Fallback');
+  assert(newsFeature?.description.includes('VADER lexical analysis fallback'), 'Description must indicate fallback');
+  assert(!sigVaderFallback.topContributions.some(c => c.description.toLowerCase().includes('finbert confirmed')), 'Must not claim FinBERT confirmation');
+  // Confidence must be capped honestly when FinBERT is offline
+  assert(sigVaderFallback.confidenceScore <= 0.78, `Confidence must be capped when FinBERT is offline (got ${sigVaderFallback.confidenceScore})`);
+  console.log('✓ VADER fallback correctly labelled without claiming false FinBERT confirmation, confidence capped honestly.');
+
+  // 2. When corporate news is completely unavailable (newsCount === 0 or dataStatus === UNAVAILABLE)
+  const noNewsSentiment: SentimentData = {
+    overallScore: 0.0,
+    vaderCompound: 0.0,
+    finbertScore: null,
+    finbertStatus: 'UNAVAILABLE',
+    finbertReason: 'EMPTY_INPUT',
+    sentimentMethod: 'UNAVAILABLE',
+    newsCount: 0,
+    label: 'NEUTRAL',
+    articles: [],
+    dataStatus: 'UNAVAILABLE',
+    reddit: { status: 'EMPTY', postCount: 0, message: '', posts: [] }
+  };
+
+  const sigNoNews = computeModelSignal(dummyTech, noNewsSentiment, dummyQuote);
+  assert.strictEqual(sigNoNews.breakdown.finbert.weight, 0.0, 'FinBERT weight must be 0% when no news');
+  assert.strictEqual(sigNoNews.breakdown.vader.weight, 0.0, 'VADER weight must be 0% when no news');
+  const totalNoNewsWeights = sigNoNews.breakdown.finbert.weight +
+    sigNoNews.breakdown.vader.weight +
+    sigNoNews.breakdown.technicals.weight +
+    (sigNoNews.breakdown.fundamentals?.weight || 0) +
+    sigNoNews.breakdown.mlEnsemble.weight;
+  assert.strictEqual(Math.round(totalNoNewsWeights * 100), 100, `Total weights without news must sum to 100%, got ${totalNoNewsWeights * 100}%`);
+  const noNewsFeature = sigNoNews.topContributions.find(c => c.feature.includes('News Sentiment'));
+  assert(noNewsFeature?.feature.includes('Unavailable'), 'Feature must be labelled as Unavailable when no news');
+  assert.strictEqual(noNewsFeature?.impact, 0, 'Unavailable news must have 0 impact');
+  console.log('✓ Missing news sentiment handled gracefully: FinBERT=0%, VADER=0%, remaining active engines sum to 100%.');
+}
+
 // Execute all async tests
 async function runAll() {
   await testMissingToken();
@@ -480,6 +625,7 @@ async function runAll() {
   await testTimeouts();
   await testHttpErrors();
   testModelWeightRedistribution();
+  testSentimentFallbackAndHonesty();
 
   console.log('\n======================================================');
   console.log('ALL FINBERT INFERENCE VERIFICATION TESTS PASSED!');

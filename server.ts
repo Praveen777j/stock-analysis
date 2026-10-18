@@ -1041,7 +1041,7 @@ async function startServer() {
     const tokenConfigured = Boolean(cleanToken);
     const tokenPrefixValid = cleanToken.startsWith('hf_');
 
-    const result = await runFinbertInference([HARMLESS_FINBERT_TEST_SENTENCE]);
+    const result = await runFinbertInference([HARMLESS_FINBERT_TEST_SENTENCE], { forceProbe: true });
 
     return res.json({
       timestamp: new Date().toISOString(),
@@ -1250,7 +1250,7 @@ async function startServer() {
       let finbertScore: number | null = null;
       let finbertStatus: 'LIVE' | 'UNAVAILABLE' = 'UNAVAILABLE';
       let finbertDiagnostic: string | undefined = undefined;
-      let finbertReason: 'MISSING_TOKEN' | 'INVALID_CREDENTIALS' | 'INSUFFICIENT_ACCESS' | 'EMPTY_INPUT' | 'AUTH_ERROR' | 'RATE_LIMITED' | 'UNSUPPORTED_ENDPOINT' | 'MODEL_LOADING' | 'MODEL_UNAVAILABLE' | 'TIMEOUT' | 'NETWORK_ERROR' | 'MALFORMED_RESPONSE' | 'SERVICE_UNAVAILABLE' | undefined = undefined;
+      let finbertReason: 'MISSING_TOKEN' | 'INVALID_CREDENTIALS' | 'INSUFFICIENT_ACCESS' | 'CREDITS_EXHAUSTED' | 'EMPTY_INPUT' | 'AUTH_ERROR' | 'RATE_LIMITED' | 'UNSUPPORTED_ENDPOINT' | 'MODEL_LOADING' | 'MODEL_UNAVAILABLE' | 'TIMEOUT' | 'NETWORK_ERROR' | 'MALFORMED_RESPONSE' | 'SERVICE_UNAVAILABLE' | undefined = undefined;
 
       if (hasRealNews) {
         try {
@@ -1396,6 +1396,13 @@ async function startServer() {
         else if (compositeScore <= -0.05) label = 'BEARISH';
       }
 
+      const sentimentMethod: 'FINBERT_VADER_HYBRID' | 'VADER_FALLBACK' | 'UNAVAILABLE' =
+        finbertStatus === 'LIVE' && finbertScore !== null
+          ? 'FINBERT_VADER_HYBRID'
+          : hasRealNews
+            ? 'VADER_FALLBACK'
+            : 'UNAVAILABLE';
+
       return res.json({
         ticker,
         overallScore: compositeScore,
@@ -1404,6 +1411,7 @@ async function startServer() {
         finbertStatus,
         finbertDiagnostic,
         finbertReason,
+        sentimentMethod,
         newsCount: articles.length,
         distinctEventsCount,
         expansionCatalystsCount,
