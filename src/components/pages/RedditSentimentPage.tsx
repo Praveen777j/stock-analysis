@@ -132,7 +132,9 @@ export const RedditSentimentPage: React.FC<RedditSentimentPageProps> = ({ sentim
             }`}>
               {!hasPosts ? 'N/A' : `${redditBuzz >= 0 ? '+' : ''}${redditBuzz.toFixed(2)}`}
             </div>
-            <div className="text-[10px] text-slate-500">VADER & FinBERT Social Index</div>
+            <div className="text-[10px] text-slate-500">
+              {sentiment.finbertStatus === 'LIVE' ? 'VADER & FinBERT Social Index' : 'VADER Social Index (FinBERT Offline)'}
+            </div>
           </div>
         </div>
       </div>

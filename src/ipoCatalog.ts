@@ -337,6 +337,51 @@ export const UPCOMING_IPOS_CATALOG: IPODetails[] = [
     verdict: 'HISTORICAL FILING',
     verdictRationale: 'Statutory historical disclosure: Ather Energy Limited completed its IPO and listed on NSE/BSE.',
     longTermSuitability: 'REFERENCE'
+  },
+  {
+    id: 'tonbo',
+    companyName: 'Tonbo Imaging India Limited',
+    symbol: 'TONBO',
+    exchange: 'NSE / BSE',
+    ipoType: 'Mainboard',
+    dataStatus: 'REFERENCE_CATALOG',
+    sector: 'Industrials & Defence Technology',
+    industry: 'Electro-Optics, Autonomous Surveillance & Defence Systems',
+    status: 'UPCOMING',
+    openDate: 'Draft DRHP Filed',
+    closeDate: 'Pending SEBI Approval',
+    listingDate: 'T+3 from Allotment',
+    priceBand: 'Disclosed in RHP',
+    minPrice: 0,
+    maxPrice: 0,
+    issueSizeCr: 1000,
+    freshIssueCr: 750,
+    ofsCr: 250,
+    lotSize: 0,
+    minInvestment: 14500,
+    retailQuotaPct: 35,
+    website: 'https://tonboimaging.com',
+    businessSummary: 'Tonbo Imaging designs and manufactures advanced electro-optics, night vision, and autonomous surveillance systems for global defence, aerospace, and homeland security agencies.',
+    revenueYoYGrowthPct: 42.0,
+    annualRevenueCr: 410,
+    netProfitLossCr: 58,
+    profitMarginPct: 14.15,
+    debtToEquity: 12.0,
+    postIssuePe: 0,
+    peerAveragePe: 65.0,
+    promoterHoldingPostPct: 45.0,
+    strengths: [
+      'Proprietary thermal imaging and AI sensor fusion intellectual property',
+      'Export footprint across 25+ countries and key contracts with Indian Armed Forces',
+      'High operating margins and low leverage'
+    ],
+    redFlags: [
+      'Customer concentration in government defense procurement cycles',
+      'Geopolitical and export regulation licensing requirements'
+    ],
+    verdict: 'REFERENCE DISCLOSURE',
+    verdictRationale: 'Draft Red Herring Prospectus (DRHP) filed with SEBI for proposed ₹1,000 Cr initial public offering.',
+    longTermSuitability: 'HIGH'
   }
 ];
 

@@ -34,6 +34,7 @@ export const TomorrowTradePage: React.FC<TomorrowTradePageProps> = ({ signal, qu
   const isBuy = forecast.tradeAction === 'BUY';
   const isSell = forecast.tradeAction === 'SELL';
   const isHold = forecast.tradeAction === 'HOLD';
+  const currSym = quote.currency === 'USD' ? '$' : '₹';
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
@@ -59,13 +60,14 @@ export const TomorrowTradePage: React.FC<TomorrowTradePageProps> = ({ signal, qu
             </div>
             <p className="text-xs text-slate-400 mt-1 font-sans">
               Systematic quantitative setup for <strong className="text-slate-200">{quote.companyName} ({quote.ticker})</strong>
+              {quote.lastUpdated && <span className="ml-2 text-slate-500">· Feed: {quote.lastUpdated}</span>}
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-3 font-mono">
             <div className="bg-slate-950/80 px-4 py-2.5 rounded-xl border border-slate-800 text-right">
               <span className="text-[10px] text-slate-400 uppercase block font-sans">Current Price</span>
-              <span className="text-lg font-bold text-slate-100">₹{quote.price.toFixed(2)}</span>
+              <span className="text-lg font-bold text-slate-100">{currSym}{quote.price.toFixed(2)}</span>
             </div>
             <div className="bg-slate-950/80 px-4 py-2.5 rounded-xl border border-slate-800 text-right">
               <span className="text-[10px] text-slate-400 uppercase block font-sans">Pre-Market Gap</span>
@@ -101,7 +103,7 @@ export const TomorrowTradePage: React.FC<TomorrowTradePageProps> = ({ signal, qu
               <Shield className="w-4 h-4 text-rose-400" />
             </div>
             <div className="text-xl font-bold text-rose-400">
-              ₹{setup.stopLoss.toFixed(1)}
+              {currSym}{setup.stopLoss.toFixed(1)}
               <span className="text-xs font-normal ml-1.5 text-rose-500">
                 ({setup.stopLossPct}%)
               </span>
@@ -118,7 +120,7 @@ export const TomorrowTradePage: React.FC<TomorrowTradePageProps> = ({ signal, qu
               <Target className="w-4 h-4 text-emerald-400" />
             </div>
             <div className="text-lg font-bold text-emerald-400">
-              T1: ₹{setup.target1.toFixed(1)} <span className="text-xs font-normal text-slate-400">/</span> T2: ₹{setup.target2.toFixed(1)}
+              T1: {currSym}{setup.target1.toFixed(1)} <span className="text-xs font-normal text-slate-400">/</span> T2: {currSym}{setup.target2.toFixed(1)}
             </div>
             <p className="text-[11px] text-slate-400 font-sans">
               Book 50% profit at T1 (+{setup.target1Pct}%) and trail stop to breakeven for T2 runner (+{setup.target2Pct}%).
@@ -129,34 +131,43 @@ export const TomorrowTradePage: React.FC<TomorrowTradePageProps> = ({ signal, qu
 
       {/* 2. Institutional Market Flow & Levels */}
       <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6 space-y-4">
-        <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider font-mono flex items-center gap-2">
-          <Activity className="w-4 h-4 text-indigo-400" />
-          Intraday Flow & Key Price Decision Levels
-        </h4>
+        <div className="flex items-center justify-between">
+          <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider font-mono flex items-center gap-2">
+            <Activity className="w-4 h-4 text-indigo-400" />
+            Intraday Flow & Key Price Decision Levels
+          </h4>
+          <span className="px-2.5 py-0.5 rounded text-[11px] font-mono font-bold bg-slate-950 border border-slate-800 text-emerald-400">
+            Calculated R:R: {setup.riskRewardRatio}
+          </span>
+        </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 font-mono text-xs">
           <div className="bg-slate-950/60 border border-slate-800 p-3.5 rounded-xl space-y-1">
             <span className="text-slate-400 text-[11px] uppercase block">Price vs VWAP</span>
             <div className={`text-sm font-bold ${
-              setup.priceVsVwap.includes('BULLISH') ? 'text-emerald-400' : 'text-rose-400'
+              setup.priceVsVwap.includes('BULLISH') ? 'text-emerald-400' : setup.priceVsVwap.includes('BEARISH') ? 'text-rose-400' : 'text-slate-300'
             }`}>
               {setup.priceVsVwap}
             </div>
-            <div className="text-[10px] text-slate-500">Benchmark: ₹{setup.vwap.toFixed(1)}</div>
+            <div className="text-[10px] text-slate-500">
+              Benchmark: {currSym}{setup.vwap.toFixed(1)} {setup.priceVsVwap === 'UNAVAILABLE' ? '(Insufficient Data)' : ''}
+            </div>
           </div>
 
           <div className="bg-slate-950/60 border border-slate-800 p-3.5 rounded-xl space-y-1">
             <span className="text-slate-400 text-[11px] uppercase block">Delivery Volume</span>
             <div className="text-sm font-bold text-slate-200">
-              {setup.deliveryVolumePct}%
+              {setup.deliveryVolumePct !== null && setup.deliveryVolumePct > 0 ? `${setup.deliveryVolumePct}%` : 'N/A (Clearing Feed Required)'}
             </div>
-            <div className="text-[10px] text-slate-500">{setup.institutionalBias}</div>
+            <div className="text-[10px] text-slate-500">
+              {setup.institutionalBias === 'UNAVAILABLE' ? 'Direct Clearing Feed Required' : setup.institutionalBias}
+            </div>
           </div>
 
           <div className="bg-slate-950/60 border border-slate-800 p-3.5 rounded-xl space-y-1">
             <span className="text-slate-400 text-[11px] uppercase block">Central Floor Pivot</span>
             <div className="text-sm font-bold text-amber-400">
-              ₹{forecast.pivotPoint.toFixed(1)}
+              {currSym}{forecast.pivotPoint.toFixed(1)}
             </div>
             <div className="text-[10px] text-slate-500">Intraday Bias Trigger</div>
           </div>
@@ -164,17 +175,22 @@ export const TomorrowTradePage: React.FC<TomorrowTradePageProps> = ({ signal, qu
           <div className="bg-slate-950/60 border border-slate-800 p-3.5 rounded-xl space-y-1">
             <span className="text-slate-400 text-[11px] uppercase block">Breakout Levels</span>
             <div className="text-xs space-y-0.5 font-bold">
-              <span className="text-emerald-400 block">R1: ₹{forecast.resistanceLevel.toFixed(1)}</span>
-              <span className="text-rose-400 block">S1: ₹{forecast.supportLevel.toFixed(1)}</span>
+              <span className="text-emerald-400 block">R1: {currSym}{forecast.resistanceLevel.toFixed(1)}</span>
+              <span className="text-rose-400 block">S1: {currSym}{forecast.supportLevel.toFixed(1)}</span>
             </div>
           </div>
         </div>
 
         {/* Execution Directive Summary */}
         <div className="p-4 bg-slate-950/70 border border-slate-800 rounded-xl space-y-1.5 text-xs text-slate-300">
-          <strong className="text-slate-100 font-semibold font-mono block">
-            Trader Execution Rules:
-          </strong>
+          <div className="flex items-center justify-between">
+            <strong className="text-slate-100 font-semibold font-mono block">
+              Trader Execution Rules:
+            </strong>
+            <span className="text-[11px] font-mono text-slate-400">
+              Assumed Entry: {currSym}{setup.triggerPrice.toFixed(1)} · Target Blended R:R: {setup.riskRewardRatio}
+            </span>
+          </div>
           <p className="leading-relaxed font-sans">
             {setup.traderPlaybook}
           </p>

@@ -38,7 +38,12 @@ export const ChartsPage: React.FC<ChartsPageProps> = ({
     return bars.slice(-count);
   }, [bars, period]);
 
-  // Compute period gain percentage (e.g. 50% gain this month)
+  const currSym = quote.currency === 'USD' ? '$' : '₹';
+
+  // Compute period gain percentage and explicit start/end observations
+  const startBar = filteredBars.length > 0 ? filteredBars[0] : null;
+  const endBar = filteredBars.length > 0 ? filteredBars[filteredBars.length - 1] : null;
+
   const periodGainPct = useMemo(() => {
     if (filteredBars.length < 2) return quote.changePct || 0;
     const startPrice = filteredBars[0].close;
@@ -53,6 +58,10 @@ export const ChartsPage: React.FC<ChartsPageProps> = ({
     const endPrice = filteredBars[filteredBars.length - 1].close;
     return Math.round((endPrice - startPrice) * 100) / 100;
   }, [filteredBars, quote.change]);
+
+  const hasEma200Data = useMemo(() => {
+    return filteredBars.some(b => typeof b.ema200 === 'number' && Number.isFinite(b.ema200));
+  }, [filteredBars]);
 
   const svgRef = useRef<SVGSVGElement>(null);
 
@@ -80,15 +89,15 @@ export const ChartsPage: React.FC<ChartsPageProps> = ({
     for (const b of filteredBars) {
       if (b.low < minP) minP = b.low;
       if (b.high > maxP) maxP = b.high;
-      if (showEma20 && b.ema20) {
+      if (showEma20 && typeof b.ema20 === 'number') {
         if (b.ema20 < minP) minP = b.ema20;
         if (b.ema20 > maxP) maxP = b.ema20;
       }
-      if (showEma50 && b.ema50) {
+      if (showEma50 && typeof b.ema50 === 'number') {
         if (b.ema50 < minP) minP = b.ema50;
         if (b.ema50 > maxP) maxP = b.ema50;
       }
-      if (showEma200 && b.ema200) {
+      if (showEma200 && typeof b.ema200 === 'number') {
         if (b.ema200 < minP) minP = b.ema200;
         if (b.ema200 > maxP) maxP = b.ema200;
       }
@@ -134,7 +143,7 @@ export const ChartsPage: React.FC<ChartsPageProps> = ({
   const getYMacd = (val: number) =>
     yMacdTop + macdHeight / 2 - (val / (Math.max(Math.abs(minMacd), Math.abs(maxMacd)) || 1)) * (macdHeight / 2);
 
-  // SVG Paths
+  // SVG Paths without synthetic fallback to b.close
   const linePath = useMemo(() => {
     return filteredBars
       .map((b, i) => `${i === 0 ? 'M' : 'L'} ${getX(i).toFixed(1)} ${getYPrice(b.close).toFixed(1)}`)
@@ -142,21 +151,33 @@ export const ChartsPage: React.FC<ChartsPageProps> = ({
   }, [filteredBars, minPrice, maxPrice]);
 
   const ema20Path = useMemo(() => {
-    return filteredBars
-      .map((b, i) => `${i === 0 ? 'M' : 'L'} ${getX(i).toFixed(1)} ${getYPrice(b.ema20 || b.close).toFixed(1)}`)
-      .join(' ');
+    const pts: string[] = [];
+    filteredBars.forEach((b, i) => {
+      if (typeof b.ema20 === 'number' && Number.isFinite(b.ema20)) {
+        pts.push(`${pts.length === 0 ? 'M' : 'L'} ${getX(i).toFixed(1)} ${getYPrice(b.ema20).toFixed(1)}`);
+      }
+    });
+    return pts.join(' ');
   }, [filteredBars, minPrice, maxPrice]);
 
   const ema50Path = useMemo(() => {
-    return filteredBars
-      .map((b, i) => `${i === 0 ? 'M' : 'L'} ${getX(i).toFixed(1)} ${getYPrice(b.ema50 || b.close).toFixed(1)}`)
-      .join(' ');
+    const pts: string[] = [];
+    filteredBars.forEach((b, i) => {
+      if (typeof b.ema50 === 'number' && Number.isFinite(b.ema50)) {
+        pts.push(`${pts.length === 0 ? 'M' : 'L'} ${getX(i).toFixed(1)} ${getYPrice(b.ema50).toFixed(1)}`);
+      }
+    });
+    return pts.join(' ');
   }, [filteredBars, minPrice, maxPrice]);
 
   const ema200Path = useMemo(() => {
-    return filteredBars
-      .map((b, i) => `${i === 0 ? 'M' : 'L'} ${getX(i).toFixed(1)} ${getYPrice(b.ema200 || b.close).toFixed(1)}`)
-      .join(' ');
+    const pts: string[] = [];
+    filteredBars.forEach((b, i) => {
+      if (typeof b.ema200 === 'number' && Number.isFinite(b.ema200)) {
+        pts.push(`${pts.length === 0 ? 'M' : 'L'} ${getX(i).toFixed(1)} ${getYPrice(b.ema200).toFixed(1)}`);
+      }
+    });
+    return pts.join(' ');
   }, [filteredBars, minPrice, maxPrice]);
 
   const rsiPath = useMemo(() => {
@@ -202,15 +223,22 @@ export const ChartsPage: React.FC<ChartsPageProps> = ({
         </div>
 
         {/* Selected Period Return Badge */}
-        <div className="flex items-center gap-2 font-mono bg-slate-950 px-3 py-1 rounded-lg border border-slate-800">
-          <span className="text-slate-400">{period} Gain:</span>
-          <span className={`font-bold flex items-center gap-1 ${periodGainPct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-            {periodGainPct >= 0 ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
-            {periodGainPct >= 0 ? '+' : ''}{periodGainPct}%
-            <span className="text-[11px] font-normal text-slate-400">
-              ({periodGainAmount >= 0 ? '+₹' : '-₹'}{Math.abs(periodGainAmount).toFixed(2)})
+        <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 font-mono bg-slate-950 px-3 py-1.5 rounded-lg border border-slate-800">
+          <div className="flex items-center gap-2">
+            <span className="text-slate-400">{period} Gain:</span>
+            <span className={`font-bold flex items-center gap-1 ${periodGainPct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+              {periodGainPct >= 0 ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
+              {periodGainPct >= 0 ? '+' : ''}{periodGainPct}%
+              <span className="text-[11px] font-normal text-slate-400">
+                ({periodGainAmount >= 0 ? '+' : '-'}{currSym}{Math.abs(periodGainAmount).toFixed(2)})
+              </span>
             </span>
-          </span>
+          </div>
+          {startBar && endBar && (
+            <span className="text-[10px] text-slate-500 font-sans">
+              ({startBar.date}: {currSym}{startBar.close.toFixed(1)} → {endBar.date}: {currSym}{endBar.close.toFixed(1)})
+            </span>
+          )}
         </div>
 
         {/* Chart Style Toggle */}
@@ -264,7 +292,9 @@ export const ChartsPage: React.FC<ChartsPageProps> = ({
               onChange={(e) => setShowEma200(e.target.checked)}
               className="rounded bg-slate-800 border-slate-700 text-purple-500 focus:ring-0"
             />
-            <span className="text-purple-400 font-mono">EMA 200</span>
+            <span className="text-purple-400 font-mono">
+              EMA 200 {!hasEma200Data && <span className="text-[10px] text-slate-500">(Needs 200 Bars)</span>}
+            </span>
           </label>
         </div>
       </div>
@@ -278,13 +308,13 @@ export const ChartsPage: React.FC<ChartsPageProps> = ({
             <span>·</span>
             <span>Date: <strong className="text-slate-200">{activeBar?.date || 'N/A'}</strong></span>
             <span>·</span>
-            <span>O: <strong className="text-slate-200">{activeBar ? `₹${activeBar.open?.toFixed(2)}` : 'N/A'}</strong></span>
+            <span>O: <strong className="text-slate-200">{activeBar ? `${currSym}${activeBar.open?.toFixed(2)}` : 'N/A'}</strong></span>
             <span>·</span>
-            <span>H: <strong className="text-slate-200">{activeBar ? `₹${activeBar.high?.toFixed(2)}` : 'N/A'}</strong></span>
+            <span>H: <strong className="text-slate-200">{activeBar ? `${currSym}${activeBar.high?.toFixed(2)}` : 'N/A'}</strong></span>
             <span>·</span>
-            <span>L: <strong className="text-slate-200">{activeBar ? `₹${activeBar.low?.toFixed(2)}` : 'N/A'}</strong></span>
+            <span>L: <strong className="text-slate-200">{activeBar ? `${currSym}${activeBar.low?.toFixed(2)}` : 'N/A'}</strong></span>
             <span>·</span>
-            <span>C: <strong className="text-emerald-400">{activeBar ? `₹${activeBar.close?.toFixed(2)}` : 'N/A'}</strong></span>
+            <span>C: <strong className="text-emerald-400">{activeBar ? `${currSym}${activeBar.close?.toFixed(2)}` : 'N/A'}</strong></span>
             <span>·</span>
             <span>Vol: <strong className="text-slate-200">{activeBar ? activeBar.volume?.toLocaleString() : 'N/A'}</strong></span>
           </div>
@@ -332,7 +362,7 @@ export const ChartsPage: React.FC<ChartsPageProps> = ({
           {/* Subplot 1: Price Action */}
           <g>
             <text x={paddingLeft} y={15} fill="#64748b" fontSize="9" fontWeight="bold">
-              ax[0]: Price & Moving Averages (INR)
+              ax[0]: Price & Moving Averages ({quote.currency || 'INR'})
             </text>
             {/* Grid lines */}
             {[0, 0.25, 0.5, 0.75, 1].map((p, idx) => {
@@ -350,7 +380,7 @@ export const ChartsPage: React.FC<ChartsPageProps> = ({
                     strokeDasharray="2 3"
                   />
                   <text x={width - paddingRight + 6} y={y + 3} fill="#64748b" fontSize="9">
-                    ₹{val.toFixed(1)}
+                    {currSym}{val.toFixed(1)}
                   </text>
                 </g>
               );

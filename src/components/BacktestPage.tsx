@@ -10,6 +10,9 @@ export const BacktestPage: React.FC<BacktestPageProps> = ({ backtest, ticker }) 
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
   const { metrics, equityCurve, trades } = backtest;
 
+  const currSym = ticker.endsWith('.NS') || ticker.endsWith('.BO') || (!ticker.includes('.') && ticker !== 'AAPL') ? '₹' : '$';
+  const locale = currSym === '₹' ? 'en-IN' : 'en-US';
+
   const isAlphaPositive = metrics.strategyReturnPct >= metrics.buyHoldReturnPct;
 
   // Layout for SVG equity curve chart
@@ -135,7 +138,7 @@ export const BacktestPage: React.FC<BacktestPageProps> = ({ backtest, ticker }) 
       <div className="bg-slate-950 border border-slate-800 rounded-lg p-3">
         <div className="flex flex-wrap items-center justify-between text-xs mb-2">
           <div className="flex items-center gap-4">
-            <span className="font-semibold text-slate-200">Portfolio Equity Trajectory (Base: ₹1,00,000)</span>
+            <span className="font-semibold text-slate-200">Portfolio Equity Trajectory (Base: {currSym}{metrics.initialCapital.toLocaleString(locale)})</span>
             <div className="flex items-center gap-3">
               <span className="flex items-center gap-1.5 text-emerald-400">
                 <span className="w-2.5 h-0.5 bg-emerald-400 inline-block" /> Quantitative Strategy
@@ -148,8 +151,8 @@ export const BacktestPage: React.FC<BacktestPageProps> = ({ backtest, ticker }) 
           {activePoint && (
             <div className="font-mono text-slate-300">
               <span className="text-slate-500 mr-2">{activePoint.date}:</span>
-              <span className="text-emerald-400 font-semibold mr-3">Strategy: ₹{activePoint.strategy.toLocaleString('en-IN')}</span>
-              <span className="text-slate-400">B&H: ₹{activePoint.buyHold.toLocaleString('en-IN')}</span>
+              <span className="text-emerald-400 font-semibold mr-3">Strategy: {currSym}{activePoint.strategy.toLocaleString(locale)}</span>
+              <span className="text-slate-400">B&H: {currSym}{activePoint.buyHold.toLocaleString(locale)}</span>
             </div>
           )}
         </div>
@@ -252,8 +255,8 @@ export const BacktestPage: React.FC<BacktestPageProps> = ({ backtest, ticker }) 
                   <tr key={`${tr.entryDate}-${tr.exitDate}-${tr.entryPrice}-${i}`} className="hover:bg-slate-800/30 transition-colors">
                     <td className="py-2 px-3">{tr.entryDate}</td>
                     <td className="py-2 px-3">{tr.exitDate}</td>
-                    <td className="py-2 px-3">₹{tr.entryPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                    <td className="py-2 px-3">₹{tr.exitPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    <td className="py-2 px-3">{currSym}{tr.entryPrice.toLocaleString(locale, { minimumFractionDigits: 2 })}</td>
+                    <td className="py-2 px-3">{currSym}{tr.exitPrice.toLocaleString(locale, { minimumFractionDigits: 2 })}</td>
                     <td className={`py-2 px-3 text-right font-semibold ${tr.returnPct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                       {tr.returnPct >= 0 ? '+' : ''}{tr.returnPct.toFixed(2)}%
                     </td>

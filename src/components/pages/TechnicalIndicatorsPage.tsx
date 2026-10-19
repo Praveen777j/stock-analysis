@@ -119,6 +119,62 @@ export const TechnicalIndicatorsPage: React.FC<TechnicalIndicatorsPageProps> = (
     ? Math.min(88, Math.max(50, Math.round((Math.max(bullCount, bearCount) / totalEvaluated) * 80 + (totalEvaluated / 9) * 8)))
     : 50;
 
+  // Structured Evidence & Conflicts Breakdown
+  const bullishEvidence: string[] = [];
+  const bearishEvidence: string[] = [];
+  const unresolvedConflicts: string[] = [];
+
+  if (ema20 !== undefined && price >= ema20) {
+    bullishEvidence.push(`Price is sustained above short-term 20 EMA (${currSym}${ema20.toFixed(1)})`);
+  } else if (ema20 !== undefined) {
+    bearishEvidence.push(`Price is trading below short-term 20 EMA (${currSym}${ema20.toFixed(1)})`);
+  }
+
+  if (ema50 !== undefined && price >= ema50) {
+    bullishEvidence.push(`Intermediate trend holds above 50 EMA (${currSym}${ema50.toFixed(1)})`);
+  } else if (ema50 !== undefined) {
+    bearishEvidence.push(`Intermediate resistance capped under 50 EMA (${currSym}${ema50.toFixed(1)})`);
+  }
+
+  if (ema200 !== undefined && price >= ema200) {
+    bullishEvidence.push(`Long-term institutional bias is positive above 200 EMA (${currSym}${ema200.toFixed(1)})`);
+  } else if (ema200 !== undefined) {
+    bearishEvidence.push(`Major long-term regime is bearish below 200 EMA (${currSym}${ema200.toFixed(1)})`);
+  }
+
+  if (rsi !== undefined) {
+    if (rsi > 70) {
+      bearishEvidence.push(`RSI at ${rsi.toFixed(1)} indicates overbought conditions (elevated pullback probability)`);
+    } else if (rsi >= 55) {
+      bullishEvidence.push(`RSI at ${rsi.toFixed(1)} confirms constructive bullish momentum (55–70 band)`);
+    } else if (rsi < 35) {
+      bullishEvidence.push(`RSI at ${rsi.toFixed(1)} in oversold territory (<35) — candidate for technical mean-reversion`);
+    } else if (rsi < 45) {
+      bearishEvidence.push(`RSI at ${rsi.toFixed(1)} confirms seller dominance and weak buying interest`);
+    } else {
+      unresolvedConflicts.push(`RSI at ${rsi.toFixed(1)} sits in neutral consolidation equilibrium (45–55 band)`);
+    }
+  }
+
+  if (macdHist !== undefined) {
+    if (macdHist > 0) {
+      bullishEvidence.push(`MACD histogram is positive (+${macdHist.toFixed(2)}) indicating expanding buyer acceleration`);
+    } else {
+      bearishEvidence.push(`MACD histogram is negative (${macdHist.toFixed(2)}) reflecting active seller distribution`);
+    }
+  }
+
+  // Detect genuine multi-timeframe / moving average conflicts
+  if (ema20 !== undefined && ema50 !== undefined && price > ema20 && price < ema50) {
+    unresolvedConflicts.push(`Short-term bounce above 20 EMA (${currSym}${ema20.toFixed(1)}) conflicts with overhead resistance at 50 EMA (${currSym}${ema50.toFixed(1)})`);
+  }
+  if (ema20 !== undefined && ema200 !== undefined && price > ema20 && price < ema200) {
+    unresolvedConflicts.push(`Counter-trend momentum above 20 EMA conflicts with secular downtrend below 200 EMA (${currSym}${ema200.toFixed(1)})`);
+  }
+  if (macdHist !== undefined && macdHist > 0 && ema50 !== undefined && price < ema50) {
+    unresolvedConflicts.push(`Positive MACD momentum (+${macdHist.toFixed(2)}) conflicts with price capped under intermediate 50 EMA`);
+  }
+
   return (
     <div className="space-y-6 pt-1 max-w-6xl mx-auto">
       {/* 1. Master Technical Consensus Strip */}
@@ -233,9 +289,83 @@ export const TechnicalIndicatorsPage: React.FC<TechnicalIndicatorsPageProps> = (
             </p>
           </div>
           <div className="shrink-0 font-mono text-right bg-slate-900/90 px-3 py-2 rounded-lg border border-slate-800">
-            <span className="text-[10px] text-slate-400 uppercase block">Risk/Reward</span>
-            <span className="text-emerald-400 font-bold text-sm">1 : 2.5 R:R</span>
+            <span className="text-[10px] text-slate-400 uppercase block">Consensus Status</span>
+            <span className={`font-bold text-sm ${overallSignal.includes('BULLISH') ? 'text-emerald-400' : overallSignal.includes('BEARISH') ? 'text-rose-400' : 'text-amber-400'}`}>
+              {overallSignal} ({convictionPct}%)
+            </span>
           </div>
+        </div>
+      </div>
+
+      {/* 2. Structured Evidence Analysis: Bullish Evidence, Bearish Evidence & Unresolved Conflicts */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 font-mono text-xs">
+        {/* Strongest Bullish Evidence */}
+        <div className="bg-slate-900/60 border border-emerald-900/40 rounded-xl p-4 space-y-2">
+          <div className="flex items-center justify-between text-emerald-400 font-bold uppercase text-[11px] pb-1 border-b border-emerald-900/30">
+            <span className="flex items-center gap-1.5">
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              Strongest Bullish Evidence
+            </span>
+            <span>{bullishEvidence.length}</span>
+          </div>
+          {bullishEvidence.length === 0 ? (
+            <p className="text-slate-500 font-sans text-xs">No dominant bullish technical indicators currently confirmed.</p>
+          ) : (
+            <ul className="space-y-1.5 text-slate-300 font-sans text-xs">
+              {bullishEvidence.map((ev, i) => (
+                <li key={i} className="flex items-start gap-1.5">
+                  <span className="text-emerald-400 font-bold mt-0.5">•</span>
+                  <span>{ev}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        {/* Strongest Bearish Evidence */}
+        <div className="bg-slate-900/60 border border-rose-900/40 rounded-xl p-4 space-y-2">
+          <div className="flex items-center justify-between text-rose-400 font-bold uppercase text-[11px] pb-1 border-b border-rose-900/30">
+            <span className="flex items-center gap-1.5">
+              <AlertTriangle className="w-3.5 h-3.5" />
+              Strongest Bearish Evidence
+            </span>
+            <span>{bearishEvidence.length}</span>
+          </div>
+          {bearishEvidence.length === 0 ? (
+            <p className="text-slate-500 font-sans text-xs">No dominant bearish technical indicators currently confirmed.</p>
+          ) : (
+            <ul className="space-y-1.5 text-slate-300 font-sans text-xs">
+              {bearishEvidence.map((ev, i) => (
+                <li key={i} className="flex items-start gap-1.5">
+                  <span className="text-rose-400 font-bold mt-0.5">•</span>
+                  <span>{ev}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        {/* Unresolved Conflicts & Key Cross-Currents */}
+        <div className="bg-slate-900/60 border border-amber-900/40 rounded-xl p-4 space-y-2">
+          <div className="flex items-center justify-between text-amber-400 font-bold uppercase text-[11px] pb-1 border-b border-amber-900/30">
+            <span className="flex items-center gap-1.5">
+              <Activity className="w-3.5 h-3.5" />
+              Unresolved Conflicts & Risks
+            </span>
+            <span>{unresolvedConflicts.length}</span>
+          </div>
+          {unresolvedConflicts.length === 0 ? (
+            <p className="text-slate-400 font-sans text-xs">Indicators show coherent directional alignment without cross-timeframe conflicts.</p>
+          ) : (
+            <ul className="space-y-1.5 text-slate-300 font-sans text-xs">
+              {unresolvedConflicts.map((ev, i) => (
+                <li key={i} className="flex items-start gap-1.5">
+                  <span className="text-amber-400 font-bold mt-0.5">•</span>
+                  <span>{ev}</span>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       </div>
 
@@ -332,6 +462,9 @@ export const TechnicalIndicatorsPage: React.FC<TechnicalIndicatorsPageProps> = (
               <p className="text-xs text-slate-400 font-sans">
                 Estimated 1-day band: {currSym}{(price - atr).toFixed(1)} to {currSym}{(price + atr).toFixed(1)}
               </p>
+              <div className="text-[10px] text-slate-500 font-sans italic pt-0.5">
+                *Measures historical daily volatility, not a guaranteed trading range boundary.
+              </div>
             </>
           ) : (
             <>
@@ -441,12 +574,22 @@ export const TechnicalIndicatorsPage: React.FC<TechnicalIndicatorsPageProps> = (
                 </td>
                 <td className="py-2.5 px-3 text-slate-400 text-[11px]">30 (Oversold) / 70 (Overbought)</td>
                 <td className="py-2.5 px-3 text-slate-300 font-sans text-xs">
-                  {rsi === undefined ? 'Insufficient data' : rsi > 70 ? 'Overbought territory — elevated pullback probability' : rsi < 35 ? 'Oversold territory — oversold relief potential' : 'Sustained momentum within equilibrium zone'}
+                  {rsi === undefined
+                    ? 'Insufficient data'
+                    : rsi > 70
+                    ? 'Overbought territory (>70) — elevated pullback probability'
+                    : rsi >= 55
+                    ? 'Constructive momentum (55-70) in buyer control'
+                    : rsi >= 45
+                    ? 'Equilibrium consolidation band (45-55)'
+                    : rsi >= 30
+                    ? 'Sustained selling pressure (30-45)'
+                    : 'Oversold territory (<30) — potential exhaustion bounce'}
                 </td>
                 <td className="py-2.5 px-3 text-right font-bold">
                   {rsi !== undefined ? (
-                    <span className={rsi > 70 ? 'text-amber-400' : rsi < 35 ? 'text-indigo-400' : 'text-emerald-400'}>
-                      {rsi > 70 ? 'BOOK PROFITS' : rsi < 35 ? 'WATCH DIP' : 'BUY / HOLD'}
+                    <span className={rsi > 70 ? 'text-amber-400' : rsi >= 55 ? 'text-emerald-400' : rsi >= 45 ? 'text-slate-300' : rsi >= 30 ? 'text-rose-400' : 'text-indigo-400'}>
+                      {rsi > 70 ? 'OVERBOUGHT / TRIM' : rsi >= 55 ? 'BULLISH MOMENTUM' : rsi >= 45 ? 'NEUTRAL CONSOLIDATION' : rsi >= 30 ? 'BEARISH PRESSURE' : 'OVERSOLD / WATCH DIP'}
                     </span>
                   ) : (
                     <span className="text-slate-500">PENDING</span>
@@ -505,12 +648,20 @@ export const TechnicalIndicatorsPage: React.FC<TechnicalIndicatorsPageProps> = (
                 </td>
                 <td className="py-2.5 px-3 text-slate-400 text-[11px]">20 (Oversold) / 80 (Overbought)</td>
                 <td className="py-2.5 px-3 text-slate-300 font-sans text-xs">
-                  {stochK === undefined ? 'Requires 14 completed sessions' : stochK > 80 ? 'Fast oscillator in overbought band' : stochK < 20 ? 'Fast oscillator in oversold band' : 'Steady cycle alignment'}
+                  {stochK === undefined
+                    ? 'Requires 14 completed sessions'
+                    : stochK > 80
+                    ? 'Fast oscillator in overbought band (>80)'
+                    : stochK >= 50
+                    ? 'Cycle oscillating in upper half (50-80)'
+                    : stochK >= 20
+                    ? 'Cycle oscillating in lower half (20-50)'
+                    : 'Fast oscillator in oversold band (<20)'}
                 </td>
                 <td className="py-2.5 px-3 text-right font-bold">
                   {stochK !== undefined ? (
-                    <span className={stochK > 80 ? 'text-amber-400' : stochK < 20 ? 'text-emerald-400' : 'text-emerald-400'}>
-                      {stochK > 80 ? 'OVERBOUGHT' : stochK < 20 ? 'OVERSOLD' : 'BULLISH CYCLE'}
+                    <span className={stochK > 80 ? 'text-amber-400' : stochK >= 50 ? 'text-emerald-400' : stochK >= 20 ? 'text-slate-300' : 'text-indigo-400'}>
+                      {stochK > 80 ? 'OVERBOUGHT' : stochK >= 50 ? 'UPPER CYCLE' : stochK >= 20 ? 'LOWER CYCLE' : 'OVERSOLD'}
                     </span>
                   ) : (
                     <span className="text-slate-500">PENDING</span>

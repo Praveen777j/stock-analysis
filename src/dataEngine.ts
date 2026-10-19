@@ -434,7 +434,26 @@ export function extractTechnicals(bars: HistoricalBar[]): TechnicalIndicators {
     fibS2 = Math.round((pVal - 0.618 * pRange) * 100) / 100;
   }
 
+  // Rolling 20-session Volume Weighted Average Price (VWAP)
+  let vwap: number | undefined = undefined;
+  if (n >= 1) {
+    const vwapSlice = validBars.slice(-20);
+    let totalVol = 0;
+    let totalPv = 0;
+    for (const b of vwapSlice) {
+      if (b.volume > 0 && b.high > 0 && b.low > 0 && b.close > 0) {
+        const typPrice = (b.high + b.low + b.close) / 3;
+        totalPv += typPrice * b.volume;
+        totalVol += b.volume;
+      }
+    }
+    if (totalVol > 0) {
+      vwap = Math.round((totalPv / totalVol) * 100) / 100;
+    }
+  }
+
   return {
+    vwap,
     rsi: n >= 15 ? latest.rsi : undefined,
     macd: n >= 34 ? latest.macd : undefined,
     macdSignal: n >= 34 ? latest.macdSignal : undefined,
@@ -2211,7 +2230,7 @@ export function computeModelSignal(
     Math.max(bullishFactorCount, bearishFactorCount) >= 4 ? 'HIGH CONFIDENCE' :
     Math.max(bullishFactorCount, bearishFactorCount) === 3 ? 'MODERATE' : 'SPECULATIVE';
 
-  const accuracyPct = Math.min(94, Math.max(76, Math.round(72 + Math.max(bullishFactorCount, bearishFactorCount) * 4.4)));
+  const accuracyPct = Math.round((Math.max(bullishFactorCount, bearishFactorCount) / 5) * 100);
 
   const keyDrivers: string[] = [];
   if (tradeAction === 'BUY') {
@@ -2289,17 +2308,29 @@ export function computeModelSignal(
     : Math.round((currentPrice - t2Distance) * 100) / 100;
   const target2Pct = Math.round(Math.abs((target2 - currentPrice) / currentPrice) * 1000) / 10;
 
-  const riskRewardRatio = '1 : 2.5';
+  // Real mathematical Reward/Risk calculation based on trigger entry assumption, hard stop-loss, and profit targets
+  const slDist = Math.abs(currentPrice - stopLoss);
+  const t1Dist = Math.abs(target1 - currentPrice);
+  const t2Dist = Math.abs(target2 - currentPrice);
+  const t1RR = slDist > 0 ? Math.round((t1Dist / slDist) * 10) / 10 : 1.8;
+  const t2RR = slDist > 0 ? Math.round((t2Dist / slDist) * 10) / 10 : 3.0;
+  const blendedRR = slDist > 0 ? Math.round(((t1Dist * 0.5 + t2Dist * 0.5) / slDist) * 10) / 10 : 2.4;
+  const riskRewardRatio = `1 : ${blendedRR.toFixed(1)}`;
 
-  // Real rolling VWAP from available historical bars
-  const vwap = Math.round(currentPrice * 100) / 100;
-  const priceVsVwap: 'ABOVE VWAP (BULLISH)' | 'BELOW VWAP (BEARISH)' | 'AT VWAP' =
-    isBullishSetup ? 'ABOVE VWAP (BULLISH)' : isBearishSetup ? 'BELOW VWAP (BEARISH)' : 'AT VWAP';
+  // Real rolling VWAP from available historical bars via technicals
+  const vwap = technicals.vwap !== undefined ? technicals.vwap : Math.round(currentPrice * 100) / 100;
+  const priceVsVwap: 'ABOVE VWAP (BULLISH)' | 'BELOW VWAP (BEARISH)' | 'AT VWAP' | 'UNAVAILABLE' =
+    technicals.vwap === undefined
+      ? 'UNAVAILABLE'
+      : currentPrice > vwap * 1.002
+      ? 'ABOVE VWAP (BULLISH)'
+      : currentPrice < vwap * 0.998
+      ? 'BELOW VWAP (BEARISH)'
+      : 'AT VWAP';
 
   // Do not manufacture delivery volume without direct exchange clearing feed
-  const deliveryVolumePct = 0;
-  const institutionalBias: 'INSTITUTIONAL ACCUMULATION' | 'INSTITUTIONAL DISTRIBUTION' | 'NEUTRAL ROTATION' =
-    isBullishSetup ? 'INSTITUTIONAL ACCUMULATION' : isBearishSetup ? 'INSTITUTIONAL DISTRIBUTION' : 'NEUTRAL ROTATION';
+  const deliveryVolumePct: number | null = null;
+  const institutionalBias: 'INSTITUTIONAL ACCUMULATION' | 'INSTITUTIONAL DISTRIBUTION' | 'NEUTRAL ROTATION' | 'UNAVAILABLE' = 'UNAVAILABLE';
 
   const multiTimeframeConfluence = {
     dailyTrend: (isAboveEma20 ? 'STRONG BULLISH' : 'BEARISH') as 'STRONG BULLISH' | 'BEARISH' | 'CONSOLIDATION',
@@ -2310,10 +2341,10 @@ export function computeModelSignal(
 
   const recommendedPositionSizePct = isBullishSetup ? 12 : isBearishSetup ? 0 : 5;
   const traderPlaybook = isBullishSetup
-    ? `Buy Setup: Place limit orders within ${entryZone}. Set protective stop loss at ${currSym}${stopLoss.toFixed(1)} (-${stopLossPct}%). Book 50% profit at Target 1 (${currSym}${target1.toFixed(1)}, +${target1Pct}%) and trail remainder toward Target 2 (${currSym}${target2.toFixed(1)}).`
+    ? `Buy Setup: Place limit orders within ${entryZone} (Base trigger: ${currSym}${triggerPrice.toFixed(1)}). Invalidation Stop Loss at ${currSym}${stopLoss.toFixed(1)} (-${stopLossPct}%). Take Profit 1 at ${currSym}${target1.toFixed(1)} (+${target1Pct}%, R:R 1:${t1RR.toFixed(1)}) and Target 2 at ${currSym}${target2.toFixed(1)} (+${target2Pct}%, R:R 1:${t2RR.toFixed(1)}). Blended Reward/Risk is ${riskRewardRatio}.`
     : isBearishSetup
-    ? `Capital Protection: Technical indicators confirm active selling distribution. Exit open long positions. For short/hedging intraday, trigger near ${entryZone} with invalidation stop at ${currSym}${stopLoss.toFixed(1)} (+${stopLossPct}%). Take profit at ${currSym}${target1.toFixed(1)}.`
-    : `Range Waiting Mode: Momentum is consolidating between ${currSym}${supportLevel.toFixed(1)} (Support) and ${currSym}${resistanceLevel.toFixed(1)} (Resistance). Do not initiate fresh positions until price breaks decisively out of this congestion band.`;
+    ? `Capital Protection Setup: Active selling distribution detected. Exit open long positions. For intraday shorting or hedging, trigger near ${entryZone} (Base trigger: ${currSym}${triggerPrice.toFixed(1)}) with invalidation stop at ${currSym}${stopLoss.toFixed(1)} (+${stopLossPct}%). Target 1 at ${currSym}${target1.toFixed(1)} (-${target1Pct}%, R:R 1:${t1RR.toFixed(1)}) and Target 2 at ${currSym}${target2.toFixed(1)} (-${target2Pct}%, R:R 1:${t2RR.toFixed(1)}). Blended Reward/Risk is ${riskRewardRatio}.`
+    : `Range Waiting Mode: Momentum is consolidating between support at ${currSym}${supportLevel.toFixed(1)} and resistance at ${currSym}${resistanceLevel.toFixed(1)}. Central pivot is ${currSym}${pivotPoint.toFixed(1)}. Avoid initiating fresh directional positions until price decisively breaks out with volume.`;
 
   const professionalTradeSetup: ProfessionalTradeSetup = {
     bias: tradeBias,

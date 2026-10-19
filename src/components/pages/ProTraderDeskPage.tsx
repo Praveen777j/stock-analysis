@@ -155,10 +155,10 @@ export const ProTraderDeskPage: React.FC<ProTraderDeskPageProps> = ({ signal, qu
           <div className="bg-slate-950/70 p-3.5 rounded-xl border border-slate-800 space-y-1">
             <span className="text-slate-400 text-[11px]">Delivery Volume Ratio</span>
             <div className="text-base font-bold text-slate-100">
-              {setup.deliveryVolumePct}% ({setup.institutionalBias})
+              {setup.deliveryVolumePct !== null && setup.deliveryVolumePct > 0 ? `${setup.deliveryVolumePct}% (${setup.institutionalBias})` : 'N/A (Clearing Feed Required)'}
             </div>
             <div className="text-[10px] text-slate-500">
-              {setup.deliveryVolumePct > 50 ? 'Strong institutional accumulation' : 'Normal retail turnover'}
+              {setup.deliveryVolumePct !== null && setup.deliveryVolumePct > 50 ? 'Strong institutional accumulation' : setup.deliveryVolumePct !== null ? 'Normal retail turnover' : 'Direct clearing feed required'}
             </div>
           </div>
 

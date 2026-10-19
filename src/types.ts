@@ -88,6 +88,7 @@ export interface TechnicalIndicators {
   fibS2?: number;
   roc10?: number;
   momentum10?: number;
+  vwap?: number;
   dataStatus?: 'LIVE' | 'UNAVAILABLE';
 }
 
@@ -294,7 +295,7 @@ export interface ProfessionalTradeSetup {
   riskRewardRatio: string;
   vwap: number;
   priceVsVwap: 'ABOVE VWAP (BULLISH)' | 'BELOW VWAP (BEARISH)' | 'AT VWAP' | 'UNAVAILABLE';
-  deliveryVolumePct: number;
+  deliveryVolumePct: number | null;
   institutionalBias: 'INSTITUTIONAL ACCUMULATION' | 'INSTITUTIONAL DISTRIBUTION' | 'NEUTRAL ROTATION' | 'UNAVAILABLE';
   multiTimeframeConfluence: {
     dailyTrend: 'STRONG BULLISH' | 'BEARISH' | 'CONSOLIDATION';
