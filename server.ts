@@ -4,8 +4,9 @@ import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { runFinbertInference, PRIMARY_FINBERT_ENDPOINT, logSafeBackendDiagnostic } from './src/finbertService';
+import { runFinbertInference, PRIMARY_FINBERT_ENDPOINT, logSafeBackendDiagnostic, FinbertInferenceResult } from './src/finbertService';
 import { extractCleanArticleData, deduplicateAndGroupNewsArticles } from './src/newsIntelligence';
+import { UPCOMING_IPOS_CATALOG } from './src/ipoCatalog';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -257,6 +258,145 @@ async function startServer() {
       annualPnL: [],
     };
   }
+
+  // --- API: System Health & Provider Audit (Render & Frontend Health Strip) ---
+  app.get('/api/health', (req, res) => {
+    const rawToken = process.env.HF_TOKEN || process.env.HUGGINGFACE_API_KEY || process.env.HUGGING_FACE_HUB_TOKEN || '';
+    const cleanToken = rawToken.replace(/["'\r\n]/g, '').trim();
+    const memRssMb = Math.round(process.memoryUsage().rss / 1024 / 1024);
+    const memHeapMb = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
+
+    return res.status(200).json({
+      status: 'ok',
+      service: 'Nexus Stock Intelligence Platform',
+      version: '2.0.0',
+      timestamp: new Date().toISOString(),
+      uptimeSeconds: Math.floor(process.uptime()),
+      environment: process.env.NODE_ENV || 'development',
+      port: PORT,
+      system: {
+        nodeVersion: process.version,
+        platform: process.platform,
+        arch: process.arch,
+        memoryRssMb: memRssMb,
+        memoryHeapUsedMb: memHeapMb
+      },
+      providers: {
+        marketData: {
+          name: 'Yahoo Finance v8 Chart API',
+          status: 'AVAILABLE',
+          keyRequired: false,
+          description: 'Keyless real-time OHLCV candles, volume, and quotes'
+        },
+        newsIntelligence: {
+          name: 'Google News RSS / Institutional Feed',
+          status: 'AVAILABLE',
+          keyRequired: false,
+          description: 'Attributed institutional articles and corporate event clusters'
+        },
+        finbert: {
+          name: 'ProsusAI/finbert (Hugging Face / ONNX)',
+          status: cleanToken ? 'CONFIGURED' : 'VADER_FALLBACK_ACTIVE',
+          engineInUse: cleanToken ? 'FINBERT_REMOTE' : 'VADER_FALLBACK',
+          keyRequired: false,
+          fallbackDisclosed: true
+        },
+        vader: {
+          name: 'VADER Financial Lexicon Engine',
+          status: 'AVAILABLE',
+          keyRequired: false,
+          accuracyCapped: true
+        },
+        ipoCatalog: {
+          name: 'SEBI DRHP & Exchange Notices',
+          status: 'AVAILABLE',
+          totalEntries: UPCOMING_IPOS_CATALOG.length,
+          lastAudit: 'October 2026'
+        },
+        modelLab: {
+          name: 'Out-of-Fold TimeSeriesSplit ML Pipeline',
+          status: 'ACTIVE',
+          targetHorizon: '5-Day Forward Return Direction',
+          models: ['Logistic Regression', 'Random Forest', 'Gradient Boosting']
+        }
+      }
+    });
+  });
+
+  // --- API: Major Market Indices Overview Cache ---
+  interface MarketIndexItem {
+    symbol: string;
+    name: string;
+    region: 'India' | 'US';
+    price: number;
+    change: number;
+    changePct: number;
+    previousClose: number;
+    timestamp: string;
+  }
+  let marketOverviewCache: { data: MarketIndexItem[]; expires: number } | null = null;
+
+  app.get('/api/market-overview', async (req, res) => {
+    const now = Date.now();
+    if (marketOverviewCache && marketOverviewCache.expires > now) {
+      return res.json({ indices: marketOverviewCache.data, cached: true });
+    }
+
+    const indicesToFetch = [
+      { symbol: '^NSEI', name: 'NIFTY 50', region: 'India' as const },
+      { symbol: '^BSESN', name: 'S&P BSE SENSEX', region: 'India' as const },
+      { symbol: '^GSPC', name: 'S&P 500', region: 'US' as const },
+      { symbol: '^IXIC', name: 'NASDAQ Composite', region: 'US' as const }
+    ];
+
+    const results: MarketIndexItem[] = [];
+
+    await Promise.all(
+      indicesToFetch.map(async (idx) => {
+        try {
+          const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(idx.symbol)}?range=1d&interval=1d`;
+          const resp = await fetch(url, {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+          });
+          if (resp.ok) {
+            const data = await resp.json();
+            const meta = data?.chart?.result?.[0]?.meta;
+            if (meta && typeof meta.regularMarketPrice === 'number') {
+              const price = Math.round(meta.regularMarketPrice * 100) / 100;
+              const prev = typeof meta.chartPreviousClose === 'number' ? meta.chartPreviousClose : price;
+              const change = Math.round((price - prev) * 100) / 100;
+              const changePct = prev > 0 ? Math.round(((price - prev) / prev) * 10000) / 100 : 0;
+              results.push({
+                symbol: idx.symbol,
+                name: idx.name,
+                region: idx.region,
+                price,
+                change,
+                changePct,
+                previousClose: Math.round(prev * 100) / 100,
+                timestamp: new Date().toISOString()
+              });
+              return;
+            }
+          }
+        } catch (_) {
+          // Fall through
+        }
+      })
+    );
+
+    const ordered = indicesToFetch
+      .map(i => results.find(r => r.symbol === i.symbol))
+      .filter((r): r is MarketIndexItem => Boolean(r));
+
+    if (ordered.length > 0) {
+      marketOverviewCache = { data: ordered, expires: now + 60_000 };
+    }
+
+    return res.json({ indices: ordered, cached: false });
+  });
 
   // --- API: Live Stock Quote & Real Historical Data ---
   app.get('/api/stock/:ticker', async (req, res) => {
@@ -1057,6 +1197,36 @@ async function startServer() {
     });
   });
 
+  // --- API: Local Open-Source FinBERT Engine Status & Resource Audit ---
+  app.get('/api/finbert/local-status', async (req, res) => {
+    const memRssMb = Math.round(process.memoryUsage().rss / 1024 / 1024);
+    const memHeapMb = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
+    const localEnabled = process.env.ENABLE_LOCAL_FINBERT === 'true' || process.env.ENABLE_LOCAL_FINBERT === '1';
+
+    return res.json({
+      engine: 'Transformers.js (ONNX Runtime CPU)',
+      modelName: 'Xenova/finbert (ProsusAI/finbert quantized ONNX)',
+      license: 'Apache 2.0 (Open Source, Free to Run)',
+      isLocallyEnabled: localEnabled,
+      memoryRequirements: {
+        currentRssMb: memRssMb,
+        currentHeapMb: memHeapMb,
+        measuredModelRssPeakMb: 733,
+        renderFreeTierLimitMb: 512,
+        renderFeasibility: 'Render Free Tier has a strict 512MB RAM cgroup limit. Running local ONNX model alongside Node/Express/Vite requires ~733MB RSS and risks OOM SIGKILL. Supported on Render Starter (1GB+ RAM), local dev environments, or self-hosted VMs.'
+      },
+      modelFileSpecs: {
+        modelFile: 'onnx/model_quantized.onnx',
+        downloadSizeMb: 65,
+        tokenizer: 'BertTokenizer (vocab.txt, tokenizer.json)',
+        classes: ['positive', 'negative', 'neutral'],
+        contextWindow: 512
+      },
+      inferenceTimeEstimateMs: '80 - 250ms per batch on modern CPU',
+      freeRunningStatus: localEnabled ? 'ACTIVE_LOCAL' : 'AVAILABLE_ON_DEMAND_REQUIRES_1GB_RAM'
+    });
+  });
+
   // --- API: Live Financial News & Sentiment Analysis ---
   app.get('/api/news/:ticker', async (req, res) => {
     try {
@@ -1250,7 +1420,8 @@ async function startServer() {
       let finbertScore: number | null = null;
       let finbertStatus: 'LIVE' | 'UNAVAILABLE' = 'UNAVAILABLE';
       let finbertDiagnostic: string | undefined = undefined;
-      let finbertReason: 'MISSING_TOKEN' | 'INVALID_CREDENTIALS' | 'INSUFFICIENT_ACCESS' | 'CREDITS_EXHAUSTED' | 'EMPTY_INPUT' | 'AUTH_ERROR' | 'RATE_LIMITED' | 'UNSUPPORTED_ENDPOINT' | 'MODEL_LOADING' | 'MODEL_UNAVAILABLE' | 'TIMEOUT' | 'NETWORK_ERROR' | 'MALFORMED_RESPONSE' | 'SERVICE_UNAVAILABLE' | undefined = undefined;
+      let finbertReason: FinbertInferenceResult['diagnostics']['reason'] = undefined;
+      let finbertEngine: 'FINBERT_LOCAL' | 'FINBERT_REMOTE' | 'VADER_FALLBACK' | 'UNAVAILABLE' = hasRealNews ? 'VADER_FALLBACK' : 'UNAVAILABLE';
 
       if (hasRealNews) {
         try {
@@ -1261,6 +1432,7 @@ async function startServer() {
             finbertScore = fbRes.overallScore;
             finbertDiagnostic = fbRes.diagnostics.message;
             finbertReason = undefined;
+            finbertEngine = fbRes.engine || 'FINBERT_REMOTE';
             // Attach individual headline FinBERT scores and genuine labels
             for (let i = 0; i < articles.length; i++) {
               const item = fbRes.items[i];
@@ -1274,12 +1446,14 @@ async function startServer() {
             finbertScore = null;
             finbertDiagnostic = fbRes.diagnostics.message;
             finbertReason = fbRes.diagnostics.reason || 'MISSING_TOKEN';
+            finbertEngine = 'VADER_FALLBACK';
           }
         } catch (e: any) {
           finbertStatus = 'UNAVAILABLE';
           finbertScore = null;
           finbertDiagnostic = 'FinBERT inference service exception: ' + (e?.message || 'Error');
           finbertReason = 'SERVICE_UNAVAILABLE';
+          finbertEngine = 'VADER_FALLBACK';
         }
       }
 
@@ -1396,9 +1570,9 @@ async function startServer() {
         else if (compositeScore <= -0.05) label = 'BEARISH';
       }
 
-      const sentimentMethod: 'FINBERT_VADER_HYBRID' | 'VADER_FALLBACK' | 'UNAVAILABLE' =
+      const sentimentMethod: 'FINBERT_LOCAL' | 'FINBERT_REMOTE' | 'FINBERT_VADER_HYBRID' | 'VADER_FALLBACK' | 'UNAVAILABLE' =
         finbertStatus === 'LIVE' && finbertScore !== null
-          ? 'FINBERT_VADER_HYBRID'
+          ? (finbertEngine === 'FINBERT_LOCAL' ? 'FINBERT_LOCAL' : 'FINBERT_VADER_HYBRID')
           : hasRealNews
             ? 'VADER_FALLBACK'
             : 'UNAVAILABLE';
@@ -1412,10 +1586,12 @@ async function startServer() {
         finbertDiagnostic,
         finbertReason,
         sentimentMethod,
+        sentimentEngine: finbertEngine,
         newsCount: articles.length,
         distinctEventsCount,
         expansionCatalystsCount,
         cautionaryOverhangsCount,
+        eventClusters: groupedData.eventClusters || [],
         label,
         dataStatus: hasRealNews ? 'LIVE' : 'UNAVAILABLE',
         articles,

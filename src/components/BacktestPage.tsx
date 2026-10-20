@@ -177,7 +177,7 @@ export const BacktestPage: React.FC<BacktestPageProps> = ({ backtest, ticker }) 
               <g key={`eq-grid-${idx}`}>
                 <line x1={padLeft} y1={y} x2={padLeft + chartW} y2={y} stroke="#1e293b" strokeDasharray="3 3" />
                 <text x={padLeft + chartW + 6} y={y + 3} fill="#64748b" fontSize="9" fontFamily="monospace">
-                  ₹{Math.round(val).toLocaleString('en-IN')}
+                  {currSym}{Math.round(val).toLocaleString(locale)}
                 </text>
               </g>
             );
@@ -237,8 +237,8 @@ export const BacktestPage: React.FC<BacktestPageProps> = ({ backtest, ticker }) 
               <tr>
                 <th className="py-2.5 px-3">Entry Date</th>
                 <th className="py-2.5 px-3">Exit Date</th>
-                <th className="py-2.5 px-3">Entry Price (₹)</th>
-                <th className="py-2.5 px-3">Exit Price (₹)</th>
+                <th className="py-2.5 px-3">Entry Price ({currSym})</th>
+                <th className="py-2.5 px-3">Exit Price ({currSym})</th>
                 <th className="py-2.5 px-3 text-right">Return %</th>
                 <th className="py-2.5 px-3 text-right">Outcome</th>
               </tr>

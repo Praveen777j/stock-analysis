@@ -3,7 +3,8 @@ import {
   parseFinbertItem,
   runFinbertInference,
   PRIMARY_FINBERT_ENDPOINT,
-  FINBERT_MODEL_NAME
+  FINBERT_MODEL_NAME,
+  CREDITS_EXHAUSTED_COOLDOWN_MS
 } from '../src/finbertService';
 import { computeModelSignal } from '../src/dataEngine';
 import { StockQuote, TechnicalIndicators, SentimentData } from '../src/types';
@@ -257,7 +258,8 @@ async function testHttpErrors() {
   assert.strictEqual(res402.diagnostics.reason, 'CREDITS_EXHAUSTED');
   assert.strictEqual(calls402.length, 1, 'HTTP 402 must fail immediately without falling back to alternate endpoints for the same model');
   assert(res402.diagnostics.message?.includes('credits exhausted') || res402.diagnostics.message?.includes('HTTP 402'), 'Must mention credits exhausted');
-  console.log('✓ HTTP 402 correctly flagged as CREDITS_EXHAUSTED without retrying alternate endpoints.');
+  assert.strictEqual(CREDITS_EXHAUSTED_COOLDOWN_MS, 15 * 60 * 1000, 'Credits exhaustion cooldown must be exactly 15 minutes');
+  console.log('✓ HTTP 402 correctly flagged as CREDITS_EXHAUSTED without retrying alternate endpoints (15-min cooldown verified).');
 
   // Circuit breaker: Subsequent calls within cooldown do NOT invoke network
   const callsThrottle: string[] = [];
@@ -616,6 +618,45 @@ function testSentimentFallbackAndHonesty() {
   console.log('✓ Missing news sentiment handled gracefully: FinBERT=0%, VADER=0%, remaining active engines sum to 100%.');
 }
 
+// 9. Free Render 512MB RAM Safety: Verify local ONNX model is disabled by default
+async function testLocalFinbertDisabledByDefaultSafety() {
+  console.log('\n[Test 9] Testing Free Render Memory Safety (Local ONNX FinBERT Disabled By Default)...');
+  const originalEnv = process.env.ENABLE_LOCAL_FINBERT;
+  delete process.env.ENABLE_LOCAL_FINBERT;
+
+  try {
+    // When no HF_TOKEN is configured and ENABLE_LOCAL_FINBERT is unset,
+    // FinBERT MUST return UNAVAILABLE with MISSING_TOKEN and NOT load local model
+    const res = await runFinbertInference(['Quarterly net profit rose 25% year on year.'], { token: '' });
+    assert.strictEqual(res.status, 'UNAVAILABLE');
+    assert.strictEqual(res.diagnostics.reason, 'MISSING_TOKEN');
+    assert.notStrictEqual(res.engine, 'FINBERT_LOCAL', 'Local ONNX engine must not be used when disabled');
+    console.log('✓ When ENABLE_LOCAL_FINBERT is unset, model does NOT load local ONNX and safely returns UNAVAILABLE (MISSING_TOKEN).');
+
+    // When remote token is provided, it must query remote endpoint and NOT load local ONNX
+    let remoteCalled = false;
+    const mockRemoteFetch: typeof fetch = async (url: any) => {
+      remoteCalled = true;
+      return new Response(JSON.stringify([
+        [{ label: 'positive', score: 0.91 }, { label: 'neutral', score: 0.06 }, { label: 'negative', score: 0.03 }]
+      ]), { status: 200 });
+    };
+
+    const resRemote = await runFinbertInference(['Headline'], {
+      token: 'hf_remote_token',
+      fetchFn: mockRemoteFetch
+    });
+    assert.strictEqual(resRemote.status, 'LIVE');
+    assert.strictEqual(remoteCalled, true, 'Remote endpoint must be called');
+    assert.notStrictEqual(resRemote.engine, 'FINBERT_LOCAL', 'Remote inference must not be tagged as FINBERT_LOCAL');
+    console.log('✓ Remote inference does NOT load local ONNX model.');
+  } finally {
+    if (originalEnv !== undefined) {
+      process.env.ENABLE_LOCAL_FINBERT = originalEnv;
+    }
+  }
+}
+
 // Execute all async tests
 async function runAll() {
   await testMissingToken();
@@ -626,6 +667,7 @@ async function runAll() {
   await testHttpErrors();
   testModelWeightRedistribution();
   testSentimentFallbackAndHonesty();
+  await testLocalFinbertDisabledByDefaultSafety();
 
   console.log('\n======================================================');
   console.log('ALL FINBERT INFERENCE VERIFICATION TESTS PASSED!');

@@ -605,6 +605,84 @@ export const ChartsPage: React.FC<ChartsPageProps> = ({
         </svg>
         )}
       </div>
+
+      {/* Natural-Language Historical Chart Analysis Card */}
+      {startBar && endBar && (
+        <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-800">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-400" />
+              <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-slate-200">
+                Natural-Language Historical Price Analysis ({period} Period)
+              </h3>
+            </div>
+            <span className="text-[11px] font-mono text-slate-400 bg-slate-950 px-2.5 py-1 rounded-lg border border-slate-800">
+              Verified OHLCV Observations ({filteredBars.length} Bars)
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 text-xs font-mono">
+            <div className="bg-slate-950/70 p-3 rounded-xl border border-slate-800/80 space-y-1">
+              <span className="text-slate-500 text-[10px] uppercase block font-sans">Period Bounds</span>
+              <div className="text-slate-200 font-bold">{startBar.date} → {endBar.date}</div>
+              <div className="text-[10px] text-slate-400">{filteredBars.length} trading sessions</div>
+            </div>
+
+            <div className="bg-slate-950/70 p-3 rounded-xl border border-slate-800/80 space-y-1">
+              <span className="text-slate-500 text-[10px] uppercase block font-sans">Price Trajectory</span>
+              <div className={`font-bold ${periodGainPct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                {periodGainAmount >= 0 ? 'Advanced' : 'Declined'} {periodGainAmount >= 0 ? '+' : '-'}{currSym}{Math.abs(periodGainAmount).toFixed(2)}
+              </div>
+              <div className="text-[10px] text-slate-400">
+                {currSym}{startBar.close.toFixed(2)} → {currSym}{endBar.close.toFixed(2)} ({periodGainPct >= 0 ? '+' : ''}{periodGainPct}%)
+              </div>
+            </div>
+
+            <div className="bg-slate-950/70 p-3 rounded-xl border border-slate-800/80 space-y-1">
+              <span className="text-slate-500 text-[10px] uppercase block font-sans">Period Extremes</span>
+              {(() => {
+                const pHigh = filteredBars.reduce((m, b) => b.high > m.high ? b : m, filteredBars[0]);
+                const pLow = filteredBars.reduce((m, b) => b.low < m.low ? b : m, filteredBars[0]);
+                return (
+                  <>
+                    <div className="text-slate-200 font-bold">
+                      H: {currSym}{pHigh.high.toFixed(1)} · L: {currSym}{pLow.low.toFixed(1)}
+                    </div>
+                    <div className="text-[10px] text-slate-400">
+                      High: {pHigh.date} | Low: {pLow.date}
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+
+            <div className="bg-slate-950/70 p-3 rounded-xl border border-slate-800/80 space-y-1">
+              <span className="text-slate-500 text-[10px] uppercase block font-sans">Trend Classification</span>
+              <div className="text-slate-200 font-bold">
+                {periodGainPct >= 8
+                  ? 'Sustained Uptrend'
+                  : periodGainPct <= -8
+                  ? 'Downward Trajectory'
+                  : 'Sideways Consolidation'}
+              </div>
+              <div className="text-[10px] text-slate-400">
+                {endBar.ema20 && endBar.close >= endBar.ema20 ? 'Above 20 EMA' : 'Below 20 EMA'}
+                {endBar.ema50 ? ` · ${endBar.close >= endBar.ema50 ? 'Above 50 EMA' : 'Below 50 EMA'}` : ''}
+              </div>
+            </div>
+          </div>
+
+          {/* Narrative Summary and Limitations Note */}
+          <div className="bg-slate-950/70 p-4 rounded-xl border border-slate-800 text-xs text-slate-300 space-y-2 leading-relaxed font-sans">
+            <p>
+              <strong>Factual Period Summary:</strong> Over the {period} period from {startBar.date} to {endBar.date}, {ticker} {periodGainAmount >= 0 ? 'rose' : 'declined'} from {currSym}{startBar.close.toFixed(2)} to {currSym}{endBar.close.toFixed(2)}, representing an absolute change of {periodGainAmount >= 0 ? '+' : '-'}{currSym}{Math.abs(periodGainAmount).toFixed(2)} ({periodGainPct >= 0 ? '+' : ''}{periodGainPct}%). The stock reached an observed timeframe high of {currSym}{filteredBars.reduce((m, b) => b.high > m.high ? b : m, filteredBars[0]).high.toFixed(2)} and a low of {currSym}{filteredBars.reduce((m, b) => b.low < m.low ? b : m, filteredBars[0]).low.toFixed(2)}. The current price is {endBar.ema20 && endBar.close >= endBar.ema20 ? 'trading above' : 'trading below'} its 20-session EMA ({currSym}{endBar.ema20 ? endBar.ema20.toFixed(2) : 'N/A'}){endBar.ema200 ? ` and ${endBar.close >= endBar.ema200 ? 'above' : 'below'} its 200-session EMA (${currSym}${endBar.ema200.toFixed(2)})` : ''}.
+            </p>
+            <p className="text-[11px] text-slate-400 pt-1 border-t border-slate-800/80">
+              <strong>Analytical Limitation:</strong> Historical price trajectory describes past market transaction consensus and does not constitute a complete assessment of the company's enterprise quality, balance-sheet solvency, or future equity performance.
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

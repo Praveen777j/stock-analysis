@@ -1,298 +1,273 @@
-# Nexus Stock Sentiment Dashboard
-> **A Real-Time Stock Market Intelligence Web Application & Explainable Quantitative AI System**
+# NEXUS — Professional AI Stock Analysis & Decision Support Platform
 
-Nexus is a complete stock market intelligence platform that combines **live financial news sentiment (FinBERT & VADER)**, **Reddit community analytics**, **multi-indicator technical analysis (RSI, MACD, EMAs, Bollinger Bands, ATR)**, **audited multi-year company financials & annual P&L trajectory**, **upcoming IPOs with Grey Market Premium (GMP)**, and **calibrated machine learning models with walk-forward backtesting**.
+> **A disciplined, production-grade financial analysis web application combining keyless real-time market data, dual-engine financial sentiment (FinBERT + VADER), audited corporate fundamentals, SEBI DRHP IPO intelligence, walk-forward supervised ML models, SHAP explainability, and quantitative risk management.**
 
 ---
 
-## 🚀 Complete Development & Deployment Lifecycle
+## 🏛️ Project Architecture & Design Philosophy
+
+Nexus is engineered as a unified, high-integrity financial intelligence application designed to run locally with zero mandatory configuration and deploy seamlessly on **Render's Free Tier** (or any modern cloud container).
 
 ```text
-       AI Studio (Download / Export Project Zip)
-                         ↓
-               Open folder in VS Code
-                         ↓
-          Create Python Virtual Environment (venv)
-                         ↓
-             pip install -r requirements.txt
-                         ↓
-              Copy .env.example to .env
-                         ↓
-                Run Streamlit (app.py)
-                         ↓
-            Test locally at http://localhost:8501
-                         ↓
-               Commit & Push to GitHub
-                         ↓
-    Deploy Free on Streamlit Community Cloud (share.streamlit.io)
+                                  ┌────────────────────────┐
+                                  │      Client (SPA)      │
+                                  │  React 19 + Tailwind   │
+                                  └───────────┬────────────┘
+                                              │ HTTP / JSON
+                                              ▼
+                                  ┌────────────────────────┐
+                                  │   Express Backend API  │
+                                  │   Node 22 / TypeScript │
+                                  └─────┬──────────────┬───┘
+                                        │              │
+                   ┌────────────────────┴───┐      ┌───┴────────────────────┐
+                   ▼                        ▼      ▼                        ▼
+        ┌───────────────────────┐  ┌──────────────┐ ┌───────────────┐ ┌──────────────┐
+        │ Yahoo Finance v8 API  │  │ Google News  │ │ Hugging Face  │ │  SEBI DRHP   │
+        │ Quotes, OHLCV Candles │  │  RSS Wire &  │ │ FinBERT Router│ │ Statutory IPO│
+        │ Statements (Keyless)  │  │   Clusters   │ │ (VADER Fallbk)│ │   Catalog    │
+        └───────────────────────┘  └──────────────┘ └───────────────┘ └──────────────┘
+```
+
+### Core Design Principles
+1. **Zero Mandatory Paid APIs**: Out-of-the-box operation using keyless institutional feeds, Yahoo Finance v8 chart data, Google News RSS, and local VADER/Transformers.js pipelines.
+2. **Strict Data Integrity**: Missing financial ratios or settlement data are never silently converted to zero. Stale or unavailable fields explicitly display `N/A` or `Unavailable`.
+3. **No Fabricated Accuracy**: Machine learning benchmarks use chronological `TimeSeriesSplit` cross-validation with an explicit 5-day directional return target ($\pm 1.5\%$) rather than lookahead-biased metrics.
+4. **Transparent Sentiment Engine**: If FinBERT is unconfigured or credits are exhausted, the system automatically falls back to VADER with dynamic weight redistribution, explicitly disclosing the fallback in both UI and diagnostics.
+5. **No Secret Leaks**: Strict redaction in logs; no credentials, session tokens, or API keys are ever bundled into client JavaScript.
+
+---
+
+## 🧭 The 6 Core Navigation Sections
+
+The user experience is structured around 6 purpose-built financial views:
+
+1. **Dashboard (`dashboard`)**:
+   - Live benchmark indices (**NIFTY 50**, **SENSEX**, **S&P 500**, **NASDAQ**).
+   - Global stock search with instant autocomplete across Indian (NSE/BSE) and US equities.
+   - Pinned watchlist summary with local persistence.
+   - Active market movers from the audited universe catalog.
+   - Real-time financial news wire with sentiment indicators.
+   - Comprehensive **System & Data Health Strip** (Phase 17 audit).
+
+2. **Stock Analysis (`stock-analysis`)**:
+   - **Central Candlestick & Volume Chart**: Interactive SVG charts across 1M, 3M, 6M, 1Y, 3Y, 5Y, and Max timeframes with EMA 20, EMA 50, EMA 200, and VWAP overlays.
+   - **Next-Day Tactical Trade Plan**: Algorithmic entry triggers, hard stop-loss levels, and dual targets enforcing a strict $1:2.5$ asymmetric risk-to-reward ratio.
+   - **Technical Indicators**: RSI(14), MACD(12,26,9), Stochastic Oscillator (%K, %D), Bollinger Bands, ATR(14) historical volatility range, Floor Trader & Fibonacci Pivots (R1–R3, S1–S3).
+   - **Financial News & Sentiment**: Attributed articles, corporate event clustering, and dual-engine FinBERT + VADER sentiment.
+   - **Reddit Community**: Retail investor discussions, upvotes, buzz scores, and sentiment ratios.
+   - **Decision Reconciliation**: Integrated multi-timeframe reconciliation addressing short-term tactical setups vs multi-year fundamental moats.
+
+3. **Company Research (`research`)**:
+   - **12-Dimension Moat Framework**: Economic moat, pricing power, ROE, capital efficiency, balance sheet leverage, and governance scoring.
+   - **Annual P&L Trajectory**: Multi-year financial statements (Revenue, EBITDA, PAT, EPS, margins).
+   - **Solvency & Balance Sheet Audit**: Debt-to-Equity, Current Ratio, Operating Cash Flow, Free Cash Flow, and Altman Z-Score indicators.
+   - **Peer Valuation Multiples**: Sectoral comparison of P/E, P/B, and growth metrics.
+
+4. **IPO Centre (`ipos`)**:
+   - **Audited Primary Pipeline**: Categorized into Upcoming, Open Now, Closed / Awaiting Listing, and Historical Reference Filings.
+   - **Statutory Disclosures**: Issue size, Price band, Lot size, Listing date, Subscription rates, Promoters, and Objects of the Issue.
+   - **Unofficial Grey Market Premium (GMP)**: Transparent GMP tracking with timestamps and prominent regulatory risk warnings.
+
+5. **Model Lab (`model-lab`)**:
+   - **Documented Prediction Target**: 5-day forward directional classification ($+1$ if return $> 1.5\%$, $-1$ if return $< -1.5\%$, $0$ neutral).
+   - **Empirical Out-of-Fold Benchmarking**: Supervised comparison (Logistic Regression, Random Forest, Gradient Boosting) against Buy-and-Hold and Majority-Class baselines.
+   - **SHAP Factor Attribution**: Genuine game-theoretic Shapley values quantifying feature contributions.
+   - **Strategy Backtesting**: Walk-forward simulation with realistic transaction slippage (10 bps) and execution fees, equity curve vs Buy-and-Hold, metrics, and trade logs.
+
+6. **Watchlist & Risk (`watchlist-risk`)**:
+   - **Persistent Watchlist**: Add/remove stocks stored in `localStorage` with live price and change polling.
+   - **Quantitative Risk Profile**: Historical Annualized Volatility (30D & 1Y), Historical 1-day 95% Value at Risk (VaR), Maximum Drawdown (1Y), and estimated Beta.
+   - **Multi-Exchange Screener**: Multi-criteria filtering by Exchange, Sector, Price, Market Cap, RSI conditions, and EMA trend alignment.
+
+---
+
+## 🛠️ Directory Structure
+
+```text
+nexus/
+├── .env.example               # Environment variables template (no secrets)
+├── .gitignore                 # Excludes cookies, tokens, build artifacts, env
+├── index.html                 # HTML entry point with synchronized SEO meta
+├── metadata.json              # Platform identity and capabilities
+├── package.json               # Full-stack Node scripts & dependencies
+├── server.ts                  # Express server + Vite middleware + API endpoints
+├── tsconfig.json              # TypeScript compilation configuration
+├── vite.config.ts             # Vite frontend bundler config with Tailwind v4
+├── src/
+│   ├── App.tsx                # Master 6-section navigation container
+│   ├── main.tsx               # React 19 DOM entry point
+│   ├── types.ts               # Strict TypeScript definitions & interfaces
+│   ├── dataEngine.ts          # Financial calculations, technicals, backtest
+│   ├── finbertService.ts      # FinBERT inference, circuit breaker, local ONNX
+│   ├── ipoCatalog.ts          # SEBI DRHP filing data & GMP tracking
+│   ├── newsIntelligence.ts    # Google News RSS parser, article clustering
+│   ├── universeCatalog.ts     # Curated stock universe & sector classifications
+│   └── components/
+│       ├── ChartsPage.tsx     # Custom interactive SVG candlestick/line chart
+│       ├── BacktestPage.tsx   # Walk-forward strategy backtest & equity curve
+│       ├── HelpModal.tsx      # Quantitative methodology documentation
+│       ├── pages/
+│       │   ├── DashboardPage.tsx         # Section 1: Dashboard
+│       │   ├── StockAnalysisPage.tsx     # Section 2: Stock Analysis Hub
+│       │   ├── CompanyResearchPage.tsx   # Section 3: Company Research
+│       │   ├── TomorrowTradePage.tsx     # 1-Day Tactical Action Plan
+│       │   ├── TechnicalIndicatorsPage.tsx# RSI, MACD, ATR, Pivots
+│       │   ├── FinancialNewsPage.tsx     # Institutional News & Clusters
+│       │   ├── RedditSentimentPage.tsx   # Retail Community Analytics
+│       │   ├── BalanceSheetPage.tsx      # Annual P&L & Solvency
+│       │   ├── InvestmentAnalysisPage.tsx# 12-Dimension Moat Framework
+│       │   ├── DecisionSummaryPage.tsx   # Multi-Timeframe Reconciliation
+│       │   ├── ModelLabPage.tsx          # Section 5: Model Lab
+│       │   └── WatchlistRiskPage.tsx     # Section 6: Watchlist & Risk
+│       └── tabs/
+│           ├── UpcomingIPOsTab.tsx       # Section 4: IPO Centre
+│           ├── EvaluationTab.tsx         # ML Benchmark Table
+│           ├── ExplainabilityTab.tsx     # SHAP Factor Attribution
+│           └── ScannerTab.tsx            # Multi-Exchange Stock Screener
+└── tests/
+    ├── audit_verification.ts             # Invariants, math, and data tests
+    ├── data_integrations.ts              # Provider parsing & formatting tests
+    ├── finbert_inference.ts              # Circuit breaker & fallback tests
+    └── master_upgrade_verification.ts    # Moat, clustering & local inference
 ```
 
 ---
 
-## 📋 System Prerequisites
+## ⚡ Prerequisites & Local Installation
 
-* **Operating System**: Windows 10/11 (or macOS / Linux)
-* **Code Editor**: Visual Studio Code (VS Code)
-* **Node.js**: Version **22.12 or newer** (Download from [nodejs.org](https://nodejs.org/))
-* **Python**: Version **3.10 to 3.12** recommended (Python 3.10+ supported)
+### Prerequisites
+- **Node.js**: Version `22.12.0` or newer (Recommended: Node 22 LTS).
+- **npm**: Version `10` or newer.
+- Modern web browser (Chrome, Edge, Firefox, Safari).
 
----
+### Local Setup Instructions
 
-## ⚡ Quick Start: Windows VS Code Setup Guide
+1. **Clone the repository**:
+   ```bash
+   git clone https://github.com/your-username/nexus.git
+   cd nexus
+   ```
 
-Follow these exact steps to clone or open and run the project locally on Windows:
+2. **Install dependencies**:
+   ```bash
+   npm install
+   ```
 
-### Step 1: Open Project in VS Code
-1. Launch **Visual Studio Code**.
-2. Go to **File -> Open Folder...** and select the project root directory.
-3. Open a new integrated terminal by pressing `` Ctrl + ` `` (or **Terminal -> New Terminal**).
+3. **Configure environment (Optional)**:
+   ```bash
+   cp .env.example .env
+   ```
+   *Note: All core features operate out-of-the-box with zero keys.*
 
----
-
-### Step 2: Configure Python Virtual Environment (Windows)
-
-In the VS Code terminal (PowerShell or Command Prompt):
-
-#### If using PowerShell:
-```powershell
-# 1. Enable execution of local scripts for the current session (if restricted)
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-
-# 2. Create a clean virtual environment
-python -m venv venv
-
-# 3. Activate the virtual environment
-.\venv\Scripts\Activate.ps1
-```
-
-#### If using Command Prompt (cmd.exe):
-```cmd
-python -m venv venv
-venv\Scripts\activate.bat
-```
-
-> **Verification**: Your terminal prompt will now show `(venv)` prefix.
+4. **Start the local development server**:
+   ```bash
+   npm run dev
+   ```
+   Open your browser at `http://localhost:3000`.
 
 ---
 
-### Step 3: Install Python Dependencies
+## 🧪 Running Tests & Build Verification
 
-With `(venv)` activated, upgrade pip and install all required scientific and ML dependencies:
+Nexus includes a comprehensive suite of automated unit, integration, and regression tests.
 
 ```bash
-python -m pip install --upgrade pip
-pip install -r requirements.txt
+# 1. Run all automated test suites
+npm test
+
+# 2. Run TypeScript static type checking
+npm run lint
+
+# 3. Create production bundle
+npm run build
 ```
+
+### Test Coverage Summary:
+- **`tests/finbert_inference.ts`**: Tests HTTP 401, 402 (`CREDITS_EXHAUSTED`), 403, 404, 429, 500, 503 error handling, 15-minute circuit breaker cooldown, VADER fallback labelling, and secret redaction.
+- **`tests/audit_verification.ts`**: Verifies dynamic 1:2.5 R:R calculation, ATR historical volatility labelling, absence of zero-converted delivery volume, and SEBI IPO catalog integrity.
+- **`tests/data_integrations.ts`**: Verifies RSS headline sanitization, number formatting, currency conversion, and missing-data guards.
+- **`tests/master_upgrade_verification.ts`**: Tests 12-dimension moat framework, timeframe disagreement reconciliation, corporate event clustering, and local ONNX inference.
 
 ---
 
-### Step 4: Install Node.js Dependencies
+## 🔐 Environment Variables & Secret Safety
 
-In the same root directory, install the full-stack web application packages:
-
-```bash
-npm install
-```
-
----
-
-### Step 5: Environment Variables Setup (`.env`)
-
-Create your local `.env` file from the provided template:
-
-#### PowerShell:
-```powershell
-Copy-Item .env.example .env
-```
-
-#### Command Prompt:
-```cmd
-copy .env.example .env
-```
-
-> **Note on API Keys**: **NO API keys are required to run the application.** 
-> All market data (Yahoo Finance), news headlines (Google News RSS), FinBERT sentiment, and technical indicators function out-of-the-box with zero configuration. Optional API keys can be added to `.env` if desired (see [API Keys Reference](#-api-keys--external-services-reference)).
-
----
-
-### Step 6: Run the Application
-
-You can run either the **Full-Stack Web Application** or the **Streamlit Analytics Dashboard**:
-
-#### Option A: Unified Streamlit Intelligence Platform (Primary Target)
-This runs the single integrated application featuring all 9 core academic modules:
-* 📊 **Dashboard** (Executive market summary, quote metrics, signal badge, benchmark)
-* 🔍 **Stock Search** (Global & Indian multi-exchange universe explorer + batch scanner)
-* 📈 **Technical Analysis** (Candlestick charts, zero-leakage RSI, MACD, EMAs, Bollinger Bands)
-* 📰 **News/Sentiment** (Dual-engine FinBERT & VADER analysis, zero-leakage news policy)
-* 🤖 **ML Prediction** (Calibrated probability estimates, factor attribution, target formulation)
-* 🔄 **Backtesting** (Walk-forward execution, 15 bps friction, Sortino, trade logs)
-* 📋 **Model Evaluation** (Chronological 3-way split, baselines, confusion matrix, honest reporting)
-* 💡 **Explainability** (SHAP Tree Attribution & factor contribution breakdown)
-* ⚙️ **Settings** (MCA academic metadata, viva voce defense topics, reproducibility)
-
-```bash
-python -m streamlit run app.py
-```
-*(Or simply: `streamlit run app.py`)*
-
-Open your browser at:
-👉 **[http://localhost:8501](http://localhost:8501)**
-
----
-
-#### Option B: Full-Stack React + Express Web Application
-If you also want to run the full-stack TypeScript dashboard:
-
-```bash
-npm run dev
-```
-
-Open your browser at:
-👉 **[http://localhost:3000](http://localhost:3000)**
-
----
-
-## 🔑 API Keys & External Services Reference
-
-| Service | Used In | API Key Required? | Notes |
+| Variable | Required? | Default | Description |
 | :--- | :--- | :--- | :--- |
-| **Yahoo Finance (`yfinance`)** | Prices, OHLCV, Metrics | **NO (Free)** | Uses public Yahoo Finance endpoints with automatic session cookies & crumbs. |
-| **Google News RSS** | Financial News Feed | **NO (Free)** | Fetches real-time RSS feeds directly without authentication. |
-| **VADER Sentiment** | NLP Lexicon Scoring | **NO (Free)** | Downloads `vader_lexicon` locally on first run via NLTK. |
-| **FinBERT Transformer** | NLP Sentiment (`ProsusAI/finbert`) | **NO (Free)** | Hugging Face downloads pretrained model weights into local cache automatically. |
-| **NewsAPI (`NEWS_API_KEY`)** | Financial Press | **OPTIONAL** | If empty, gracefully falls back to Google News RSS with zero errors. |
-| **Reddit OAuth API** | Social Sentiment | **OPTIONAL** | If empty, provides curated community sentiment without crashing. |
-| **Finnhub / AlphaVantage** | Supplemental Quotes | **OPTIONAL** | Handled gracefully if omitted. |
+| `PORT` | Optional | `3000` | Port for Express server (automatically injected by Render). |
+| `NODE_ENV` | Optional | `development` | Set to `production` in production environments. |
+| `HF_TOKEN` | Optional | `""` | Hugging Face Access Token for remote FinBERT inference. |
+| `HF_INFERENCE_ENDPOINT` | Optional | Router URL | Hugging Face inference endpoint for `ProsusAI/finbert`. |
+| `ENABLE_LOCAL_FINBERT` | Optional | `false` | Enables local ONNX model execution (requires $\ge 1\text{ GB}$ RAM). |
+| `NEWS_API_KEY` | Optional | `""` | NewsAPI key. Keyless Google News RSS is used by default. |
+| `REDDIT_CLIENT_ID` | Optional | `""` | Reddit OAuth Client ID for live Reddit API queries. |
+| `REDDIT_CLIENT_SECRET` | Optional | `""` | Reddit OAuth Client Secret. |
+
+### Security Rules:
+- Private keys must never be committed to git or bundled in client JS.
+- `.gitignore` strictly excludes `.env`, `cookies.txt`, `*.token`, and `data_cache/`.
+- If session cookies or access tokens were ever previously stored, invalidate them at the provider immediately and clean repository history.
 
 ---
 
-## 📊 Pre-packaged Datasets & Model Artifacts
+## 🚀 Render Deployment Guide (Free Web Service)
 
-* **Equities Universe Datasets**:
-  - `ai_stock_intelligence/data/stock_universe.csv`: 2,500+ Indian (NSE/BSE) and global tickers.
-  - `ai_stock_intelligence/data/stock_universe_full.csv`: Extended securities universe.
-* **Model Serialization**:
-  - `project/models/`: Target directory for saved scikit-learn models (`trained_model.pkl`).
-  - `ai_stock_intelligence/models_saved/`: Target directory for trained ensemble and calibration models.
-  - Models are trained on-demand with 1 click in the UI using temporal cross-validation (`TimeSeriesSplit`) to guarantee zero look-ahead bias.
+Nexus is pre-configured for 1-click deployment on **Render's Free Web Service tier**.
 
----
-
-## 🛠️ Windows Troubleshooting
-
-### 1. PowerShell Script Execution Policy
-If you get `File ... Activate.ps1 cannot be loaded because running scripts is disabled`:
-```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-.\venv\Scripts\Activate.ps1
-```
-
-### 2. Port 3000 Already in Use
-If port 3000 is occupied by another application, either stop that process or specify a different port in your `.env` file:
-```env
-PORT=3001
-```
-
-### 3. PyTorch Installation on Windows
-If `torch` or `transformers` encounters issues during pip install, you can install the CPU version directly:
-```bash
-pip install torch --index-url https://download.pytorch.org/whl/cpu
-pip install transformers
-```
-*(Note: If torch is not installed, the application automatically uses high-precision financial domain heuristics so you can still run seamlessly.)*
-
----
-
-## 🐙 Push to GitHub Guide
-
-When you're ready to store your code on GitHub:
-
-1. Open your terminal in the project folder.
-2. Initialize git and make your first commit:
+### Step 1: Push Code to GitHub
 ```bash
 git init
 git add .
-git commit -m "feat: initial commit for AI stock intelligence dashboard"
-```
-
-3. Create a new empty repository on [GitHub](https://github.com/new) (e.g. `stock-intelligence-dashboard`).
-4. Link and push your branch:
-```bash
+git commit -m "feat: complete Nexus professional financial intelligence platform"
 git branch -M main
-git remote add origin https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git
+git remote add origin https://github.com/your-username/nexus.git
 git push -u origin main
 ```
 
-*(Note: `.gitignore` is already preconfigured to ensure your local `venv/`, `node_modules/`, and `.env` credentials are never pushed.)*
+### Step 2: Configure Render Web Service
+1. Log in to [Render Dashboard](https://dashboard.render.com).
+2. Click **New +** $\to$ **Web Service**.
+3. Connect your GitHub repository `nexus`.
+4. Configure the service settings:
+   - **Name**: `nexus-stock-intelligence`
+   - **Language / Runtime**: `Node`
+   - **Branch**: `main`
+   - **Region**: Closest to your users (e.g., `Singapore` or `Frankfurt`).
+   - **Build Command**: `npm run build`
+   - **Start Command**: `npm start`
+   - **Instance Type**: `Free` (0.1 CPU, 512MB RAM)
 
----
+5. **Environment Variables** (in Render Dashboard):
+   - `NODE_ENV` = `production`
+   - *(Leave all optional API keys blank for 100% keyless operation).*
 
-## 🌐 100% Free Cloud Deployment Guide
+6. Click **Deploy Web Service**. Render will automatically build the React bundle and launch the Express backend on port `3000`.
 
-### Option 1: Streamlit Community Cloud (Recommended for Streamlit)
-Streamlit Community Cloud provides **unlimited free hosting** directly from GitHub:
-
-1. Go to **[share.streamlit.io](https://share.streamlit.io)** and log in with your GitHub account.
-2. Click **"New app"**.
-3. Select your repository: `YOUR_USERNAME/YOUR_REPO_NAME`.
-4. Branch: `main`.
-5. Main file path: **`app.py`** *(or `ai_stock_intelligence/app.py`)*.
-6. Under **Advanced settings -> Secrets**, you can optionally paste any API keys (e.g., `NEWS_API_KEY`), or leave it blank as default features require **zero API keys**.
-7. Click **Deploy!** — Within 2 minutes, you will receive a free public `*.streamlit.app` URL.
-
----
-
-### Option 2: Render / Railway / Fly.io (For Full-Stack Node + React App)
-1. Link your GitHub repository on [render.com](https://render.com).
-2. Choose **Web Service**.
-3. Environment: **Node**
-4. Node Version: **22.12 or newer (Node 22+)**
-5. Build Command: `npm install && npm run build`
-6. Start Command: `npm run start` (runs `tsx server.ts` with production static serving)
-7. Environment Variables:
-   - `NODE_ENV`: `production`
-   - `PORT`: `3000` (or leave default assigned by Render `$PORT`)
-8. Free tier includes automatic HTTPS, managed TLS certificates, and auto-deploy on git push.
-
----
-
-### Option 3: Hugging Face Spaces (Free ML / Streamlit Hosting)
-1. Go to [huggingface.co/spaces](https://huggingface.co/spaces) and click **Create new Space**.
-2. Select **Streamlit** SDK.
-3. Push your repository files or link your GitHub repo.
-4. Hugging Face automatically installs `requirements.txt` and starts your app for free.
-
----
-
-## 📂 Project Structure
-
+### Step 3: Health Check Endpoint
+Render monitors service health via:
+```text
+GET /api/health
 ```
-├── .env.example              # Environment variables template
-├── requirements.txt          # Python dependencies
-├── package.json              # Node.js dependencies and scripts
-├── server.ts                 # Full-stack Express backend with Yahoo Finance proxy & RSS
-├── vite.config.ts            # Vite build configuration
-├── index.html                # Application entry HTML
-├── src/                      # React frontend
-│   ├── App.tsx               # Main application orchestration & 8-page router
-│   ├── types.ts              # TypeScript domain interfaces
-│   ├── dataEngine.ts         # Quantitative computations & data pipeline
-│   ├── universeCatalog.ts    # Curated Indian & Global stock universe
-│   └── components/
-│       ├── pages/            # Page components (Tomorrow Trade Desk, Financials, etc.)
-│       └── tabs/             # IPO and analysis tabs
-├── ai_stock_intelligence/    # Comprehensive Python Streamlit application
-│   ├── app.py                # Streamlit entry point
-│   ├── config/               # Settings & environment configuration
-│   ├── data/                 # Market data, News, Reddit, Universe CSVs
-│   ├── features/             # Technical and sentiment feature engineering
-│   ├── models/               # Walk-forward training, calibration, registry
-│   ├── backtesting/          # Transaction-cost-aware backtesting engine
-│   └── explainability/       # SHAP feature attribution
-└── project/                  # Lightweight Python Streamlit module
-    ├── app.py                # Streamlit application
-    ├── services.py           # yfinance & news services
-    ├── model.py              # Gradient Boosting with probability calibration
-    └── backtest.py           # Historical simulation engine
-```
+Returns HTTP 200 with system uptime, RAM consumption, and status of all data providers.
+
+---
+
+## ⚠️ Free-Tier Limitations & Realities
+
+1. **Render Free Sleep Cycle**:
+   - Free instances spin down after 15 minutes of inactivity. The first request after sleep may take 30–50 seconds to boot.
+2. **512 MB RAM Limit**:
+   - The in-memory Node/Express process requires ~220–350 MB RSS.
+   - The local quantized ONNX FinBERT model requires ~733 MB peak RSS during active batch inference. Running local ONNX on the free tier risks out-of-memory SIGKILLs.
+   - **Solution**: The platform defaults to the cloud Hugging Face Router API with VADER fallback, preserving stability on the 512 MB free tier. Local ONNX can be activated on instances with $\ge 1\text{ GB}$ RAM (`ENABLE_LOCAL_FINBERT=true`).
+3. **Public Rate Limits**:
+   - Public Yahoo Finance endpoints can occasionally rate-limit excessive bursts. The server implements request caching (60s TTL) to prevent throttling.
+4. **NSE Delivery Volume**:
+   - Exchange delivery settlement files are published by NSE India only after market hours. Intraday delivery percentages will show `N/A` rather than misleading static numbers.
+
+---
+
+## 📜 Statutory Financial Disclaimer
+
+Nexus is an educational and analytical research software platform. Nexus does not provide personalized investment advice, brokerage services, or financial recommendations. Financial markets involve substantial risk of loss. Past performance, backtest simulations, and algorithmic trade setups do not guarantee future results.

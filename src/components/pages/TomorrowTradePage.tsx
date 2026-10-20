@@ -92,7 +92,7 @@ export const TomorrowTradePage: React.FC<TomorrowTradePageProps> = ({ signal, qu
               {setup.entryZone}
             </div>
             <p className="text-[11px] text-slate-400 font-sans">
-              Wait for limit trigger near support; do not chase market open spikes.
+              Base Trigger: {currSym}{setup.triggerPrice.toFixed(1)}. Limit orders in zone; do not chase open gap spikes.
             </p>
           </div>
 
@@ -109,24 +109,33 @@ export const TomorrowTradePage: React.FC<TomorrowTradePageProps> = ({ signal, qu
               </span>
             </div>
             <p className="text-[11px] text-slate-400 font-sans">
-              Strict invalidation floor to protect trade capital against drawdowns.
+              {isBuy
+                ? `Placed strictly below entry at support (${currSym}${setup.stopLoss.toFixed(1)}) to cap maximum drawdown.`
+                : `Placed strictly above entry at overhead resistance (${currSym}${setup.stopLoss.toFixed(1)}) for short protection.`}
             </p>
           </div>
 
           {/* Take-Profit Targets */}
           <div className="bg-slate-950/70 border border-emerald-900/60 p-4 rounded-xl space-y-1 font-mono">
             <div className="flex items-center justify-between text-emerald-400 text-xs">
-              <span className="font-bold uppercase">3. Targets (T1 / T2)</span>
+              <span className="font-bold uppercase">3. Targets & R:R</span>
               <Target className="w-4 h-4 text-emerald-400" />
             </div>
             <div className="text-lg font-bold text-emerald-400">
               T1: {currSym}{setup.target1.toFixed(1)} <span className="text-xs font-normal text-slate-400">/</span> T2: {currSym}{setup.target2.toFixed(1)}
             </div>
             <p className="text-[11px] text-slate-400 font-sans">
-              Book 50% profit at T1 (+{setup.target1Pct}%) and trail stop to breakeven for T2 runner (+{setup.target2Pct}%).
+              T1 R:R ~ 1:1.8 (+{setup.target1Pct}%) · T2 R:R ~ 1:3.0 (+{setup.target2Pct}%) · Blended: {setup.riskRewardRatio}
             </p>
           </div>
         </div>
+
+        {/* Sell / Short Distinction Notice when Bearish */}
+        {isSell && (
+          <div className="mt-4 p-3.5 bg-rose-950/40 border border-rose-900/60 rounded-xl text-xs text-rose-200/90 leading-relaxed font-sans">
+            <strong>Execution Discipline Note:</strong> This SELL signal directs traders holding open long positions to exit and preserve capital. Initiating a new short position requires a confirmed breakdown below intraday S1 support ({currSym}{forecast.supportLevel.toFixed(1)}); do not assume an automatic short without confirmation.
+          </div>
+        )}
       </div>
 
       {/* 2. Institutional Market Flow & Levels */}
@@ -137,7 +146,7 @@ export const TomorrowTradePage: React.FC<TomorrowTradePageProps> = ({ signal, qu
             Intraday Flow & Key Price Decision Levels
           </h4>
           <span className="px-2.5 py-0.5 rounded text-[11px] font-mono font-bold bg-slate-950 border border-slate-800 text-emerald-400">
-            Calculated R:R: {setup.riskRewardRatio}
+            Blended Execution R:R: {setup.riskRewardRatio}
           </span>
         </div>
 

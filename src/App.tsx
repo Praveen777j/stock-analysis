@@ -4,14 +4,12 @@
  */
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { TomorrowTradePage } from './components/pages/TomorrowTradePage';
-import { ChartsPage } from './components/ChartsPage';
-import { TechnicalIndicatorsPage } from './components/pages/TechnicalIndicatorsPage';
-import { FinancialNewsPage } from './components/pages/FinancialNewsPage';
-import { RedditSentimentPage } from './components/pages/RedditSentimentPage';
-import { BalanceSheetPage } from './components/pages/BalanceSheetPage';
+import { DashboardPage } from './components/pages/DashboardPage';
+import { StockAnalysisPage } from './components/pages/StockAnalysisPage';
+import { CompanyResearchPage } from './components/pages/CompanyResearchPage';
+import { ModelLabPage } from './components/pages/ModelLabPage';
+import { WatchlistRiskPage } from './components/pages/WatchlistRiskPage';
 import { UpcomingIPOsTab } from './components/tabs/UpcomingIPOsTab';
-import { BacktestPage } from './components/BacktestPage';
 import { HelpModal } from './components/HelpModal';
 
 import {
@@ -28,39 +26,76 @@ import {
 } from './dataEngine';
 import { HistoricalBar, StockQuote, SentimentData, BenchmarkData } from './types';
 import {
-  Target,
+  LayoutDashboard,
   LineChart,
-  Layers,
-  Newspaper,
-  MessageSquare,
-  ShieldCheck,
+  Building2,
   Sparkles,
+  Brain,
+  BookmarkCheck,
   BookOpen,
   Search,
   TrendingUp,
   TrendingDown,
   X,
   AlertCircle,
-  Loader2
+  Loader2,
+  Layers,
+  ShieldCheck
 } from 'lucide-react';
 
 export type TraderPageId =
+  | 'dashboard'
+  | 'stock-analysis'
+  | 'research'
+  | 'ipos'
+  | 'model-lab'
+  | 'watchlist-risk'
+  // Legacy aliases for backward compatibility
   | 'trade'
+  | 'investing'
+  | 'decision'
   | 'chart'
   | 'technicals'
   | 'news'
   | 'reddit'
   | 'financials'
-  | 'ipos'
   | 'backtest';
+
+const INITIAL_WATCHLIST = ['RELIANCE.NS', 'TCS.NS', 'AAPL'];
 
 export default function App() {
   const [currentTicker, setCurrentTicker] = useState('RELIANCE.NS');
   const [selectedRange, setSelectedRange] = useState('1y');
-  const [activePage, setActivePage] = useState<TraderPageId>('trade');
+  const [activePage, setActivePage] = useState<TraderPageId>('dashboard');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
+
+  // Persistent Watchlist in localStorage
+  const [watchlist, setWatchlist] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('nexus_watchlist');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (_) {
+      // Fallback
+    }
+    return INITIAL_WATCHLIST;
+  });
+
+  const toggleWatchlist = (ticker: string) => {
+    setWatchlist((prev) => {
+      const next = prev.includes(ticker) ? prev.filter((t) => t !== ticker) : [...prev, ticker];
+      try {
+        localStorage.setItem('nexus_watchlist', JSON.stringify(next));
+      } catch (_) {
+        // Storage full / disabled
+      }
+      return next;
+    });
+  };
 
   // Search input state
   const [searchQuery, setSearchQuery] = useState('');
@@ -76,7 +111,6 @@ export default function App() {
   // Live Market State: Null initially until the first real stock response arrives
   const [quote, setQuote] = useState<StockQuote | null>(null);
   const [benchmark, setBenchmark] = useState<BenchmarkData | null>(null);
-
   const [bars, setBars] = useState<HistoricalBar[]>([]);
   const [sentiment, setSentiment] = useState<SentimentData | null>(null);
 
@@ -93,14 +127,16 @@ export default function App() {
       try {
         const [data, benchmarkData] = await Promise.all([
           fetchLiveStockData(currentTicker, selectedRange),
-          fetchLiveBenchmark(currentTicker).catch(() => extractBenchmark(currentTicker))
+          fetchLiveBenchmark(currentTicker)
         ]);
 
         if (!isMounted) return;
+
         setQuote(data.quote);
         setBars(data.bars);
         setBenchmark(benchmarkData);
 
+        // Fetch genuine news & financial sentiment for the resolved company
         try {
           const newsData = await fetchLiveNewsAndSentiment(currentTicker, data.quote.companyName, data.quote);
           if (isMounted) setSentiment(newsData);
@@ -157,12 +193,17 @@ export default function App() {
     setCurrentTicker(ticker);
     setSearchQuery('');
     setIsSearchOpen(false);
+    // Switch to stock analysis view if currently on dashboard or if navigating from another view
+    if (activePage === 'dashboard') {
+      setActivePage('stock-analysis');
+    }
   };
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (searchQuery.trim()) {
       handleSelectTicker(searchQuery.trim().toUpperCase());
+      setActivePage('stock-analysis');
     }
   };
 
@@ -191,15 +232,49 @@ export default function App() {
     [technicals, safeSentiment, safeQuote]
   );
 
-  const traderPages: { id: TraderPageId; label: string; icon: React.FC<{ className?: string }>; desc: string }[] = [
-    { id: 'trade', label: "Tomorrow Trade Desk", icon: Target, desc: "Direct Action Directive (Buy/Sell/Hold), Entry Zone, Stop Loss & Targets" },
-    { id: 'chart', label: "Interactive Chart", icon: LineChart, desc: "Full Interactive Candlestick Chart, Timeframes & EMAs" },
-    { id: 'technicals', label: "Technical Indicators", icon: Layers, desc: "RSI (14), Moving Averages, MACD, ATR Oscillators" },
-    { id: 'news', label: "Financial News", icon: Newspaper, desc: "Verified Financial Media Coverage & Market Impact" },
-    { id: 'reddit', label: "Reddit Community", icon: MessageSquare, desc: "Grassroots Retail Investor Discussions & Sentiment" },
-    { id: 'financials', label: "Company Financials & P&L", icon: ShieldCheck, desc: "Annual Profit & Loss Trajectory, Corporate Details & Solvency Audit" },
-    { id: 'ipos', label: "Upcoming IPOs & GMP", icon: Sparkles, desc: "Primary Market Pipeline, Grey Market Premium & Allotment" },
-    { id: 'backtest', label: "Strategy Backtest", icon: TrendingUp, desc: "Historical Strategy Simulation, Return & Drawdown Track Record" }
+  // The 6 Primary Structured Sections (Phase 2 UX Requirement)
+  const mainNavigationSections: {
+    id: TraderPageId;
+    label: string;
+    icon: React.FC<{ className?: string }>;
+    desc: string;
+  }[] = [
+    {
+      id: 'dashboard',
+      label: 'Dashboard',
+      icon: LayoutDashboard,
+      desc: 'Market overview, global benchmarks, curated movers, and system health'
+    },
+    {
+      id: 'stock-analysis',
+      label: 'Stock Analysis',
+      icon: LineChart,
+      desc: 'Central price charts, technical indicators, dual-engine sentiment, and tactical action plan'
+    },
+    {
+      id: 'research',
+      label: 'Company Research',
+      icon: Building2,
+      desc: 'Statutory filings, annual P&L trajectory, balance sheet solvency, and 12-dimension moat framework'
+    },
+    {
+      id: 'ipos',
+      label: 'IPO Centre',
+      icon: Sparkles,
+      desc: 'Verified primary market pipeline, SEBI DRHP filing metrics, and unofficial GMP tracking'
+    },
+    {
+      id: 'model-lab',
+      label: 'Model Lab',
+      icon: Brain,
+      desc: 'Out-of-fold supervised ML benchmarking, SHAP attribution, and walk-forward backtesting'
+    },
+    {
+      id: 'watchlist-risk',
+      label: 'Watchlist & Risk',
+      icon: BookmarkCheck,
+      desc: 'Locally persisted watchlists, historical volatility, VaR 95%, and multi-exchange screener'
+    }
   ];
 
   const popularStocks = [
@@ -215,6 +290,20 @@ export default function App() {
 
   const isPositive = quote ? quote.change >= 0 : true;
 
+  // Resolve legacy alias pages to the 6 primary pages
+  const resolvedActivePage: TraderPageId = useMemo(() => {
+    if (activePage === 'trade' || activePage === 'chart' || activePage === 'technicals' || activePage === 'news' || activePage === 'reddit' || activePage === 'decision') {
+      return 'stock-analysis';
+    }
+    if (activePage === 'investing' || activePage === 'financials') {
+      return 'research';
+    }
+    if (activePage === 'backtest') {
+      return 'model-lab';
+    }
+    return activePage;
+  }, [activePage]);
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-emerald-500/30 selection:text-emerald-200">
       {/* 1. Developer-Grade Sticky Navigation Bar */}
@@ -223,15 +312,25 @@ export default function App() {
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2.5">
             {/* Left: Terminal Brand & Active Stock Ticker */}
             <div className="flex items-center justify-between gap-3 flex-wrap">
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-                <span className="font-mono font-extrabold text-sm tracking-wide text-slate-100">
-                  NEXUS STOCK SENTIMENT DASHBOARD
+              <div
+                className="flex items-center gap-2 cursor-pointer group"
+                onClick={() => setActivePage('dashboard')}
+              >
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 group-hover:scale-125 transition-transform" />
+                <span className="font-mono font-black text-sm tracking-wide text-slate-100 group-hover:text-emerald-400 transition-colors">
+                  NEXUS
+                </span>
+                <span className="hidden sm:inline text-[11px] font-mono text-slate-500">
+                  | AI Stock Analysis & Decision Platform
                 </span>
               </div>
 
               {/* Active Stock Summary Pill */}
-              <div className="flex items-center gap-2 px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 font-mono text-xs">
+              <div
+                onClick={() => setActivePage('stock-analysis')}
+                className="flex items-center gap-2 px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 font-mono text-xs hover:border-slate-700 cursor-pointer transition-colors"
+                title="Click to view full analysis"
+              >
                 {quote ? (
                   <>
                     <span className="font-bold text-slate-200">{quote.ticker}</span>
@@ -253,39 +352,42 @@ export default function App() {
               </div>
             </div>
 
-            {/* Right: Search Input + Methodology Button */}
-            <div className="flex items-center gap-2.5 flex-1 max-w-xl justify-end">
-              {/* Compact Search Bar with Autocomplete Dropdown */}
-              <div ref={searchRef} className="relative flex-1 max-w-md">
-                <form onSubmit={handleSearchSubmit} className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-slate-400">
-                    <Search className="w-3.5 h-3.5" />
+            {/* Right: Autocomplete Search & Methodology Trigger */}
+            <div className="flex items-center gap-2 relative">
+              {/* Autocomplete Input Form */}
+              <div ref={searchRef} className="relative w-full sm:w-72">
+                <form onSubmit={handleSearchSubmit}>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => {
+                        setSearchQuery(e.target.value);
+                        setIsSearchOpen(true);
+                      }}
+                      onFocus={() => setIsSearchOpen(true)}
+                      placeholder="Search company or ticker..."
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg pl-8 pr-7 py-1.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500 font-mono transition-colors"
+                    />
+                    <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-2.5" />
+                    {searchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSearchQuery('');
+                          setSuggestions([]);
+                        }}
+                        className="absolute right-2 top-2 text-slate-500 hover:text-slate-300"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => {
-                      setSearchQuery(e.target.value);
-                      setIsSearchOpen(true);
-                    }}
-                    onFocus={() => setIsSearchOpen(true)}
-                    placeholder="Search stock (e.g. RELIANCE, TCS, INFY, AAPL)..."
-                    className="w-full bg-slate-900 border border-slate-700/80 hover:border-slate-600 focus:border-emerald-500 focus:outline-none rounded-lg pl-8 pr-7 py-1.5 text-xs text-slate-100 placeholder-slate-500 font-mono transition-colors"
-                  />
-                  {searchQuery && (
-                    <button
-                      type="button"
-                      onClick={() => setSearchQuery('')}
-                      className="absolute inset-y-0 right-0 pr-2 flex items-center text-slate-400 hover:text-slate-200"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  )}
                 </form>
 
-                {/* Autocomplete Suggestions Dropdown */}
+                {/* Autocomplete Suggestion Dropdown */}
                 {isSearchOpen && suggestions.length > 0 && (
-                  <div className="absolute top-full left-0 right-0 mt-1 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl z-50 overflow-hidden font-mono text-xs max-h-64 overflow-y-auto">
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-slate-900 border border-slate-800 rounded-xl shadow-xl overflow-hidden z-50 max-h-60 overflow-y-auto font-mono text-xs">
                     {suggestions.map((s) => (
                       <button
                         key={s.ticker}
@@ -334,10 +436,10 @@ export default function App() {
             ))}
           </div>
 
-          {/* Clean 4-Tab Navigation Bar */}
+          {/* Clean 6-Section Primary Navigation Bar (Phase 2 Requirement) */}
           <nav className="flex items-center gap-2 pt-2.5 mt-1 overflow-x-auto scrollbar-none">
-            {traderPages.map((page) => {
-              const isActive = activePage === page.id;
+            {mainNavigationSections.map((page) => {
+              const isActive = resolvedActivePage === page.id;
               const Icon = page.icon;
               return (
                 <button
@@ -348,6 +450,7 @@ export default function App() {
                       ? 'bg-emerald-500 text-slate-950 font-bold shadow-md shadow-emerald-500/25 ring-1 ring-emerald-400'
                       : 'bg-slate-900/70 border border-slate-800/80 text-slate-300 hover:text-slate-100 hover:bg-slate-800/80'
                   }`}
+                  title={page.desc}
                 >
                   <Icon className="w-4 h-4" />
                   <span>{page.label}</span>
@@ -358,7 +461,7 @@ export default function App() {
         </div>
       </header>
 
-      {/* 2. Main Page Viewport — Strictly Only The Selected Feature Page */}
+      {/* 2. Main Page Viewport */}
       <div className="max-w-7xl mx-auto px-4 py-5">
         {/* Error / Not Found Display */}
         {error ? (
@@ -375,7 +478,7 @@ export default function App() {
               </div>
             </div>
           </div>
-        ) : isLoading && !quote && activePage !== 'ipos' ? (
+        ) : isLoading && !quote && resolvedActivePage !== 'dashboard' && resolvedActivePage !== 'ipos' ? (
           <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-16 text-center space-y-3 font-mono">
             <Loader2 className="w-8 h-8 text-emerald-400 animate-spin mx-auto" />
             <div className="text-slate-200 font-bold text-sm">
@@ -387,44 +490,63 @@ export default function App() {
           </div>
         ) : (
           <main className="min-h-[550px]">
-            {/* STRICT PAGE 1: Tomorrow Trade Desk (Action Plan, Targets, SL, VWAP, Gap) */}
-            {activePage === 'trade' && quote && (
-              <TomorrowTradePage signal={signal} quote={quote} />
+            {/* 1. DASHBOARD */}
+            {resolvedActivePage === 'dashboard' && (
+              <DashboardPage
+                onSelectTicker={handleSelectTicker}
+                watchlist={watchlist}
+                onToggleWatchlist={toggleWatchlist}
+              />
             )}
 
-            {/* STRICT PAGE 2: Interactive Chart (Full-width Candlestick & Volume Chart) */}
-            {activePage === 'chart' && quote && (
-              <ChartsPage ticker={currentTicker} bars={bars} quote={quote} />
+            {/* 2. STOCK ANALYSIS (Centralized Hub) */}
+            {resolvedActivePage === 'stock-analysis' && quote && (
+              <StockAnalysisPage
+                quote={quote}
+                bars={bars}
+                technicals={technicals}
+                sentiment={safeSentiment}
+                signal={signal}
+                fundamentals={fundamentals}
+                watchlist={watchlist}
+                onToggleWatchlist={toggleWatchlist}
+                onSelectTicker={handleSelectTicker}
+              />
             )}
 
-            {/* STRICT PAGE 3: Technical Indicators (RSI, MACD, EMAs, ATR & Volatility) */}
-            {activePage === 'technicals' && quote && (
-              <TechnicalIndicatorsPage technicals={technicals} quote={quote} bars={bars} />
+            {/* 3. COMPANY RESEARCH */}
+            {resolvedActivePage === 'research' && quote && (
+              <CompanyResearchPage
+                quote={quote}
+                fundamentals={fundamentals}
+                benchmark={benchmark || undefined}
+              />
             )}
 
-            {/* STRICT PAGE 4: Financial News (Verified Institutional Financial Press) */}
-            {activePage === 'news' && quote && sentiment && (
-              <FinancialNewsPage sentiment={sentiment} quote={quote} />
-            )}
-
-            {/* STRICT PAGE 5: Reddit Community (Retail Investor Sentiment & Discussion) */}
-            {activePage === 'reddit' && quote && sentiment && (
-              <RedditSentimentPage sentiment={sentiment} quote={quote} />
-            )}
-
-            {/* STRICT PAGE 6: Company Financials (Balance Sheet Solvency & Debt Health) */}
-            {activePage === 'financials' && quote && (
-              <BalanceSheetPage quote={quote} fundamentals={fundamentals} benchmark={benchmark || undefined} />
-            )}
-
-            {/* STRICT PAGE 7: Upcoming IPOs & GMP Tracker */}
-            {activePage === 'ipos' && (
+            {/* 4. IPO CENTRE */}
+            {resolvedActivePage === 'ipos' && (
               <UpcomingIPOsTab />
             )}
 
-            {/* STRICT PAGE 8: Strategy Backtest (Historical Walk-Forward Simulation) */}
-            {activePage === 'backtest' && quote && (
-              <BacktestPage backtest={backtest} ticker={currentTicker} />
+            {/* 5. MODEL LAB & BACKTESTING */}
+            {resolvedActivePage === 'model-lab' && quote && (
+              <ModelLabPage
+                signal={signal}
+                backtest={backtest}
+                ticker={currentTicker}
+              />
+            )}
+
+            {/* 6. WATCHLIST & RISK */}
+            {resolvedActivePage === 'watchlist-risk' && (
+              <WatchlistRiskPage
+                watchlist={watchlist}
+                onToggleWatchlist={toggleWatchlist}
+                onSelectTicker={handleSelectTicker}
+                activeQuote={safeQuote}
+                bars={bars}
+                technicals={technicals}
+              />
             )}
           </main>
         )}
@@ -434,8 +556,8 @@ export default function App() {
 
         {/* Professional Minimal Footer */}
         <footer className="mt-14 pt-6 border-t border-slate-800/80 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 font-mono gap-2">
-          <span>Nexus Stock Sentiment Dashboard · Real-Time Stock Market Intelligence</span>
-          <span>Disciplined Risk Management · 1:2.5 Asymmetric R:R</span>
+          <span>Nexus · Professional AI Stock Analysis & Decision Support Platform</span>
+          <span>Disciplined Quantitative Risk Management · Zero-Paid-API Architecture</span>
         </footer>
       </div>
     </div>

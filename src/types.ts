@@ -107,6 +107,19 @@ export interface NewsArticle {
   corporateEventType?: 'EXPANSION' | 'RISK' | 'ROUTINE';
 }
 
+export interface EventCluster {
+  id: string;
+  title: string;
+  category: 'CATALYST' | 'RISK' | 'BROKER_OPINION' | 'ROUTINE_FILING' | 'PRICE_ACTION';
+  articleCount: number;
+  summary: string;
+  firstSeen: string;
+  latestSeen: string;
+  articles: NewsArticle[];
+  isVerifiedCatalyst: boolean;
+  isVerifiedRisk: boolean;
+}
+
 export interface RedditPost {
   title: string;
   subreddit: string;
@@ -141,10 +154,12 @@ export interface SentimentData {
   dataStatus?: 'LIVE' | 'EMPTY' | 'UNAVAILABLE';
   finbertDiagnostic?: string;
   finbertReason?: 'MISSING_TOKEN' | 'INVALID_CREDENTIALS' | 'INSUFFICIENT_ACCESS' | 'CREDITS_EXHAUSTED' | 'EMPTY_INPUT' | 'AUTH_ERROR' | 'RATE_LIMITED' | 'UNSUPPORTED_ENDPOINT' | 'MODEL_LOADING' | 'MODEL_UNAVAILABLE' | 'TIMEOUT' | 'NETWORK_ERROR' | 'MALFORMED_RESPONSE' | 'SERVICE_UNAVAILABLE';
-  sentimentMethod?: 'FINBERT_VADER_HYBRID' | 'VADER_FALLBACK' | 'UNAVAILABLE';
+  sentimentMethod?: 'FINBERT_LOCAL' | 'FINBERT_REMOTE' | 'FINBERT_VADER_HYBRID' | 'VADER_FALLBACK' | 'UNAVAILABLE';
+  sentimentEngine?: 'FINBERT_LOCAL' | 'FINBERT_REMOTE' | 'VADER_FALLBACK' | 'UNAVAILABLE';
   distinctEventsCount?: number;
   expansionCatalystsCount?: number;
   cautionaryOverhangsCount?: number;
+  eventClusters?: EventCluster[];
 }
 
 export interface AnnualFinancialRow {
@@ -454,3 +469,141 @@ export interface IPODetails {
   };
   gmpHistory?: Array<{ date: string; gmpPrice: number; gmpPct: number }>;
 }
+
+// ==============================================================================
+// 9. NEW FEATURE NINE: LONG-TERM INVESTMENT ANALYSIS INTERFACES
+// ==============================================================================
+
+export type InvestmentHorizon = '3-5 Years' | '5-10 Years';
+export type RiskPreference = 'Conservative' | 'Moderate' | 'Aggressive';
+
+export type InvestmentClassification =
+  | 'POTENTIALLY ATTRACTIVE'
+  | 'STRONGER FUNDAMENTALS'
+  | 'WATCHLIST'
+  | 'HIGH RISK'
+  | 'AVOID / NEGATIVE THESIS'
+  | 'INSUFFICIENT DATA';
+
+export interface InvestmentDimensionEvaluation {
+  id: string;
+  name: string;
+  score?: number; // 1 to 10 scale where calculated, or undefined
+  status: 'POSITIVE' | 'NEUTRAL' | 'CAUTION' | 'NEGATIVE' | 'UNAVAILABLE';
+  finding: string;
+  evidenceQuality: 'HIGH (AUDITED)' | 'MODERATE (PROVIDER DATA)' | 'ESTIMATED / DERIVED' | 'LIMITED' | 'UNAVAILABLE';
+  source: string;
+  period: string;
+  implication: string;
+  limitations?: string;
+}
+
+export interface LongTermInvestmentAnalysis {
+  ticker: string;
+  companyName: string;
+  sector: string;
+  industry: string;
+  horizon: InvestmentHorizon;
+  riskPreference: RiskPreference;
+  classification: InvestmentClassification;
+  confidenceLabel: 'HIGH CONFIDENCE' | 'MODERATE CONFIDENCE' | 'LOW CONFIDENCE' | 'INSUFFICIENT DATA';
+  executiveThesis: string;
+  threeStrongestReasons: string[];
+  threeMajorRisks: string[];
+  valuationAssessment: {
+    status: 'POTENTIALLY UNDERVALUED' | 'FAIRLY VALUED' | 'VALUATION DEMANDING / EXPENSIVE' | 'HIGH MULTIPLE SPECULATIVE' | 'UNAVAILABLE';
+    currentPe?: number;
+    historicalPeMedian?: number;
+    peerPeAverage?: number;
+    pbRatio?: number;
+    fcfYieldPct?: number;
+    narrative: string;
+  };
+  financialHealthSummary: string;
+  businessGrowthAssessment: string;
+  keyMetricsToMonitor: { metric: string; currentVal: string; benchmark: string; rationale: string }[];
+  thesisValidationTriggers: string[];
+  thesisInvalidationTriggers: string[];
+  dataCompletenessPct: number;
+  reportingDates: string;
+  missingEvidence: string[];
+  dimensions: InvestmentDimensionEvaluation[];
+}
+
+// ==============================================================================
+// 10. NEW FEATURE TEN: INTEGRATED STOCK DECISION AND COMPARISON INTERFACES
+// ==============================================================================
+
+export type ShortTermAction =
+  | 'BUY / LONG SETUP'
+  | 'SELL / SHORT SETUP'
+  | 'SELL / EXIT LONGS'
+  | 'WAIT / CONSOLIDATION'
+  | 'INSUFFICIENT DATA';
+
+export interface ShortTermTradingDecision {
+  action: ShortTermAction;
+  bias: string;
+  timeframe: string;
+  triggerPrice?: number;
+  entryZone: string;
+  stopLoss?: number;
+  stopLossReasoning: string;
+  target1?: number;
+  target2?: number;
+  individualR1Ratio: string;
+  individualR2Ratio: string;
+  blendedRiskReward: string;
+  invalidationCondition: string;
+  requiredConfirmation: string;
+  explanation: string;
+  dataFreshness: string;
+}
+
+export interface DecisionComparisonRow {
+  dimension: string;
+  finding: string;
+  evidenceQuality: string;
+  mainImplication: string;
+  status: 'BULLISH' | 'BEARISH' | 'NEUTRAL' | 'UNAVAILABLE';
+}
+
+export interface IntegratedDecisionSummary {
+  ticker: string;
+  companyName: string;
+  shortTerm: ShortTermTradingDecision;
+  longTerm: LongTermInvestmentAnalysis;
+  matrix: DecisionComparisonRow[];
+  disagreementExplanation: string;
+  synthesisVerdict: string;
+  dataFreshness: string;
+}
+
+export interface StockComparisonItem {
+  ticker: string;
+  name: string;
+  sector: string;
+  price: number;
+  currency: string;
+  change1yPct?: number;
+  businessQuality: string;
+  growth: string;
+  profitability: string;
+  debtHealth: string;
+  valuation: string;
+  shortTermBias: string;
+  longTermClassification: InvestmentClassification;
+  dataCompleteness: string;
+}
+
+export type IpoCategoryTab =
+  | 'ALL'
+  | 'UPCOMING'
+  | 'DRHP_FILED'
+  | 'RHP_FILED'
+  | 'OPEN_NOW'
+  | 'CLOSED_AWAITING'
+  | 'RECENTLY_LISTED'
+  | 'HISTORICAL'
+  | 'UNLISTED_PRE_IPO';
+

@@ -29,14 +29,17 @@ export interface FinbertItemResult {
 
 export interface FinbertInferenceResult {
   status: 'LIVE' | 'UNAVAILABLE';
+  engine?: 'FINBERT_LOCAL' | 'FINBERT_REMOTE' | 'VADER_FALLBACK' | 'UNAVAILABLE';
   overallScore: number | null;
   items: Array<FinbertItemResult | null>;
   diagnostics: {
     endpoint: string;
     model: string;
     articlesAnalyzed: number;
-    reason?: 'MISSING_TOKEN' | 'INVALID_CREDENTIALS' | 'INSUFFICIENT_ACCESS' | 'CREDITS_EXHAUSTED' | 'EMPTY_INPUT' | 'MODEL_LOADING' | 'MODEL_UNAVAILABLE' | 'AUTH_ERROR' | 'RATE_LIMITED' | 'UNSUPPORTED_ENDPOINT' | 'TIMEOUT' | 'NETWORK_ERROR' | 'MALFORMED_RESPONSE' | 'SERVICE_UNAVAILABLE';
+    reason?: 'MISSING_TOKEN' | 'INVALID_CREDENTIALS' | 'INSUFFICIENT_ACCESS' | 'CREDITS_EXHAUSTED' | 'EMPTY_INPUT' | 'MODEL_LOADING' | 'MODEL_UNAVAILABLE' | 'AUTH_ERROR' | 'RATE_LIMITED' | 'UNSUPPORTED_ENDPOINT' | 'TIMEOUT' | 'NETWORK_ERROR' | 'MALFORMED_RESPONSE' | 'SERVICE_UNAVAILABLE' | 'INSUFFICIENT_MEMORY_RENDER_512MB' | 'LOCAL_MODEL_INIT_FAILED';
     message?: string;
+    memoryRssMb?: number;
+    runtime?: string;
   };
 }
 
@@ -47,6 +50,7 @@ export interface FinbertOptions {
   maxRetries?: number;
   fetchFn?: typeof fetch;
   forceProbe?: boolean;
+  preferLocal?: boolean;
 }
 
 export const PRIMARY_FINBERT_ENDPOINT = 'https://router.huggingface.co/hf-inference/models/ProsusAI/finbert';
@@ -61,10 +65,10 @@ export const CANDIDATE_FINBERT_ENDPOINTS = [
 ];
 
 /**
- * Cooldown duration when Hugging Face provider credits are exhausted.
+ * Cooldown duration when Hugging Face provider credits are exhausted (15 minutes).
  * Prevents bombarding Hugging Face on every page render or article index.
  */
-export const CREDITS_EXHAUSTED_COOLDOWN_MS = 5 * 60 * 1000;
+export const CREDITS_EXHAUSTED_COOLDOWN_MS = 15 * 60 * 1000;
 
 let creditsExhaustedUntil = 0;
 let lastCreditsExhaustedMessage = '';
@@ -227,12 +231,148 @@ export function parseFinbertItem(data: any): FinbertItemResult | null {
 }
 
 /**
+ * Lazy-loaded singleton pipeline for local open-source FinBERT inference
+ * using @xenova/transformers ONNX runtime.
+ */
+let localClassifierPipeline: any = null;
+let localClassifierInitPromise: Promise<any> | null = null;
+
+export async function getLocalFinbertPipeline(): Promise<any> {
+  if (localClassifierPipeline) return localClassifierPipeline;
+  if (!localClassifierInitPromise) {
+    localClassifierInitPromise = (async () => {
+      try {
+        const { pipeline } = await import('@xenova/transformers');
+        const classifier = await pipeline('text-classification', 'Xenova/finbert', {
+          quantized: true
+        });
+        localClassifierPipeline = classifier;
+        return classifier;
+      } catch (err) {
+        localClassifierInitPromise = null;
+        throw err;
+      }
+    })();
+  }
+  return localClassifierInitPromise;
+}
+
+/**
+ * Concurrency lock for local CPU inference to prevent concurrent inference calls
+ * from thrashing CPU and memory simultaneously.
+ */
+let localInferenceQueue: Promise<void> = Promise.resolve();
+
+/**
+ * Executes local, free open-source FinBERT inference using Transformers.js ONNX runtime.
+ * Guarantees zero network calls to Hugging Face paid inference providers.
+ * Bounded to top 10 articles and protected by a sequential concurrency queue.
+ */
+export async function runLocalFinbertInference(
+  headlines: string[]
+): Promise<FinbertInferenceResult> {
+  const startTime = Date.now();
+  const cleanHeadlines = headlines
+    .map(h => (h || '').trim())
+    .filter(h => h.length > 0)
+    .slice(0, 10);
+
+  if (cleanHeadlines.length === 0) {
+    return {
+      status: 'UNAVAILABLE',
+      engine: 'FINBERT_LOCAL',
+      overallScore: null,
+      items: headlines.map(() => null),
+      diagnostics: {
+        endpoint: 'local://Xenova/finbert',
+        model: 'Xenova/finbert (ONNX Quantized)',
+        articlesAnalyzed: 0,
+        reason: 'EMPTY_INPUT',
+        message: 'No headline text supplied for local FinBERT inference.'
+      }
+    };
+  }
+
+  // Sequential concurrency lock: chain onto localInferenceQueue
+  let unlock: () => void = () => {};
+  const currentLock = new Promise<void>(resolve => { unlock = resolve; });
+  const prevLock = localInferenceQueue;
+  localInferenceQueue = prevLock.then(() => currentLock).catch(() => currentLock);
+  await prevLock;
+
+  try {
+    const classifier = await getLocalFinbertPipeline();
+    const items: Array<FinbertItemResult | null> = [];
+    let scoreSum = 0;
+    let validCount = 0;
+
+    for (const h of cleanHeadlines) {
+      try {
+        const truncated = h.slice(0, 512);
+        const output = await classifier(truncated, { topk: 3 });
+        const parsed = parseFinbertItem(Array.isArray(output) ? output : [output]);
+        items.push(parsed);
+        if (parsed) {
+          scoreSum += parsed.score;
+          validCount++;
+        }
+      } catch {
+        items.push(null);
+      }
+    }
+
+    const overallScore = validCount > 0 ? Math.round((scoreSum / validCount) * 100) / 100 : null;
+    const elapsed = Date.now() - startTime;
+    const rssMb = Math.round(process.memoryUsage().rss / 1024 / 1024);
+
+    return {
+      status: 'LIVE',
+      engine: 'FINBERT_LOCAL',
+      overallScore,
+      items,
+      diagnostics: {
+        endpoint: 'local://Xenova/finbert',
+        model: 'Xenova/finbert (Local ONNX Quantized)',
+        articlesAnalyzed: validCount,
+        memoryRssMb: rssMb,
+        runtime: `Transformers.js (CPU, ${elapsed}ms)`
+      }
+    };
+  } catch (err: any) {
+    return {
+      status: 'UNAVAILABLE',
+      engine: 'FINBERT_LOCAL',
+      overallScore: null,
+      items: headlines.map(() => null),
+      diagnostics: {
+        endpoint: 'local://Xenova/finbert',
+        model: 'Xenova/finbert (Local ONNX Quantized)',
+        articlesAnalyzed: 0,
+        reason: 'LOCAL_MODEL_INIT_FAILED',
+        message: `Local FinBERT failed to initialize: ${err.message || String(err)}`
+      }
+    };
+  } finally {
+    unlock();
+  }
+}
+
+/**
  * Executes FinBERT inference on an array of financial headlines.
  */
 export async function runFinbertInference(
   headlines: string[],
   options: FinbertOptions = {}
 ): Promise<FinbertInferenceResult> {
+  // Check if Local FinBERT is explicitly preferred or enabled via environment variable
+  const enableLocal = options.preferLocal || process.env.ENABLE_LOCAL_FINBERT === 'true' || process.env.ENABLE_LOCAL_FINBERT === '1';
+  if (enableLocal) {
+    const localResult = await runLocalFinbertInference(headlines);
+    if (localResult.status === 'LIVE') {
+      return localResult;
+    }
+  }
+
   const rawToken = options.token !== undefined
     ? options.token
     : (process.env.HF_TOKEN || process.env.HUGGINGFACE_API_KEY || process.env.HUGGING_FACE_HUB_TOKEN || '');

@@ -37,6 +37,7 @@ export interface ClassifiedArticle {
 
 export interface GroupedNewsResult {
   articles: ClassifiedArticle[];
+  eventClusters: import('./types').EventCluster[];
   distinctEventsCount: number;
   expansionCatalystsCount: number;
   cautionaryOverhangsCount: number;
@@ -330,6 +331,7 @@ export function deduplicateAndGroupNewsArticles(rawArticles: any[]): GroupedNews
   const distinctExpansionEvents = new Set<string>();
   const distinctCautionaryEvents = new Set<string>();
   const distinctAllEvents = new Set<string>();
+  const clusterMap = new Map<string, import('./types').EventCluster>();
 
   let expansionArticlesCount = 0;
   let cautionaryArticlesCount = 0;
@@ -359,6 +361,37 @@ export function deduplicateAndGroupNewsArticles(rawArticles: any[]): GroupedNews
 
     classifiedArticles.push(classified);
 
+    const eventId = classification.corporateEventId || `general-${art.publisher.toLowerCase().replace(/[^a-z0-9]/g, '')}-${art.date.replace(/[^a-z0-9]/gi, '')}`;
+    const eventTitle = classification.corporateEventTitle || (classification.corporateEventType === 'ROUTINE' ? 'Routine Financial Media Disclosure' : 'General Market & Corporate Coverage');
+
+    let cluster = clusterMap.get(eventId);
+    if (!cluster) {
+      cluster = {
+        id: eventId,
+        title: eventTitle,
+        category: classification.corporateEventType === 'EXPANSION'
+          ? 'CATALYST'
+          : classification.corporateEventType === 'RISK'
+          ? 'RISK'
+          : /target price|brokerage|recommendation/i.test(`${art.title} ${art.summary}`)
+          ? 'BROKER_OPINION'
+          : /filing|quarterly|annual|board/i.test(`${art.title} ${art.summary}`)
+          ? 'ROUTINE_FILING'
+          : 'PRICE_ACTION',
+        articleCount: 0,
+        summary: art.summary || art.title,
+        firstSeen: art.date,
+        latestSeen: art.date,
+        articles: [],
+        isVerifiedCatalyst: classification.corporateEventType === 'EXPANSION',
+        isVerifiedRisk: classification.corporateEventType === 'RISK'
+      };
+      clusterMap.set(eventId, cluster);
+    }
+    cluster.articleCount++;
+    cluster.articles.push(classified);
+    cluster.latestSeen = art.date;
+
     if (classification.corporateEventType === 'EXPANSION' && classification.corporateEventId) {
       distinctExpansionEvents.add(classification.corporateEventId);
       distinctAllEvents.add(classification.corporateEventId);
@@ -370,8 +403,11 @@ export function deduplicateAndGroupNewsArticles(rawArticles: any[]): GroupedNews
     }
   }
 
+  const eventClusters = Array.from(clusterMap.values()).sort((a, b) => b.articleCount - a.articleCount);
+
   return {
     articles: classifiedArticles,
+    eventClusters,
     distinctEventsCount: distinctAllEvents.size,
     expansionCatalystsCount: distinctExpansionEvents.size,
     cautionaryOverhangsCount: distinctCautionaryEvents.size,

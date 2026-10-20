@@ -181,12 +181,51 @@ export const RedditSentimentPage: React.FC<RedditSentimentPageProps> = ({ sentim
 
         <div className="space-y-3">
           {!hasPosts ? (
-            <div className="p-12 text-center bg-slate-900/40 border border-slate-800 rounded-2xl text-slate-400 font-mono text-xs space-y-2">
-              <MessageSquare className="w-8 h-8 text-slate-600 mx-auto" />
-              <div className="text-slate-300 font-semibold text-sm">Social sentiment data unavailable</div>
-              <p className="text-slate-500 max-w-md mx-auto text-[11px] leading-relaxed">
-                {sentiment.reddit?.message || `Live Reddit community posts are unavailable for ${quote.ticker}. Synthetic discussion threads, generated scores, and usernames are strictly disabled.`}
-              </p>
+            <div className="p-8 sm:p-10 bg-slate-900/60 border border-slate-800 rounded-2xl text-slate-300 font-sans text-xs space-y-4">
+              <div className="flex items-start gap-3">
+                <MessageSquare className="w-6 h-6 text-orange-400 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <h4 className="text-sm font-bold text-slate-100 font-mono">
+                    Reddit Public Data API Authentication Required
+                  </h4>
+                  <p className="text-slate-400 leading-relaxed">
+                    Under Reddit's official Data API terms, third-party applications must authenticate using OAuth credentials. Live unauthenticated scraping of Reddit is strictly disabled to comply with provider terms and prevent IP bans.
+                  </p>
+                </div>
+              </div>
+
+              {/* Step-by-Step Setup Guide */}
+              <div className="p-4 bg-slate-950/80 border border-slate-800 rounded-xl space-y-3 font-mono">
+                <span className="text-xs font-bold text-orange-400 uppercase tracking-wider block">
+                  Official Reddit API Configuration Guide (Free Tier)
+                </span>
+                <ol className="list-decimal list-inside space-y-1.5 text-[11px] text-slate-300 font-sans">
+                  <li>Visit the official Reddit Developer App Portal: <code className="bg-slate-900 px-1.5 py-0.5 rounded text-orange-300 font-mono">https://www.reddit.com/prefs/apps</code></li>
+                  <li>Click <strong>"create app..."</strong> (or "create another app...").</li>
+                  <li>Select the <strong>"script"</strong> radio button (for automated server-side scripts).</li>
+                  <li>Enter Name: <code className="bg-slate-900 px-1.5 py-0.5 rounded text-slate-200 font-mono">NexusStockIntelligence</code> and Redirect URI: <code className="bg-slate-900 px-1.5 py-0.5 rounded text-slate-200 font-mono">http://localhost:3000</code>.</li>
+                  <li>Click <strong>"create app"</strong>. Copy the generated <strong>Client ID</strong> (shown below the app name) and the <strong>secret</strong>.</li>
+                  <li>In your Render Service Dashboard (or local <code className="bg-slate-900 px-1.5 py-0.5 rounded text-slate-200 font-mono">.env</code>), configure:
+                    <div className="mt-1.5 pl-4 space-y-1 font-mono text-[10px] text-emerald-400 bg-slate-900 p-2 rounded-lg border border-slate-800">
+                      <div>REDDIT_CLIENT_ID=your_client_id_here</div>
+                      <div>REDDIT_CLIENT_SECRET=your_client_secret_here</div>
+                    </div>
+                  </li>
+                  <li className="text-slate-400 text-[10px] pt-1">
+                    *Never share credentials in chat or commit secrets to git repositories.
+                  </li>
+                </ol>
+              </div>
+
+              {/* Retail Sentiment Limitations */}
+              <div className="p-4 bg-slate-950/60 border border-slate-800/80 rounded-xl space-y-1.5 text-[11px] text-slate-400">
+                <strong className="text-slate-200 font-semibold block font-mono">
+                  Retail Sentiment Methodological Limitations:
+                </strong>
+                <p>
+                  Social media sentiment does not drive equity valuation. Retail discussions suffer from heavy selection bias (over-indexing on volatile microcaps and recent large-cap gainers), coordinated herd behaviour, and small sample sizes. An abundance of Reddit upvotes or comments does not imply institutional accumulation or future price appreciation.
+                </p>
+              </div>
             </div>
           ) : filteredPosts.length === 0 ? (
             <div className="p-8 text-center bg-slate-900/40 border border-slate-800 rounded-xl text-slate-400 font-mono text-xs">

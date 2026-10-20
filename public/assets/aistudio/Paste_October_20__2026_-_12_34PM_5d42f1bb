@@ -1,0 +1,734 @@
+# NEXUS — PROFESSIONAL AI STOCK ANALYSIS & DECISION SUPPORT PLATFORM
+## Complete Project Audit, Intelligent Simplification, Implementation, Testing and Render Deployment
+
+Act as a senior quantitative trader, quantitative researcher, full-stack engineer, machine-learning engineer, financial-data engineer, UI/UX designer, cybersecurity reviewer, QA engineer and production deployment specialist.
+
+I am providing my existing Nexus project as a ZIP archive. Your responsibility is to understand the actual codebase, audit it thoroughly, remove unnecessary or misleading functionality, repair genuine problems, improve the user experience, and deliver a reliable application that I can push to GitHub and deploy on Render's free tier wherever technically feasible.
+
+This is an existing project. Do not treat it as a blank project.
+
+The objective is not to add the maximum number of features. The objective is to build a clean, coherent, credible and professionally engineered financial analysis platform in which every feature has a clear purpose.
+
+---
+
+# 1. NON-NEGOTIABLE REQUIREMENTS
+
+1. Preserve the project name and branding: **Nexus**. Do not rename it.
+2. Preserve the existing working architecture and useful functionality wherever practical.
+3. Do not perform a blind rewrite, replace the stack unnecessarily, or delete modules before understanding their dependencies.
+4. Remove duplicate, broken, misleading, redundant, decorative and genuinely unnecessary features.
+5. Keep the interface clean, professional, restrained and logically organised.
+6. Prioritise correctness, data integrity, security and maintainability over the number of features.
+7. Do not invent stock prices, financial statements, news articles, IPO statuses, model results, backtest results, citations or sentiment scores.
+8. Do not display hardcoded demonstration metrics as if they were real results.
+9. No secret API keys, access tokens, credentials, session cookies or private configuration values in frontend code.
+10. No mandatory paid API, paid inference endpoint or paid hosting service for the core application.
+11. Make the application suitable for GitHub and a realistic Render deployment.
+12. Do not claim that a feature works until you have inspected and tested its actual implementation.
+13. Do not claim that tests pass unless they have actually been executed and their results verified.
+14. Do not promise guaranteed investment returns or 100% prediction accuracy.
+15. Do not remove a useful existing feature merely because it is difficult. First assess whether it can be repaired, simplified or safely retained.
+16. Keep all essential functions understandable to a beginner while maintaining the analytical depth expected of a professional financial tool.
+
+**Definition of success:** Nexus should feel like one carefully designed stock-analysis product, not a collection of unrelated dashboards, unfinished experiments and decorative AI widgets.
+
+# 2. PHASE ONE — AUDIT THE ENTIRE EXISTING PROJECT
+
+Before changing files, inspect the complete ZIP and map the actual application.
+
+Inspect:
+
+- Every relevant source directory and application entry point.
+- Frontend components, routes, layouts, charts and state management.
+- Backend routes, services, data providers and error handling.
+- Python modules, if present, including model training, inference, sentiment, backtesting and data services.
+- Package files, dependencies, scripts, environment variables and deployment configuration.
+- Tests, documentation, duplicated implementations and abandoned experiments.
+- Existing market-data, news, company-fundamental and IPO sources.
+- Authentication, secrets, session material, logging and external service calls.
+- Actual build and start commands used by the current Render deployment.
+
+Produce a feature inventory with these classifications:
+
+- WORKING AND WORTH KEEPING
+- WORKING BUT NEEDS IMPROVEMENT
+- BROKEN AND NEEDS REPAIR
+- DUPLICATED AND NEEDS CONSOLIDATION
+- MISLEADING OR UNSAFE AND MUST BE CORRECTED
+- UNNECESSARY AND SHOULD BE REMOVED
+- OPTIONAL BECAUSE OF FREE-TIER OR RESOURCE LIMITATIONS
+
+For each feature, identify the actual source files, dependencies, routes, data source, current limitations and whether the frontend is connected to a real backend implementation.
+
+Determine exactly which application is deployed and which entry point Render uses. If the repository contains React/Express and multiple Python/Streamlit implementations, do not assume they all belong to the deployed application.
+
+Choose one clear source of truth for each feature. Integrate other implementations only when doing so is justified and compatible with the existing deployment. Do not create a second application merely to make the feature list look larger.
+
+Do not modify the project until you have mapped its architecture and identified the safest implementation strategy.
+
+# 3. PHASE TWO — PROFESSIONAL UI/UX DESIGN
+
+## Preserve Nexus identity
+
+Keep the name Nexus and preserve the existing visual identity wherever it is already effective. Improve visual quality and usability without renaming the project or introducing an unrelated design concept.
+
+Create a restrained, premium financial research interface inspired by professional trading and equity-research software.
+
+### Design principles
+
+- Clear visual hierarchy and disciplined spacing.
+- Readable typography and consistent number formatting.
+- A restrained colour palette with subtle borders.
+- Green for positive market movement and red for negative movement, without relying on colour alone.
+- Neutral colours for uncertain, unavailable or insufficient evidence.
+- Responsive desktop, tablet and mobile layouts.
+- Accessible contrast, keyboard navigation and clear focus states.
+- Fast, uncluttered screens with useful information density.
+- Consistent chart legends, axes, units, date formats and tooltips.
+- Proper loading, empty, error, stale-data and unavailable-service states.
+
+Avoid:
+
+- Unnecessary gradients, glowing effects and excessive animations.
+- Oversized decorative statistic cards.
+- Duplicate metrics shown in multiple places.
+- Unnecessary navigation items and repeated dashboards.
+- Fake terminal-style numbers or decorative live indicators.
+- Excessive pop-ups, modals, badges and buttons.
+- AI chat widgets that do not materially help the user analyse a stock.
+- Charts that have no analytical purpose.
+- Empty pages, placeholder actions and nonfunctional controls.
+
+Do not sacrifice readability or analytical usefulness to imitate a trading terminal.
+
+## Recommended navigation
+
+Use the fewest sections needed to organise the actual working functionality. A suitable target is:
+
+1. Dashboard
+2. Stock Analysis
+3. Company Research
+4. IPO Centre
+5. Model Lab
+6. Watchlist and Risk
+
+Consolidate or rename existing navigation labels where needed for clarity, but retain useful existing functionality. Do not create these sections as empty pages just to follow the list.
+
+### Main dashboard
+
+Show only information that helps the user understand the market and choose what to investigate next:
+
+- A compact market overview using verified data.
+- Search for a company or stock.
+- Watchlist summary.
+- Selected stock movements or meaningful market opportunities, only when supported by valid data.
+- Important news or market events with sources and timestamps.
+- A compact system/data health indicator.
+
+Remove generic welcome content, fake market statistics and unnecessary promotional cards.
+
+### Stock-analysis page
+
+This is the most important page.
+
+A user should be able to search for a stock and quickly understand:
+
+- What the company is.
+- Its latest available price and timestamp.
+- How the price has moved.
+- What the technical indicators suggest.
+- What relevant news sentiment suggests.
+- What a validated model predicts for a defined horizon, if one is available.
+- What supports or contradicts that assessment.
+- What the major risks and limitations are.
+
+Organise these elements into a clear hierarchy. Keep the price chart central and put detailed evidence below or alongside it according to screen size.
+
+A user should not have to navigate through several unrelated pages to understand one stock.
+
+# 4. CORE FEATURE — STOCK MARKET DATA AND CHARTS
+
+Retain and improve the existing stock-search and market-data functionality.
+
+Where supported by the existing providers, include:
+
+- Search by company name and ticker.
+- Correct exchange and ticker identification, particularly for Indian NSE/BSE listings where data is available.
+- Latest available price.
+- Previous close and daily price change.
+- Open, high, low and trading volume.
+- Historical price charts with appropriate time ranges.
+- Clear line or candlestick presentation where supported by the charting library and data.
+- RSI, MACD, EMA/SMA and Bollinger Bands where correctly calculated.
+- Volume and other useful indicators.
+- Support/resistance estimates only when derived from actual historical prices using a documented method.
+
+Requirements:
+
+- Never label delayed or cached prices as real-time.
+- Display source, market timestamp, last successful update and relevant delay information.
+- Handle market holidays, non-trading periods, missing candles, invalid tickers, provider errors and rate limits.
+- Validate numeric data and timestamps.
+- Do not fill missing observations with invented prices.
+- Use caching and request deduplication to reduce provider calls.
+- Avoid unnecessary repeated requests on every render.
+- Explain indicators in plain English without presenting them as guaranteed forecasts.
+
+If a provider cannot reliably supply a requested field, show that the field is unavailable rather than fabricating a substitute.
+
+# 5. FINANCIAL NEWS AND SENTIMENT — FINBERT + VADER
+
+Preserve the useful financial-news and sentiment functionality, but make it truthful, traceable and robust.
+
+### Financial news
+
+- Retrieve genuine company-related financial news from sources that are actually accessible.
+- Display article title, publisher, original link, publication timestamp and company relevance.
+- Deduplicate articles and avoid presenting the same story repeatedly.
+- Separate article publication time from retrieval time.
+- Cache results sensibly and handle unavailable feeds.
+- Never generate fictional news to fill empty space.
+
+### FinBERT
+
+Use a genuine financial-domain FinBERT model when its weights, dependencies and execution resources are available.
+
+- Load the model lazily and cache it where practical.
+- Use bounded batches and appropriate timeouts.
+- Do not download model weights repeatedly.
+- Handle missing dependencies, download failures and memory exhaustion.
+- Report the actual model status and inference result.
+- Do not claim that FinBERT ran if it did not.
+
+Inspect the existing Python and TypeScript sentiment implementations. Correct any mismatch between their displayed engine labels and the code actually used.
+
+### VADER
+
+Retain VADER as a lightweight lexicon/rule-based sentiment option or fallback when appropriate.
+
+Clearly distinguish VADER from FinBERT. Do not call VADER a trained financial prediction model.
+
+### Critical sentiment correctness rule
+
+If FinBERT fails and the system uses VADER or a keyword heuristic instead, return the actual engine identity and disclose the fallback.
+
+For every result, expose enough metadata to understand:
+
+- Engine used.
+- Model availability or fallback status.
+- Article timestamp.
+- Source article.
+- Sentiment label and score where meaningfully defined.
+- Relevant limitations.
+
+Do not silently substitute a keyword-based heuristic while labelling the result as FinBERT.
+
+If no trustworthy news is available, show “Insufficient news data” rather than manufacturing sentiment.
+
+Treat sentiment as one piece of evidence, not a standalone buy/sell instruction.
+
+# 6. GENUINE MACHINE LEARNING — NO FABRICATED ACCURACY
+
+Inspect the existing model-training, prediction and model-comparison implementations before modifying them.
+
+Retain Logistic Regression, Random Forest, XGBoost or other existing models only where their implementations are valid, their dependencies are justified and their computational requirements are realistic.
+
+Do not add a model merely because it is popular.
+
+### Define the prediction target
+
+Every model must have a documented target and forecast horizon.
+
+For example, a model may estimate the direction of a stock over the next five trading sessions. Define exactly how the label is calculated, how observations are aligned and when a prediction is considered correct.
+
+Do not mix a next-day target, five-day target and long-term investment outlook into one unexplained prediction.
+
+### Data integrity
+
+- Use chronological training, validation and test splits.
+- Use walk-forward or other appropriate time-series validation.
+- Prevent look-ahead bias and target leakage.
+- Fit preprocessing and feature selection using training data only.
+- Align news, prices, fundamentals and labels by their actual availability timestamps.
+- Avoid using future financial statements or subsequently published information as if they were known at prediction time.
+- Compare the model against a suitable simple baseline.
+- Record model version, training period, target definition and feature set.
+
+### Evaluation
+
+Report real, reproducible metrics appropriate to the target, such as:
+
+- Accuracy and balanced accuracy.
+- Precision, recall and F1 where appropriate.
+- Confusion matrix.
+- ROC-AUC only when mathematically appropriate.
+- Calibration metrics when probability estimates are displayed.
+- Trading returns and drawdown only from a valid trading simulation.
+
+Never insert hardcoded comparison scores, manually invented accuracy percentages or sample outputs into the production results.
+
+If a model has not been trained or evaluated, show that status clearly.
+
+If there is insufficient data to train or evaluate a model, explain the limitation.
+
+### Predictions and uncertainty
+
+- Show the forecast horizon.
+- Explain whether the output is a classification, estimated return or calibrated probability.
+- Display confidence or probability only when it has a valid mathematical interpretation.
+- Avoid implying that a probability is a guarantee.
+- Allow “Insufficient evidence” or “Model unavailable”.
+- Do not force every stock into BUY, HOLD or SELL.
+
+A simple technical rule may remain as a separately labelled rule-based signal, but it must never be represented as a trained ML model prediction.
+
+# 7. EXPLAINABLE AI AND DECISION SUPPORT
+
+Nexus must explain the evidence behind its outputs rather than simply displaying a signal.
+
+When a genuine model and compatible explainability method are available, retain SHAP or an appropriate alternative.
+
+Requirements:
+
+- Compute explanations from the actual model and input features.
+- Do not generate fake SHAP charts or manually invented feature contributions.
+- Explain which features contributed positively or negatively to the model output.
+- Distinguish model contribution from proof of causation.
+- Explain limitations and missing evidence.
+- Identify conflicting evidence, such as positive news sentiment but deteriorating technical conditions.
+- Provide a concise plain-English explanation, with optional deeper detail.
+- Show the model status and prediction horizon near the result.
+
+The decision-support panel should contain:
+
+1. Overall assessment, if supported by evidence.
+2. Forecast horizon and actual method used.
+3. Evidence supporting the assessment.
+4. Evidence against it.
+5. Main risks and uncertainty.
+6. Data quality and model limitations.
+7. What additional evidence would be useful.
+
+Do not tell users that they must buy or sell a stock. Do not claim that a prediction guarantees profit.
+
+# 8. COMPANY RESEARCH AND FUNDAMENTALS
+
+Retain the company-research functionality if it can obtain genuine, attributable data.
+
+Where available, display:
+
+- Company profile, business description, ticker, exchange and sector.
+- Revenue, operating performance and profit trends.
+- Debt, cash flow and relevant financial ratios.
+- Historical reporting periods and annual or quarterly comparisons.
+- Valuation metrics where the required underlying values exist.
+- Competitor comparisons using consistent definitions and periods.
+- Relevant news, company announcements and earnings information.
+
+Every financial value must have a clear period, currency and source where applicable.
+
+Do not invent missing values or silently mix annual and quarterly figures.
+
+If a free source cannot provide a field, display an explicit unavailable state. Do not pretend that every company has complete coverage.
+
+Keep this page focused on helping a user understand the business and its financial condition.
+
+# 9. IPO INTELLIGENCE CENTRE
+
+Retain IPO functionality, but ensure that dates and statuses are correct and that historical reference data cannot be mistaken for current opportunities.
+
+Separate:
+
+- Upcoming IPOs.
+- Currently open IPOs.
+- Closed IPOs awaiting listing, where relevant.
+- Recently listed IPOs.
+- Historical IPO records.
+
+For available records, include:
+
+- Company name and business.
+- Issue opening and closing dates.
+- Price band and lot size.
+- Issue size and exchange.
+- Listing date and listing performance, when verified.
+- Subscription information, when available.
+- Company financial background.
+- Promoters and use of proceeds, when reliable information exists.
+- Valuation context and major risks.
+- Data source and last verified timestamp.
+
+Use credible sources, prioritising official exchange, regulator and company filing information where accessible.
+
+### Grey market premium
+
+GMP is unofficial and must be separated from verified exchange data.
+
+Label it as unofficial, identify the source and timestamp where available, and do not present it as a guaranteed listing-gain forecast.
+
+Never present an old IPO record as currently open or upcoming.
+
+If live IPO data cannot be verified, disclose the limitation and retain a clearly labelled historical archive rather than pretending to have live coverage.
+
+# 10. BACKTESTING AND STRATEGY EVALUATION
+
+Retain a backtesting module only after validating its actual implementation.
+
+Consolidate duplicate backtesting engines if possible, but only after checking their dependencies and ensuring that useful behaviour is preserved.
+
+A credible backtest should:
+
+- Use historical data with realistic timestamp alignment.
+- Avoid look-ahead bias and data leakage.
+- Simulate decisions using information available at the decision time.
+- Account for transaction costs and reasonable slippage.
+- Specify entry, exit, position sizing and risk rules.
+- Avoid assuming execution at prices that were not realistically available.
+- Include a suitable benchmark, such as buy-and-hold.
+- Report the test period and assumptions.
+- Distinguish gross from net returns where applicable.
+
+Where supported, report net returns, maximum drawdown, volatility and appropriate risk-adjusted metrics.
+
+Explain that historical results do not guarantee future performance.
+
+Never fabricate a profitable equity curve or hide failed strategies.
+
+If a backtest cannot be run correctly, fix it or clearly disable it until the necessary requirements are met.
+
+# 11. RISK ANALYSIS, SCREENER AND WATCHLIST
+
+Keep these features when they provide genuine utility.
+
+### Risk analysis
+
+Where sufficient data exists, show:
+
+- Historical volatility.
+- Maximum drawdown.
+- Liquidity concerns.
+- Concentration or exposure risks when portfolio information is available.
+- Relevant valuation or business risks.
+- Data gaps and uncertainty.
+
+Explain what each metric measures and the period used.
+
+### Stock screener
+
+Allow a user to filter stocks by available, validated criteria such as price movement, technical indicators, sector or fundamentals.
+
+Do not show results for unavailable fields as if they passed the filter.
+
+### Watchlist
+
+Allow users to track selected stocks and compare their performance.
+
+Use existing persistence mechanisms where practical. Do not introduce a complex authentication system or paid database merely for a simple watchlist unless it is genuinely necessary.
+
+Do not promise that private user data persists across Render restarts if it is stored on an ephemeral filesystem.
+
+# 12. OPTIONAL FEATURES — ADD ONLY WHEN JUSTIFIED
+
+Evaluate existing features such as Reddit sentiment, portfolio simulation, market-regime detection, event analysis and advanced scanners.
+
+Keep them only if they:
+
+- Work with legitimate and accessible data.
+- Add clear value.
+- Can be tested.
+- Fit the existing architecture.
+- Can be operated within the deployment's resource constraints.
+- Do not create unnecessary maintenance or paid-service dependencies.
+
+Remove or consolidate features that merely duplicate existing functionality.
+
+Do not add new AI services, external APIs, databases or frameworks simply to make the project look more advanced.
+
+# 13. FREE-FIRST ARCHITECTURE AND API SECURITY
+
+The core application must not require a paid subscription to function.
+
+Prefer public data sources and local processing when technically feasible, while documenting their rate limits and reliability limitations.
+
+### API key rules
+
+- Never place private keys in React components, browser bundles, frontend environment variables exposed to clients, or public configuration.
+- Never commit `.env` files, cookies, tokens, credentials or private keys.
+- Keep optional provider credentials on the server.
+- Add a safe `.env.example` containing placeholder values only.
+- Ensure `.gitignore` excludes secret files, local caches, model files where appropriate, temporary files and generated artefacts.
+- Validate all external and user-supplied input.
+- Use request timeouts, sensible rate limits and bounded retries.
+- Avoid leaking provider responses containing credentials into logs.
+- Do not expose internal error traces or secrets in API responses.
+- Use server-side access controls where privileged operations exist.
+
+### Free-service policy
+
+A keyless source is not necessarily unlimited or guaranteed to be available.
+
+For every optional provider, document:
+
+- Whether a key is needed.
+- Whether a free tier exists.
+- Relevant limits or restrictions.
+- Whether the provider can fail or rate-limit requests.
+- What the application does when it is unavailable.
+
+Do not require a paid Gemini, Hugging Face, market-data, news or other API key for the essential experience.
+
+Optional keys may improve coverage or inference, but the core application must handle their absence gracefully.
+
+Do not claim that an external service is free forever or has unlimited usage.
+
+# 14. RENDER FREE DEPLOYMENT
+
+Inspect the existing deployment configuration before changing it.
+
+Preserve the working React/Express deployment path if that is what the current Render service uses.
+
+Ensure the application:
+
+- Uses Render's assigned `PORT`.
+- Binds to the appropriate host interface.
+- Has a correct production build command.
+- Has a correct production start command.
+- Serves the frontend and backend routes correctly.
+- Handles missing optional environment variables.
+- Does not depend on local development-only files.
+- Does not assume that files written to the local filesystem persist after restarts or redeployments.
+- Does not repeatedly download large models during every request.
+- Has sensible timeouts and resource limits.
+- Provides a useful health endpoint.
+- Returns appropriate HTTP status codes for errors.
+
+Account for the limited RAM, CPU, sleep behaviour and filesystem characteristics of free hosting.
+
+If local FinBERT inference exceeds available resources, do not disguise the failure or promise reliable operation. Use a truthful, clearly labelled fallback and document the limitation. Do not make a paid inference endpoint mandatory.
+
+Do not replace the current deployment with Streamlit, another framework or a new hosting service without a demonstrated technical reason and a clear migration plan.
+
+# 15. SECURITY CLEANUP
+
+Inspect the repository for sensitive material, especially files containing cookies, session state, tokens or credentials.
+
+If `cookies.txt` or similar session material exists:
+
+- Remove it from the active project if it is unnecessary.
+- Ensure it is ignored by Git.
+- Do not print or reproduce its secret contents.
+- Explain that previously committed credentials or cookies may require revocation or invalidation and Git-history cleanup.
+- Do not claim a secret has been revoked unless that action was actually performed.
+
+Review dependencies, input validation, request handling, error messages and exposure of backend routes.
+
+Avoid destructive repository operations. Preserve a recoverable copy or branch before major changes.
+
+# 16. CONSOLIDATE AND CLEAN THE CODEBASE
+
+After the audit, implement a coherent application using the existing stack wherever possible.
+
+- Consolidate duplicate implementations when safe.
+- Remove dead code and obsolete documentation after confirming they are not required.
+- Remove unused dependencies only after checking their use.
+- Eliminate hardcoded production metrics and misleading fallback behaviour.
+- Fix incorrect calculations and data-alignment errors.
+- Correct frontend/backend integration problems.
+- Add explicit types and clear interfaces where appropriate.
+- Improve error handling and logging.
+- Reuse common components and services.
+- Keep financial calculations testable and separate from presentation code.
+- Avoid unnecessary abstractions, speculative features and excessive configuration.
+- Do not leave placeholder buttons, fake data or empty sections presented as finished functionality.
+
+Maintain a clear separation between market-data retrieval, analysis, ML inference, sentiment, explainability, business logic and user-interface components.
+
+Do not break working routes or features while cleaning up. If a feature must be disabled because it is invalid or unsafe, explain why and document the replacement or future requirement.
+
+# 17. DATA FRESHNESS AND SYSTEM HEALTH
+
+Create a compact system-health area rather than scattering technical diagnostics across the interface.
+
+Where relevant, report:
+
+- Market-data provider status.
+- Last successful market-data update.
+- News-source status and latest article timestamp.
+- FinBERT availability and actual engine used.
+- VADER availability.
+- Trained-model availability and version.
+- Whether model metrics come from a real evaluation run.
+- IPO data freshness and source status.
+- Any important missing or stale data.
+
+Use clear labels such as:
+
+- Available
+- Delayed
+- Stale
+- Unavailable
+- Fallback in use
+- Not evaluated
+- Insufficient data
+
+Do not show a green operational status unless the relevant check has actually succeeded.
+
+The application must never silently substitute stale or invented values for unavailable data.
+
+# 18. TESTING AND QUALITY ASSURANCE
+
+Testing is mandatory.
+
+Inspect and run the tests that are relevant to the actual application.
+
+For the Node/React/TypeScript project, where supported by the existing package scripts, run the equivalent of:
+
+1. Dependency installation using the lockfile.
+2. TypeScript checks and lint checks.
+3. Production build.
+4. Existing unit and integration tests.
+5. Backend route and data-service tests.
+6. Frontend integration tests where available.
+
+For Python modules that remain part of the application:
+
+1. Run Python syntax checks.
+2. Run the existing test suite.
+3. Repair test failures caused by incorrect code, stale test expectations or broken interfaces.
+4. Add tests for important data and model behaviours.
+5. Verify that Python modules can actually be invoked by the selected deployment architecture.
+
+Add or repair tests for:
+
+- Missing API keys.
+- Invalid ticker symbols.
+- Empty and malformed market data.
+- Provider errors, timeouts and rate limits.
+- Stale data and cache behaviour.
+- News deduplication and timestamps.
+- FinBERT failure and truthful fallback identification.
+- VADER outputs and missing lexicon resources.
+- Chronological splits and leakage prevention.
+- Prediction target construction.
+- Model evaluation.
+- SHAP integration with a genuine model.
+- IPO date classification.
+- Backtesting costs, timing and drawdown.
+- API error handling.
+- Secret-safe logging.
+
+Use deterministic mock data in automated tests when appropriate, but clearly separate test fixtures from production data.
+
+Do not make live external network access a requirement for every unit test.
+
+Do not delete or weaken a failing test merely to achieve a green test suite. Correct the implementation or justify a changed expectation.
+
+If a command cannot run because of environment, resource, dependency or network limitations, report that limitation precisely. Never state that an unexecuted test passed.
+
+# 19. DOCUMENTATION AND GITHUB READINESS
+
+Update the README to match the actual application and architecture.
+
+The README should include:
+
+- Nexus project overview.
+- Main working features.
+- Architecture and directory structure.
+- Prerequisites.
+- Local installation and run commands.
+- Environment-variable reference.
+- Optional provider setup.
+- How to run tests and create a production build.
+- GitHub push instructions.
+- Render deployment configuration.
+- Free-tier limitations.
+- Security and secret-management instructions.
+- Known limitations and future improvements.
+
+Remove obsolete instructions that refer to an application framework or entry point no longer used.
+
+Ensure the documented commands match the real scripts in the package files.
+
+Prepare a clean `.env.example` and `.gitignore`.
+
+Do not commit generated secrets, cookie files, model caches or unnecessary build artefacts.
+
+Do not push to my GitHub account, create remote commits or claim deployment success unless you actually have the necessary authorised tools and have verified the action.
+
+Provide the exact commands I need to push the final project to GitHub and configure Render.
+
+# 20. REQUIRED WORKFLOW
+
+Work in these stages.
+
+### Stage A — Audit
+
+Inspect the entire project, map dependencies, identify the deployed entry point and produce the feature inventory.
+
+Identify the critical correctness, security, architectural and deployment risks before editing.
+
+### Stage B — Plan
+
+Define what will be retained, repaired, consolidated, removed or marked optional.
+
+Explain any breaking changes and establish a safe migration strategy.
+
+### Stage C — Implement
+
+Modify the actual project files. Do not merely return advice, mockups or a proposed code sample.
+
+Keep changes focused, preserve working functionality and avoid unnecessary framework migrations.
+
+### Stage D — Verify
+
+Run the appropriate tests, checks and production build. Fix discovered problems where possible.
+
+Inspect the final code for fabricated metrics, misleading engine labels, secret leakage, broken links, nonfunctional controls and deployment inconsistencies.
+
+### Stage E — Deliver
+
+Provide a concise but complete final report containing:
+
+1. Features retained and working.
+2. Features repaired.
+3. Features consolidated or removed, with reasons.
+4. Critical bugs fixed.
+5. Security fixes.
+6. Commands actually executed and their real outcomes.
+7. Tests that passed and failed.
+8. Any checks that could not be completed.
+9. Exact required environment variables and which are optional.
+10. Local run instructions.
+11. Exact GitHub push commands.
+12. Render build/start settings and deployment instructions.
+13. Known limitations of free data providers and Render Free.
+14. Remaining issues that must be addressed before calling the application production-ready.
+
+If file editing and export are supported, deliver the complete updated project as a coherent codebase that can be run and deployed, not just isolated snippets.
+
+# 21. FINAL ACCEPTANCE CRITERIA
+
+Do not call Nexus complete until the following have been checked:
+
+- [ ] The project name remains Nexus.
+- [ ] The existing architecture and deployment entry point have been identified.
+- [ ] Useful existing functionality is preserved.
+- [ ] Duplicate and misleading functionality is removed or consolidated.
+- [ ] The design is clean, restrained, responsive and professional.
+- [ ] Stock prices and charts use actual available data.
+- [ ] Data source and freshness are communicated.
+- [ ] FinBERT and VADER are accurately identified.
+- [ ] No fake model metrics or fabricated predictions remain.
+- [ ] Model targets and evaluation methods are documented.
+- [ ] Explainability uses genuine model outputs.
+- [ ] IPO statuses are based on verified data or explicitly labelled as unavailable/historical.
+- [ ] Backtesting avoids look-ahead bias and accounts for realistic costs.
+- [ ] No secret keys or cookie/session credentials are exposed in frontend code or committed files.
+- [ ] Optional API keys are handled safely on the backend.
+- [ ] Missing services fail gracefully without fabricated substitutes.
+- [ ] Relevant tests and production build have been executed.
+- [ ] README and environment examples match the implementation.
+- [ ] Render configuration matches the actual application.
+- [ ] Remaining limitations are documented honestly.
+
+**Final instruction:** Prioritise correctness over appearance, appearance over unnecessary complexity, and maintainability over feature count. Make Nexus a credible, coherent financial-analysis platform. Never fake a successful result to satisfy an acceptance criterion. If a feature cannot be implemented or verified under the available free-tier constraints, state the exact reason and provide the safest honest alternative.
