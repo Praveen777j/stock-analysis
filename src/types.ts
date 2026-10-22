@@ -99,6 +99,8 @@ export interface NewsArticle {
   summary: string;
   vaderScore: number;
   finbertScore: number | null;
+  distilbertScore?: number | null;
+  distilbertLabel?: 'POSITIVE' | 'NEUTRAL' | 'NEGATIVE';
   sentimentLabel?: 'POSITIVE' | 'NEUTRAL' | 'NEGATIVE';
   url?: string;
   isCatalyst?: boolean;
@@ -111,6 +113,8 @@ export interface EventCluster {
   id: string;
   title: string;
   category: 'CATALYST' | 'RISK' | 'BROKER_OPINION' | 'ROUTINE_FILING' | 'PRICE_ACTION';
+  type?: 'EXPANSION' | 'RISK' | 'ROUTINE' | string;
+  impactScore?: number;
   articleCount: number;
   summary: string;
   firstSeen: string;
@@ -129,6 +133,7 @@ export interface RedditPost {
   date?: string;
   vaderScore?: number;
   finbertScore?: number | null;
+  distilbertScore?: number | null;
   sentimentLabel?: 'POSITIVE' | 'NEUTRAL' | 'NEGATIVE';
 }
 
@@ -144,8 +149,16 @@ export interface RedditResult {
 
 export interface SentimentData {
   vaderCompound: number;
+  vaderStatus?: 'AVAILABLE' | 'UNAVAILABLE';
   finbertScore: number | null;
   finbertStatus?: 'LIVE' | 'UNAVAILABLE';
+  distilbertScore?: number | null;
+  distilbertStatus?: 'AVAILABLE' | 'UNAVAILABLE';
+  distilbertModel?: string;
+  distilbertLicense?: string;
+  distilbertDiagnostic?: string;
+  distilbertReason?: string;
+  combinedSummary?: 'POSITIVE' | 'NEGATIVE' | 'NEUTRAL' | 'MIXED' | 'UNAVAILABLE';
   newsCount: number;
   overallScore: number;
   label: 'BULLISH' | 'NEUTRAL' | 'BEARISH';
@@ -154,8 +167,8 @@ export interface SentimentData {
   dataStatus?: 'LIVE' | 'EMPTY' | 'UNAVAILABLE';
   finbertDiagnostic?: string;
   finbertReason?: 'MISSING_TOKEN' | 'INVALID_CREDENTIALS' | 'INSUFFICIENT_ACCESS' | 'CREDITS_EXHAUSTED' | 'EMPTY_INPUT' | 'AUTH_ERROR' | 'RATE_LIMITED' | 'UNSUPPORTED_ENDPOINT' | 'MODEL_LOADING' | 'MODEL_UNAVAILABLE' | 'TIMEOUT' | 'NETWORK_ERROR' | 'MALFORMED_RESPONSE' | 'SERVICE_UNAVAILABLE';
-  sentimentMethod?: 'FINBERT_LOCAL' | 'FINBERT_REMOTE' | 'FINBERT_VADER_HYBRID' | 'VADER_FALLBACK' | 'UNAVAILABLE';
-  sentimentEngine?: 'FINBERT_LOCAL' | 'FINBERT_REMOTE' | 'VADER_FALLBACK' | 'UNAVAILABLE';
+  sentimentMethod?: 'FINBERT_LOCAL' | 'FINBERT_REMOTE' | 'FINBERT_VADER_HYBRID' | 'VADER_FALLBACK' | 'DISTILBERT_VADER' | 'UNAVAILABLE';
+  sentimentEngine?: 'FINBERT_LOCAL' | 'FINBERT_REMOTE' | 'VADER_FALLBACK' | 'DISTILBERT_VADER' | 'UNAVAILABLE';
   distinctEventsCount?: number;
   expansionCatalystsCount?: number;
   cautionaryOverhangsCount?: number;
@@ -229,6 +242,8 @@ export interface BenchmarkData {
   marketReturn5d?: number;
   marketReturn20d?: number;
   marketVolatility20d?: number;
+  benchmarkBars?: HistoricalBar[];
+  beta?: number;
   dataStatus?: 'LIVE' | 'UNAVAILABLE';
 }
 
@@ -606,4 +621,54 @@ export type IpoCategoryTab =
   | 'RECENTLY_LISTED'
   | 'HISTORICAL'
   | 'UNLISTED_PRE_IPO';
+
+// ==============================================================================
+// 11. ONE FINAL ASSESSMENT: EXACTLY ONE OF BUY | SELL | WAIT | INSUFFICIENT DATA
+// ==============================================================================
+
+export type FinalDecisionOutcome = 'BUY' | 'SELL' | 'WAIT' | 'INSUFFICIENT DATA';
+
+export interface EvidenceQualityGate {
+  passed: boolean;
+  priceFreshness: 'LIVE' | 'STALE' | 'UNAVAILABLE';
+  historicalObservationsCount: number;
+  hasSufficientHistory: boolean; // Minimum 50 historical trading sessions
+  newsFreshness: 'FRESH' | 'RECENT' | 'UNAVAILABLE';
+  articlesCount: number;
+  financialsStatus: 'AUDITED' | 'PROVIDER_ESTIMATE' | 'UNAVAILABLE';
+  mlStatus: 'BENCHMARK_VALIDATED' | 'FALLBACK_WEIGHTED' | 'UNAVAILABLE';
+  dataCompletenessPct: number;
+  limitations: string[];
+}
+
+export interface FinalAssessment {
+  outcome: FinalDecisionOutcome;
+  headline: string;
+  rationale: string;
+  strongestEvidence: string[];
+  conflictingEvidence: string[];
+  importantRisks: string[];
+  missingEvidence: string[];
+  strengthenConditions: string[];
+  invalidationTriggers: string[];
+  evidenceQualityGate: EvidenceQualityGate;
+  setupConditions?: {
+    entryZone: string;
+    triggerPrice: number;
+    stopLoss: number;
+    stopLossPct: number;
+    target1: number;
+    target1Pct: number;
+    target2: number;
+    target2Pct: number;
+    riskRewardRatio: string;
+  };
+  timestamps: {
+    priceTimestamp: string;
+    newsTimestamp?: string;
+    financialsPeriod?: string;
+    modelValidatedDate: string;
+  };
+}
+
 

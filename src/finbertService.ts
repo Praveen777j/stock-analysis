@@ -25,6 +25,7 @@ export interface FinbertItemResult {
     neutral: number;
     negative: number;
   };
+  isCached?: boolean;
 }
 
 export interface FinbertInferenceResult {
@@ -205,7 +206,15 @@ export function parseFinbertItem(data: any): FinbertItemResult | null {
 
   if (!hasValid) return null;
 
-  // Normalized score from -1.00 to +1.00 based on genuine class probabilities
+  // Normalize probabilities so they strictly sum to 1.0
+  const sum = pos + neg + neu;
+  if (sum > 0) {
+    pos = pos / sum;
+    neg = neg / sum;
+    neu = neu / sum;
+  }
+
+  // Normalized score from -1.00 to +1.00 based on genuine class probabilities (pos - neg)
   const diff = pos - neg;
   const roundedScore = Math.round(diff * 100) / 100;
 
@@ -231,6 +240,102 @@ export function parseFinbertItem(data: any): FinbertItemResult | null {
 }
 
 /**
+ * Bounded Thread-Safe / In-Memory LRU Cache for FinBERT Article Inference
+ * Prevents redundant re-computation of identical news headlines across requests.
+ * Capacity: 500 items. Evicts oldest entries on overflow.
+ */
+export class FinbertLruCache {
+  private maxEntries: number;
+  private cache = new Map<string, { result: FinbertItemResult; timestamp: number }>();
+  public hits = 0;
+  public misses = 0;
+
+  constructor(maxEntries = 500) {
+    this.maxEntries = maxEntries;
+  }
+
+  private normalizeKey(text: string): string {
+    return text.trim().toLowerCase().replace(/[^a-z0-9]/g, ' ').slice(0, 512);
+  }
+
+  public get(text: string): FinbertItemResult | null {
+    const key = this.normalizeKey(text);
+    if (!key) return null;
+    const entry = this.cache.get(key);
+    if (!entry) {
+      this.misses++;
+      return null;
+    }
+    this.hits++;
+    // Refresh LRU ordering
+    this.cache.delete(key);
+    this.cache.set(key, entry);
+    return {
+      ...entry.result,
+      isCached: true
+    };
+  }
+
+  public set(text: string, result: FinbertItemResult): void {
+    const key = this.normalizeKey(text);
+    if (!key || !result) return;
+    if (this.cache.has(key)) {
+      this.cache.delete(key);
+    } else if (this.cache.size >= this.maxEntries) {
+      // Evict oldest item
+      const firstKey = this.cache.keys().next().value;
+      if (firstKey !== undefined) {
+        this.cache.delete(firstKey);
+      }
+    }
+    this.cache.set(key, { result: { ...result, isCached: false }, timestamp: Date.now() });
+  }
+
+  public size(): number {
+    return this.cache.size;
+  }
+
+  public clear(): void {
+    this.cache.clear();
+    this.hits = 0;
+    this.misses = 0;
+  }
+}
+
+export const finbertCache = new FinbertLruCache(500);
+
+let lastSuccessfulInferenceTimestamp: number | null = null;
+let localModelStatus: 'UNLOADED' | 'LOADING' | 'LOADED' | 'ERROR' = 'UNLOADED';
+let localModelError: string | null = null;
+
+export function getFinbertStatusInfo() {
+  const memRssMb = Math.round(process.memoryUsage().rss / 1024 / 1024);
+  const memHeapMb = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
+
+  return {
+    modelId: 'ProsusAI/finbert',
+    onnxModel: 'Xenova/finbert (quantized ONNX, 65MB)',
+    license: 'Apache 2.0 (Open Source, Free to Run)',
+    classes: ['positive', 'negative', 'neutral'],
+    sentimentFormula: 'positive_probability - negative_probability',
+    state: localModelStatus,
+    error: localModelError,
+    lastSuccessfulInference: lastSuccessfulInferenceTimestamp ? new Date(lastSuccessfulInferenceTimestamp).toISOString() : null,
+    cache: {
+      cachedEntries: finbertCache.size(),
+      maxCapacity: 500,
+      hits: finbertCache.hits,
+      misses: finbertCache.misses
+    },
+    memory: {
+      rssMb: memRssMb,
+      heapMb: memHeapMb,
+      renderFreeTierLimitMb: 512
+    }
+  };
+}
+
+/**
  * Lazy-loaded singleton pipeline for local open-source FinBERT inference
  * using @xenova/transformers ONNX runtime.
  */
@@ -240,6 +345,7 @@ let localClassifierInitPromise: Promise<any> | null = null;
 export async function getLocalFinbertPipeline(): Promise<any> {
   if (localClassifierPipeline) return localClassifierPipeline;
   if (!localClassifierInitPromise) {
+    localModelStatus = 'LOADING';
     localClassifierInitPromise = (async () => {
       try {
         const { pipeline } = await import('@xenova/transformers');
@@ -247,9 +353,13 @@ export async function getLocalFinbertPipeline(): Promise<any> {
           quantized: true
         });
         localClassifierPipeline = classifier;
+        localModelStatus = 'LOADED';
+        localModelError = null;
         return classifier;
-      } catch (err) {
+      } catch (err: any) {
         localClassifierInitPromise = null;
+        localModelStatus = 'ERROR';
+        localModelError = err?.message || String(err);
         throw err;
       }
     })();
@@ -293,6 +403,34 @@ export async function runLocalFinbertInference(
     };
   }
 
+  // 1. Check LRU Cache for each headline first
+  const cachedItems: Array<FinbertItemResult | null> = cleanHeadlines.map(h => finbertCache.get(h));
+  const uncachedIndices: number[] = [];
+  cachedItems.forEach((item, idx) => {
+    if (!item) uncachedIndices.push(idx);
+  });
+
+  // If all items were in cache, return immediately in sub-millisecond time
+  if (uncachedIndices.length === 0) {
+    const validCached = cachedItems.filter((i): i is FinbertItemResult => i !== null);
+    const scoreSum = validCached.reduce((acc, i) => acc + i.score, 0);
+    const overallScore = validCached.length > 0 ? Math.round((scoreSum / validCached.length) * 100) / 100 : null;
+
+    return {
+      status: 'LIVE',
+      engine: 'FINBERT_LOCAL',
+      overallScore,
+      items: cachedItems,
+      diagnostics: {
+        endpoint: 'local://Xenova/finbert',
+        model: 'Xenova/finbert (Local ONNX Quantized)',
+        articlesAnalyzed: validCached.length,
+        reason: undefined,
+        message: `Served ${validCached.length} headlines from in-memory bounded FinBERT cache.`
+      }
+    };
+  }
+
   // Sequential concurrency lock: chain onto localInferenceQueue
   let unlock: () => void = () => {};
   const currentLock = new Promise<void>(resolve => { unlock = resolve; });
@@ -302,40 +440,48 @@ export async function runLocalFinbertInference(
 
   try {
     const classifier = await getLocalFinbertPipeline();
-    const items: Array<FinbertItemResult | null> = [];
+    const finalItems: Array<FinbertItemResult | null> = [...cachedItems];
     let scoreSum = 0;
     let validCount = 0;
 
-    for (const h of cleanHeadlines) {
+    for (const idx of uncachedIndices) {
+      const h = cleanHeadlines[idx];
       try {
         const truncated = h.slice(0, 512);
         const output = await classifier(truncated, { topk: 3 });
         const parsed = parseFinbertItem(Array.isArray(output) ? output : [output]);
-        items.push(parsed);
+        finalItems[idx] = parsed;
         if (parsed) {
-          scoreSum += parsed.score;
-          validCount++;
+          finbertCache.set(h, parsed);
         }
       } catch {
-        items.push(null);
+        finalItems[idx] = null;
+      }
+    }
+
+    for (const item of finalItems) {
+      if (item) {
+        scoreSum += item.score;
+        validCount++;
       }
     }
 
     const overallScore = validCount > 0 ? Math.round((scoreSum / validCount) * 100) / 100 : null;
     const elapsed = Date.now() - startTime;
     const rssMb = Math.round(process.memoryUsage().rss / 1024 / 1024);
+    lastSuccessfulInferenceTimestamp = Date.now();
 
     return {
       status: 'LIVE',
       engine: 'FINBERT_LOCAL',
       overallScore,
-      items,
+      items: finalItems,
       diagnostics: {
         endpoint: 'local://Xenova/finbert',
         model: 'Xenova/finbert (Local ONNX Quantized)',
         articlesAnalyzed: validCount,
         memoryRssMb: rssMb,
-        runtime: `Transformers.js (CPU, ${elapsed}ms)`
+        runtime: `Transformers.js (CPU, ${elapsed}ms, ${cleanHeadlines.length - uncachedIndices.length} cached)`
       }
     };
   } catch (err: any) {
@@ -676,6 +822,7 @@ export async function runFinbertInference(
               const parsed = parseFinbertItem(json[i]);
               parsedItems.push(parsed);
               if (parsed) {
+                finbertCache.set(headlines[i], parsed);
                 scoreSum += parsed.score;
                 scoreCount++;
               }

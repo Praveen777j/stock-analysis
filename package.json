@@ -13,7 +13,7 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "test": "tsx tests/audit_verification.ts && tsx tests/data_integrations.ts && tsx tests/finbert_inference.ts && tsx tests/master_upgrade_verification.ts",
+    "test": "tsx tests/audit_verification.ts && tsx tests/data_integrations.ts && tsx tests/finbert_inference.ts && tsx tests/distilbert_inference.ts && tsx tests/master_upgrade_verification.ts",
     "test:finbert-live": "tsx scripts/test_live_finbert.ts"
   },
   "dependencies": {

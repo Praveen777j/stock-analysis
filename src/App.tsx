@@ -4,11 +4,9 @@
  */
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { DashboardPage } from './components/pages/DashboardPage';
-import { StockAnalysisPage } from './components/pages/StockAnalysisPage';
-import { CompanyResearchPage } from './components/pages/CompanyResearchPage';
-import { ModelLabPage } from './components/pages/ModelLabPage';
-import { WatchlistRiskPage } from './components/pages/WatchlistRiskPage';
+import { StockOverviewPage } from './components/pages/StockOverviewPage';
+import { NewsIntelligencePage } from './components/pages/NewsIntelligencePage';
+import { StockIntelligencePage } from './components/pages/StockIntelligencePage';
 import { UpcomingIPOsTab } from './components/tabs/UpcomingIPOsTab';
 import { HelpModal } from './components/HelpModal';
 
@@ -27,36 +25,34 @@ import {
 import { HistoricalBar, StockQuote, SentimentData, BenchmarkData } from './types';
 import {
   LayoutDashboard,
-  LineChart,
-  Building2,
-  Sparkles,
+  Newspaper,
   Brain,
-  BookmarkCheck,
+  Sparkles,
   BookOpen,
   Search,
   TrendingUp,
   TrendingDown,
   X,
   AlertCircle,
-  Loader2,
-  Layers,
-  ShieldCheck
+  Loader2
 } from 'lucide-react';
 
 export type TraderPageId =
+  | 'overview'
+  | 'news'
+  | 'intelligence'
+  | 'ipos'
+  // Legacy aliases for backward compatibility
   | 'dashboard'
   | 'stock-analysis'
   | 'research'
-  | 'ipos'
   | 'model-lab'
   | 'watchlist-risk'
-  // Legacy aliases for backward compatibility
   | 'trade'
   | 'investing'
   | 'decision'
   | 'chart'
   | 'technicals'
-  | 'news'
   | 'reddit'
   | 'financials'
   | 'backtest';
@@ -66,7 +62,7 @@ const INITIAL_WATCHLIST = ['RELIANCE.NS', 'TCS.NS', 'AAPL'];
 export default function App() {
   const [currentTicker, setCurrentTicker] = useState('RELIANCE.NS');
   const [selectedRange, setSelectedRange] = useState('1y');
-  const [activePage, setActivePage] = useState<TraderPageId>('dashboard');
+  const [activePage, setActivePage] = useState<TraderPageId>('overview');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
@@ -193,17 +189,15 @@ export default function App() {
     setCurrentTicker(ticker);
     setSearchQuery('');
     setIsSearchOpen(false);
-    // Switch to stock analysis view if currently on dashboard or if navigating from another view
-    if (activePage === 'dashboard') {
-      setActivePage('stock-analysis');
-    }
+    // Switch to stock intelligence view for the selected company
+    setActivePage('intelligence');
   };
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (searchQuery.trim()) {
       handleSelectTicker(searchQuery.trim().toUpperCase());
-      setActivePage('stock-analysis');
+      setActivePage('intelligence');
     }
   };
 
@@ -232,7 +226,7 @@ export default function App() {
     [technicals, safeSentiment, safeQuote]
   );
 
-  // The 6 Primary Structured Sections (Phase 2 UX Requirement)
+  // The 4 Primary Sections (Stock Overview, News Intelligence, Stock Intelligence, IPO Intelligence)
   const mainNavigationSections: {
     id: TraderPageId;
     label: string;
@@ -240,40 +234,28 @@ export default function App() {
     desc: string;
   }[] = [
     {
-      id: 'dashboard',
-      label: 'Dashboard',
+      id: 'overview',
+      label: 'Stock Overview',
       icon: LayoutDashboard,
-      desc: 'Market overview, global benchmarks, curated movers, and system health'
+      desc: 'Real-time market indices, interactive candlestick/line charts, key metrics, and peer comparison'
     },
     {
-      id: 'stock-analysis',
-      label: 'Stock Analysis',
-      icon: LineChart,
-      desc: 'Central price charts, technical indicators, dual-engine sentiment, and tactical action plan'
+      id: 'news',
+      label: 'News Intelligence',
+      icon: Newspaper,
+      desc: 'Institutional financial headlines, event clustering, catalyst detection, and transparent VADER/FinBERT sentiment'
     },
     {
-      id: 'research',
-      label: 'Company Research',
-      icon: Building2,
-      desc: 'Statutory filings, annual P&L trajectory, balance sheet solvency, and 12-dimension moat framework'
+      id: 'intelligence',
+      label: 'Stock Intelligence',
+      icon: Brain,
+      desc: 'Explainable AI setup synthesis (Bullish/Bearish/Wait/Insufficient Data), indicator breakdown, and tactical plan'
     },
     {
       id: 'ipos',
-      label: 'IPO Centre',
+      label: 'IPO Intelligence',
       icon: Sparkles,
-      desc: 'Verified primary market pipeline, SEBI DRHP filing metrics, and unofficial GMP tracking'
-    },
-    {
-      id: 'model-lab',
-      label: 'Model Lab',
-      icon: Brain,
-      desc: 'Out-of-fold supervised ML benchmarking, SHAP attribution, and walk-forward backtesting'
-    },
-    {
-      id: 'watchlist-risk',
-      label: 'Watchlist & Risk',
-      icon: BookmarkCheck,
-      desc: 'Locally persisted watchlists, historical volatility, VaR 95%, and multi-exchange screener'
+      desc: 'Verified primary market pipeline, SEBI DRHP filing metrics, and transparent GMP tracking'
     }
   ];
 
@@ -290,18 +272,18 @@ export default function App() {
 
   const isPositive = quote ? quote.change >= 0 : true;
 
-  // Resolve legacy alias pages to the 6 primary pages
+  // Resolve legacy alias pages to the 4 primary pages
   const resolvedActivePage: TraderPageId = useMemo(() => {
-    if (activePage === 'trade' || activePage === 'chart' || activePage === 'technicals' || activePage === 'news' || activePage === 'reddit' || activePage === 'decision') {
-      return 'stock-analysis';
+    if (activePage === 'dashboard' || activePage === 'overview') {
+      return 'overview';
     }
-    if (activePage === 'investing' || activePage === 'financials') {
-      return 'research';
+    if (activePage === 'news' || activePage === 'reddit') {
+      return 'news';
     }
-    if (activePage === 'backtest') {
-      return 'model-lab';
+    if (activePage === 'ipos') {
+      return 'ipos';
     }
-    return activePage;
+    return 'intelligence';
   }, [activePage]);
 
   return (
@@ -314,22 +296,22 @@ export default function App() {
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <div
                 className="flex items-center gap-2 cursor-pointer group"
-                onClick={() => setActivePage('dashboard')}
+                onClick={() => setActivePage('overview')}
               >
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 group-hover:scale-125 transition-transform" />
                 <span className="font-mono font-black text-sm tracking-wide text-slate-100 group-hover:text-emerald-400 transition-colors">
                   NEXUS
                 </span>
                 <span className="hidden sm:inline text-[11px] font-mono text-slate-500">
-                  | AI Stock Analysis & Decision Platform
+                  | Explainable AI Stock Intelligence & IPO Research
                 </span>
               </div>
 
               {/* Active Stock Summary Pill */}
               <div
-                onClick={() => setActivePage('stock-analysis')}
+                onClick={() => setActivePage('intelligence')}
                 className="flex items-center gap-2 px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 font-mono text-xs hover:border-slate-700 cursor-pointer transition-colors"
-                title="Click to view full analysis"
+                title="Click to view full stock intelligence"
               >
                 {quote ? (
                   <>
@@ -478,7 +460,7 @@ export default function App() {
               </div>
             </div>
           </div>
-        ) : isLoading && !quote && resolvedActivePage !== 'dashboard' && resolvedActivePage !== 'ipos' ? (
+        ) : isLoading && !quote && resolvedActivePage !== 'overview' && resolvedActivePage !== 'ipos' ? (
           <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-16 text-center space-y-3 font-mono">
             <Loader2 className="w-8 h-8 text-emerald-400 animate-spin mx-auto" />
             <div className="text-slate-200 font-bold text-sm">
@@ -490,63 +472,49 @@ export default function App() {
           </div>
         ) : (
           <main className="min-h-[550px]">
-            {/* 1. DASHBOARD */}
-            {resolvedActivePage === 'dashboard' && (
-              <DashboardPage
+            {/* 1. STOCK OVERVIEW */}
+            {resolvedActivePage === 'overview' && (
+              <StockOverviewPage
+                quote={quote}
+                bars={bars}
+                technicals={technicals}
+                benchmark={benchmark}
+                selectedRange={selectedRange}
+                onRangeChange={setSelectedRange}
                 onSelectTicker={handleSelectTicker}
+                onNavigateToNews={() => setActivePage('news')}
+                onNavigateToIntelligence={() => setActivePage('intelligence')}
                 watchlist={watchlist}
                 onToggleWatchlist={toggleWatchlist}
+                isLoading={isLoading}
               />
             )}
 
-            {/* 2. STOCK ANALYSIS (Centralized Hub) */}
-            {resolvedActivePage === 'stock-analysis' && quote && (
-              <StockAnalysisPage
-                quote={quote}
+            {/* 2. NEWS INTELLIGENCE */}
+            {resolvedActivePage === 'news' && (
+              <NewsIntelligencePage
+                sentiment={safeSentiment}
+                quote={safeQuote}
+              />
+            )}
+
+            {/* 3. STOCK INTELLIGENCE */}
+            {resolvedActivePage === 'intelligence' && (
+              <StockIntelligencePage
+                quote={safeQuote}
                 bars={bars}
                 technicals={technicals}
                 sentiment={safeSentiment}
                 signal={signal}
                 fundamentals={fundamentals}
-                watchlist={watchlist}
-                onToggleWatchlist={toggleWatchlist}
-                onSelectTicker={handleSelectTicker}
+                benchmark={benchmark}
+                onNavigateToNews={() => setActivePage('news')}
               />
             )}
 
-            {/* 3. COMPANY RESEARCH */}
-            {resolvedActivePage === 'research' && quote && (
-              <CompanyResearchPage
-                quote={quote}
-                fundamentals={fundamentals}
-                benchmark={benchmark || undefined}
-              />
-            )}
-
-            {/* 4. IPO CENTRE */}
+            {/* 4. IPO INTELLIGENCE */}
             {resolvedActivePage === 'ipos' && (
               <UpcomingIPOsTab />
-            )}
-
-            {/* 5. MODEL LAB & BACKTESTING */}
-            {resolvedActivePage === 'model-lab' && quote && (
-              <ModelLabPage
-                signal={signal}
-                backtest={backtest}
-                ticker={currentTicker}
-              />
-            )}
-
-            {/* 6. WATCHLIST & RISK */}
-            {resolvedActivePage === 'watchlist-risk' && (
-              <WatchlistRiskPage
-                watchlist={watchlist}
-                onToggleWatchlist={toggleWatchlist}
-                onSelectTicker={handleSelectTicker}
-                activeQuote={safeQuote}
-                bars={bars}
-                technicals={technicals}
-              />
             )}
           </main>
         )}

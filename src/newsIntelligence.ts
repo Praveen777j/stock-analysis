@@ -28,6 +28,8 @@ export interface ClassifiedArticle {
   url: string;
   vaderScore: number;
   finbertScore: number | null;
+  distilbertScore?: number | null;
+  distilbertLabel?: 'POSITIVE' | 'NEUTRAL' | 'NEGATIVE';
   sentimentLabel: 'POSITIVE' | 'NEUTRAL' | 'NEGATIVE';
   isCatalyst: boolean;
   corporateEventId?: string;

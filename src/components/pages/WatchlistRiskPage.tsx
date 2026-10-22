@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { StockQuote, HistoricalBar, TechnicalIndicators } from '../../types';
+import { StockQuote, HistoricalBar, TechnicalIndicators, BenchmarkData } from '../../types';
 import { ScannerTab } from '../tabs/ScannerTab';
+import { computeAuthenticBeta } from '../../dataEngine';
 import {
   Bookmark,
   ShieldAlert,
@@ -14,7 +15,8 @@ import {
   CheckCircle2,
   PieChart,
   ArrowRight,
-  Plus
+  Plus,
+  Scale
 } from 'lucide-react';
 
 interface WatchlistRiskPageProps {
@@ -24,6 +26,7 @@ interface WatchlistRiskPageProps {
   activeQuote: StockQuote;
   bars: HistoricalBar[];
   technicals: TechnicalIndicators;
+  benchmark?: BenchmarkData | null;
 }
 
 type WatchlistRiskTab = 'watchlist' | 'risk' | 'screener';
@@ -34,7 +37,8 @@ export const WatchlistRiskPage: React.FC<WatchlistRiskPageProps> = ({
   onSelectTicker,
   activeQuote,
   bars,
-  technicals
+  technicals,
+  benchmark
 }) => {
   const [activeTab, setActiveTab] = useState<WatchlistRiskTab>('watchlist');
   const [watchlistQuotes, setWatchlistQuotes] = useState<Record<string, StockQuote>>({});
@@ -127,16 +131,21 @@ export const WatchlistRiskPage: React.FC<WatchlistRiskPageProps> = ({
     // Average volume
     const avgVol = bars.reduce((acc, b) => acc + b.volume, 0) / bars.length;
 
+    // Authentic statistical Beta calculation against matching benchmark dates
+    const authenticBetaCalc = computeAuthenticBeta(bars, benchmark?.benchmarkBars);
+
     return {
       volatility30d: Math.round(volatility30d * 10) / 10,
       volatility1y: Math.round(volatility1y * 10) / 10,
       var95Pct: Math.round(var95Pct * 100) / 100,
       maxDrawdown: Math.round(maxDrawdown * 1000) / 10,
-      beta: Math.round((volatility1y / 14.5) * 100) / 100, // Beta relative to typical index vol of 14.5%
+      beta: authenticBetaCalc.beta,
+      betaMatched: authenticBetaCalc.matchedObservations,
+      betaFormula: authenticBetaCalc.formula,
       avgDailyVolume: Math.round(avgVol),
       dataPoints: bars.length
     };
-  }, [bars]);
+  }, [bars, benchmark]);
 
   const handleAddTicker = (e: React.FormEvent) => {
     e.preventDefault();
@@ -317,44 +326,56 @@ export const WatchlistRiskPage: React.FC<WatchlistRiskPageProps> = ({
                 </span>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 font-mono text-xs">
-                <div className="p-4 rounded-xl bg-slate-950/70 border border-slate-800">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 font-mono text-xs">
+                <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800">
                   <span className="text-slate-500 block uppercase text-[10px]">Annualized Volatility (1Y)</span>
-                  <div className="text-2xl font-black text-slate-100 mt-1">
+                  <div className="text-xl font-black text-slate-100 mt-1">
                     {riskMetrics.volatility1y}%
                   </div>
-                  <p className="text-[11px] text-slate-400 mt-1 font-sans">
+                  <p className="text-[10px] text-slate-400 mt-1 font-sans">
                     Standard deviation of 1-year historical daily logarithmic returns annualized (x √252).
                   </p>
                 </div>
 
-                <div className="p-4 rounded-xl bg-slate-950/70 border border-slate-800">
-                  <span className="text-slate-500 block uppercase text-[10px]">Short-Term Volatility (30D)</span>
-                  <div className="text-2xl font-black text-slate-100 mt-1">
+                <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800">
+                  <span className="text-slate-500 block uppercase text-[10px]">Short-Term Vol (30D)</span>
+                  <div className="text-xl font-black text-slate-100 mt-1">
                     {riskMetrics.volatility30d}%
                   </div>
-                  <p className="text-[11px] text-slate-400 mt-1 font-sans">
+                  <p className="text-[10px] text-slate-400 mt-1 font-sans">
                     Recent 30-day realized volatility indicating immediate price turbulence.
                   </p>
                 </div>
 
-                <div className="p-4 rounded-xl bg-slate-950/70 border border-slate-800">
-                  <span className="text-slate-500 block uppercase text-[10px]">Value at Risk (VaR 95% 1-Day)</span>
-                  <div className="text-2xl font-black text-rose-400 mt-1">
-                    -{riskMetrics.var95Pct}%
+                <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800">
+                  <span className="text-slate-500 block uppercase text-[10px]">Authentic Beta ({benchmark?.benchmarkTicker || 'Index'})</span>
+                  <div className="text-xl font-black text-slate-100 mt-1">
+                    {riskMetrics.beta !== undefined ? riskMetrics.beta.toFixed(2) : 'Unavailable'}
                   </div>
-                  <p className="text-[11px] text-slate-400 mt-1 font-sans">
-                    95% confidence threshold: On 19 out of 20 trading sessions, daily loss will not exceed this limit.
+                  <p className="text-[10px] text-slate-400 mt-1 font-sans">
+                    {riskMetrics.beta !== undefined
+                      ? `Cov(R_s, R_b)/Var(R_b) over ${riskMetrics.betaMatched} matched trading sessions.`
+                      : 'Requires matching historical index sessions (min 20).'}
                   </p>
                 </div>
 
-                <div className="p-4 rounded-xl bg-slate-950/70 border border-slate-800">
-                  <span className="text-slate-500 block uppercase text-[10px]">Maximum Drawdown (1Y)</span>
-                  <div className="text-2xl font-black text-rose-400 mt-1">
+                <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800">
+                  <span className="text-slate-500 block uppercase text-[10px]">Value at Risk (VaR 95%)</span>
+                  <div className="text-xl font-black text-rose-400 mt-1">
+                    -{riskMetrics.var95Pct}%
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-1 font-sans">
+                    95% confidence threshold for maximum single-session loss.
+                  </p>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800">
+                  <span className="text-slate-500 block uppercase text-[10px]">Max Drawdown (1Y)</span>
+                  <div className="text-xl font-black text-rose-400 mt-1">
                     -{riskMetrics.maxDrawdown}%
                   </div>
-                  <p className="text-[11px] text-slate-400 mt-1 font-sans">
-                    Largest peak-to-trough equity decline observed over the trailing 252 sessions.
+                  <p className="text-[10px] text-slate-400 mt-1 font-sans">
+                    Largest peak-to-trough decline over trailing 252 sessions.
                   </p>
                 </div>
               </div>

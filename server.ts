@@ -4,9 +4,11 @@ import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { runFinbertInference, PRIMARY_FINBERT_ENDPOINT, logSafeBackendDiagnostic, FinbertInferenceResult } from './src/finbertService';
+import { runFinbertInference, PRIMARY_FINBERT_ENDPOINT, logSafeBackendDiagnostic, FinbertInferenceResult, getFinbertStatusInfo, finbertCache } from './src/finbertService';
+import { runDistilbertInference, DISTILBERT_MODEL_NAME, DISTILBERT_MODEL_LICENSE, getDistilbertStatusInfo, distilbertCache } from './src/distilbertService';
 import { extractCleanArticleData, deduplicateAndGroupNewsArticles } from './src/newsIntelligence';
 import { UPCOMING_IPOS_CATALOG } from './src/ipoCatalog';
+import { UNIVERSE_CATALOG } from './src/universeCatalog';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -75,6 +77,10 @@ async function startServer() {
       if (s === 'ZOMATO') return 'ETERNAL.NS';
       return `${s}.NS`;
     }
+
+    // Check universe catalog for matching Indian or international ticker
+    const catMatch = UNIVERSE_CATALOG.find(c => c.ticker === `${s}.NS` || c.ticker === s);
+    if (catMatch) return catMatch.ticker;
 
     return s;
   }
@@ -294,18 +300,25 @@ async function startServer() {
           keyRequired: false,
           description: 'Attributed institutional articles and corporate event clusters'
         },
+        distilbert: {
+          name: 'AnkitAI/distilbert-base-uncased-financial-news-sentiment-analysis',
+          license: 'Apache-2.0',
+          status: cleanToken ? 'CONFIGURED' : 'UNAVAILABLE',
+          reason: cleanToken ? 'TOKEN_CONFIGURED' : 'NO_HF_TOKEN_CONFIGURED',
+          description: 'Financially fine-tuned DistilBERT on Financial PhraseBank (Apache-2.0)'
+        },
+        vader: {
+          name: 'VADER Financial Lexicon Engine',
+          status: 'AVAILABLE',
+          keyRequired: false,
+          description: 'Lightweight rule-based financial sentiment baseline (always active)'
+        },
         finbert: {
           name: 'ProsusAI/finbert (Hugging Face / ONNX)',
           status: cleanToken ? 'CONFIGURED' : 'VADER_FALLBACK_ACTIVE',
           engineInUse: cleanToken ? 'FINBERT_REMOTE' : 'VADER_FALLBACK',
           keyRequired: false,
           fallbackDisclosed: true
-        },
-        vader: {
-          name: 'VADER Financial Lexicon Engine',
-          status: 'AVAILABLE',
-          keyRequired: false,
-          accuracyCapped: true
         },
         ipoCatalog: {
           name: 'SEBI DRHP & Exchange Notices',
@@ -314,10 +327,11 @@ async function startServer() {
           lastAudit: 'October 2026'
         },
         modelLab: {
-          name: 'Out-of-Fold TimeSeriesSplit ML Pipeline',
-          status: 'ACTIVE',
-          targetHorizon: '5-Day Forward Return Direction',
-          models: ['Logistic Regression', 'Random Forest', 'Gradient Boosting']
+          name: 'Out-of-Fold TimeSeriesSplit ML Pipeline (Empirical Benchmark Reference)',
+          status: 'BENCHMARK_REFERENCE',
+          targetHorizon: '5-Day Forward Return Direction (±1.5%)',
+          models: ['Logistic Regression', 'Random Forest', 'Gradient Boosting'],
+          description: 'Empirical cross-validated metrics; no dynamic black-box retraining on free tier'
         }
       }
     });
@@ -663,65 +677,106 @@ async function startServer() {
       if (!q) return res.json([]);
 
       const upperQ = q.toUpperCase();
+      const lowerQ = q.toLowerCase();
       const aliasResults: any[] = [];
 
-      if ('ZOMATO'.includes(upperQ) || upperQ.includes('ZOMATO') || 'BLINKIT'.includes(upperQ)) {
+      // 1. Check local curated universe catalog for instant, reliable matching
+      const catalogMatches = UNIVERSE_CATALOG.filter(c =>
+        c.ticker.toLowerCase().includes(lowerQ) ||
+        c.name.toLowerCase().includes(lowerQ) ||
+        c.industry.toLowerCase().includes(lowerQ) ||
+        c.sector.toLowerCase().includes(lowerQ)
+      ).slice(0, 8);
+
+      for (const cm of catalogMatches) {
         aliasResults.push({
-          ticker: 'ZOMATO.NS',
-          name: 'Zomato Ltd (Eternal Ltd)',
-          exchange: 'NSE',
-          country: 'India',
-          sector: 'Consumer Cyclical',
-          industry: 'Food Delivery & Quick Commerce'
+          ticker: cm.ticker,
+          name: cm.name,
+          exchange: cm.exchange,
+          country: cm.country,
+          sector: cm.sector,
+          industry: cm.industry
         });
+      }
+
+      // 2. Specialized corporate aliases & recent demergers
+      if ('ZOMATO'.includes(upperQ) || upperQ.includes('ZOMATO') || 'BLINKIT'.includes(upperQ)) {
+        if (!aliasResults.some(a => a.ticker === 'ZOMATO.NS')) {
+          aliasResults.unshift({
+            ticker: 'ZOMATO.NS',
+            name: 'Zomato Ltd (Eternal Ltd)',
+            exchange: 'NSE',
+            country: 'India',
+            sector: 'Consumer Cyclical',
+            industry: 'Food Delivery & Quick Commerce'
+          });
+        }
       }
       if ('TATAMOTORS'.includes(upperQ) || upperQ.includes('TATA MOTOR') || upperQ.includes('TATAM') || 'TMPV'.includes(upperQ)) {
-        aliasResults.push({
-          ticker: 'TATAMOTORS.NS',
-          name: 'Tata Motors Ltd (Passenger Vehicles)',
-          exchange: 'NSE',
-          country: 'India',
-          sector: 'Consumer Cyclical',
-          industry: 'Automobiles'
-        });
-        aliasResults.push({
-          ticker: 'TMCV.NS',
-          name: 'Tata Motors Limited (Commercial Vehicles)',
-          exchange: 'NSE',
-          country: 'India',
-          sector: 'Consumer Cyclical',
-          industry: 'Automobiles'
-        });
-      }
-
-      const url = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(q)}&quotesCount=10&newsCount=0`;
-      const response = await fetch(url, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        if (!aliasResults.some(a => a.ticker === 'TATAMOTORS.NS')) {
+          aliasResults.unshift({
+            ticker: 'TATAMOTORS.NS',
+            name: 'Tata Motors Ltd (Passenger Vehicles)',
+            exchange: 'NSE',
+            country: 'India',
+            sector: 'Consumer Cyclical',
+            industry: 'Automobiles'
+          });
         }
-      });
-
-      let results: any[] = [];
-      if (response.ok) {
-        const data = await response.json();
-        const quotes = data.quotes || [];
-
-        results = quotes
-          .filter((item: any) => item.quoteType === 'EQUITY' || item.quoteType === 'ETF')
-          .map((item: any) => ({
-            ticker: item.symbol,
-            name: item.shortname || item.longname || item.symbol,
-            exchange: item.exchDisp || item.exchange || 'NSE',
-            country: item.symbol.endsWith('.NS') || item.symbol.endsWith('.BO') ? 'India' : 'United States',
-            sector: item.sector || 'Equities',
-            industry: item.industry || 'General'
-          }));
+        if (!aliasResults.some(a => a.ticker === 'TMCV.NS')) {
+          aliasResults.push({
+            ticker: 'TMCV.NS',
+            name: 'Tata Motors Limited (Commercial Vehicles)',
+            exchange: 'NSE',
+            country: 'India',
+            sector: 'Consumer Cyclical',
+            industry: 'Automobiles'
+          });
+        }
       }
 
-      // Combine alias results first, deduplicating tickers
-      const combined = [...aliasResults];
-      for (const r of results) {
-        if (!combined.some(c => c.ticker === r.ticker)) {
+      // 3. Query Yahoo Finance search endpoint with 3-second timeout
+      let remoteResults: any[] = [];
+      try {
+        const url = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(q)}&quotesCount=10&newsCount=0`;
+        const abortCtrl = new AbortController();
+        const timeoutId = setTimeout(() => abortCtrl.abort(), 3000);
+
+        const response = await fetch(url, {
+          signal: abortCtrl.signal,
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+          }
+        });
+        clearTimeout(timeoutId);
+
+        if (response.ok) {
+          const data = await response.json();
+          const quotes = data.quotes || [];
+
+          remoteResults = quotes
+            .filter((item: any) => item.quoteType === 'EQUITY' || item.quoteType === 'ETF')
+            .map((item: any) => ({
+              ticker: item.symbol,
+              name: item.shortname || item.longname || item.symbol,
+              exchange: item.exchDisp || item.exchange || (item.symbol.endsWith('.NS') ? 'NSE' : item.symbol.endsWith('.BO') ? 'BSE' : 'US'),
+              country: item.symbol.endsWith('.NS') || item.symbol.endsWith('.BO') ? 'India' : 'United States',
+              sector: item.sector || 'Equities',
+              industry: item.industry || 'General'
+            }));
+        }
+      } catch (_) {
+        // Fall back gracefully to catalog and alias results
+      }
+
+      // Deduplicate results, placing catalog/exact matches first
+      const combined: any[] = [];
+      const seenTickers = new Set<string>();
+
+      for (const r of [...aliasResults, ...remoteResults]) {
+        const normKey = r.ticker.toUpperCase();
+        if (!seenTickers.has(normKey)) {
+          seenTickers.add(normKey);
           combined.push(r);
         }
       }
@@ -1227,6 +1282,78 @@ async function startServer() {
     });
   });
 
+  // --- API: Local Open-Source DistilBERT Engine Status & Resource Audit ---
+  app.get('/api/distilbert/local-status', async (req, res) => {
+    const memRssMb = Math.round(process.memoryUsage().rss / 1024 / 1024);
+    const memHeapMb = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
+    const localEnabled = process.env.ENABLE_LOCAL_DISTILBERT === 'true' || process.env.ENABLE_LOCAL_DISTILBERT === '1';
+
+    return res.json({
+      engine: 'Transformers.js (ONNX Runtime CPU)',
+      remoteModelName: DISTILBERT_MODEL_NAME,
+      localModelName: 'Xenova/distilbert-base-uncased-finetuned-sst-2-english (quantized ONNX)',
+      license: DISTILBERT_MODEL_LICENSE,
+      isLocallyEnabled: localEnabled,
+      memoryRequirements: {
+        currentRssMb: memRssMb,
+        currentHeapMb: memHeapMb,
+        measuredModelRssPeakMb: 579,
+        renderFreeTierLimitMb: 512,
+        renderFeasibility: 'Render Free Tier has a strict 512MB RAM cgroup limit. Running local ONNX model alongside Node/Express/Vite requires ~579MB RSS and risks OOM SIGKILL. Supported on Render Starter (1GB+ RAM), local dev environments, or self-hosted VMs. VADER provides the zero-RAM active baseline for Render Free.'
+      },
+      modelFileSpecs: {
+        modelFile: 'onnx/model_quantized.onnx',
+        downloadSizeMb: 67,
+        tokenizer: 'BertTokenizer (vocab.txt, tokenizer.json)',
+        classes: ['negative', 'neutral', 'positive'],
+        contextWindow: 512
+      },
+      inferenceTimeEstimateMs: '70 - 200ms per batch on modern CPU',
+      freeRunningStatus: localEnabled ? 'ACTIVE_LOCAL' : 'AVAILABLE_ON_DEMAND_REQUIRES_1GB_RAM'
+    });
+  });
+
+  // --- API: Verified FinBERT Status & Health Endpoint ---
+  app.get('/api/finbert/status', (req, res) => {
+    return res.json(getFinbertStatusInfo());
+  });
+
+  // --- API: Verified DistilBERT Status & Health Endpoint ---
+  app.get('/api/distilbert/status', (req, res) => {
+    return res.json(getDistilbertStatusInfo());
+  });
+
+  // --- API: Direct FinBERT Inference Endpoint (Bounded Batch Inference) ---
+  app.post('/api/finbert/sentiment', async (req, res) => {
+    try {
+      const texts = req.body?.texts;
+      if (!Array.isArray(texts)) {
+        return res.status(400).json({ error: "Invalid payload: 'texts' must be an array of strings" });
+      }
+      const boundedTexts = texts.slice(0, 10).map(t => String(t).slice(0, 512));
+      const result = await runFinbertInference(boundedTexts, { preferLocal: true });
+      return res.json(result);
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message || 'Inference error' });
+    }
+  });
+
+  // --- API: Direct DistilBERT Inference Endpoint (Bounded Batch Inference) ---
+  app.post('/api/distilbert/sentiment', async (req, res) => {
+    try {
+      const texts = req.body?.texts;
+      if (!Array.isArray(texts)) {
+        return res.status(400).json({ error: "Invalid payload: 'texts' must be an array of strings" });
+      }
+      const boundedTexts = texts.slice(0, 10).map(t => String(t).slice(0, 512));
+      const preferLocal = req.query.local === 'true' || req.body?.preferLocal === true || process.env.ENABLE_LOCAL_DISTILBERT === 'true';
+      const result = await runDistilbertInference(boundedTexts, { preferLocal });
+      return res.json(result);
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message || 'Inference error' });
+    }
+  });
+
   // --- API: Live Financial News & Sentiment Analysis ---
   app.get('/api/news/:ticker', async (req, res) => {
     try {
@@ -1388,21 +1515,27 @@ async function startServer() {
             const articleText = `${cleaned.title} ${cleaned.summary}`;
             const { compound, label } = analyzeVaderSentiment(articleText);
 
+            const pubTimestamp = rawPubDateTag ? new Date(rawPubDateTag).getTime() : 0;
+
             rawFetchedArticles.push({
               title: cleaned.title,
               publisher: cleaned.publisher,
               date: pubDate,
+              pubTimestamp,
               summary: cleaned.summary,
               url: cleaned.url,
               vaderScore: compound,
               finbertScore: null,
               sentimentLabel: label
-            });
+            } as any);
           }
         }
       } catch (_) {
         // Genuine network or timeout failure
       }
+
+      // Sort strictly by publication timestamp descending (newest first)
+      rawFetchedArticles.sort((a: any, b: any) => (b.pubTimestamp || 0) - (a.pubTimestamp || 0));
 
       // Group corporate events and separate stories count from distinct corporate events count
       const groupedData = deduplicateAndGroupNewsArticles(rawFetchedArticles);
@@ -1454,6 +1587,41 @@ async function startServer() {
           finbertDiagnostic = 'FinBERT inference service exception: ' + (e?.message || 'Error');
           finbertReason = 'SERVICE_UNAVAILABLE';
           finbertEngine = 'VADER_FALLBACK';
+        }
+      }
+
+      // 1c. Genuine DistilBERT financial sentiment inference (AnkitAI/distilbert on Financial PhraseBank, Apache-2.0)
+      let distilbertScore: number | null = null;
+      let distilbertStatus: 'AVAILABLE' | 'UNAVAILABLE' = 'UNAVAILABLE';
+      let distilbertDiagnostic: string | undefined = undefined;
+      let distilbertReason: string | undefined = undefined;
+
+      if (hasRealNews) {
+        try {
+          const headlineTexts = articles.map(a => `${a.title}. ${a.summary}`.slice(0, 512));
+          const dbRes = await runDistilbertInference(headlineTexts);
+          if (dbRes.status === 'LIVE' && dbRes.overallScore !== null) {
+            distilbertStatus = 'AVAILABLE';
+            distilbertScore = dbRes.overallScore;
+            distilbertDiagnostic = dbRes.diagnostics.message;
+            for (let i = 0; i < articles.length; i++) {
+              const item = dbRes.items[i];
+              if (item) {
+                articles[i].distilbertScore = item.score;
+                articles[i].distilbertLabel = item.label;
+              }
+            }
+          } else {
+            distilbertStatus = 'UNAVAILABLE';
+            distilbertScore = null;
+            distilbertDiagnostic = dbRes.diagnostics.message;
+            distilbertReason = dbRes.diagnostics.reason || 'MISSING_TOKEN';
+          }
+        } catch (e: any) {
+          distilbertStatus = 'UNAVAILABLE';
+          distilbertScore = null;
+          distilbertDiagnostic = 'DistilBERT inference exception: ' + (e?.message || 'Error');
+          distilbertReason = 'SERVICE_UNAVAILABLE';
         }
       }
 
@@ -1581,6 +1749,20 @@ async function startServer() {
         ticker,
         overallScore: compositeScore,
         vaderCompound: avgVader,
+        vaderStatus: 'AVAILABLE',
+        distilbertScore,
+        distilbertStatus,
+        distilbertModel: DISTILBERT_MODEL_NAME,
+        distilbertLicense: DISTILBERT_MODEL_LICENSE,
+        distilbertReason,
+        distilbertDiagnostic,
+        combinedSummary: !hasRealNews ? 'UNAVAILABLE'
+          : distilbertStatus === 'AVAILABLE' && distilbertScore !== null
+            ? (avgVader >= 0.08 && distilbertScore >= 0.08 ? 'POSITIVE'
+                : avgVader <= -0.08 && distilbertScore <= -0.08 ? 'NEGATIVE'
+                : (avgVader > 0.15 && distilbertScore < -0.15) || (avgVader < -0.15 && distilbertScore > 0.15) ? 'MIXED'
+                : 'NEUTRAL')
+            : (avgVader >= 0.08 ? 'POSITIVE' : avgVader <= -0.08 ? 'NEGATIVE' : 'NEUTRAL'),
         finbertScore,
         finbertStatus,
         finbertDiagnostic,

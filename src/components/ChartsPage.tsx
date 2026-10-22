@@ -5,7 +5,10 @@ import { TrendingUp, TrendingDown, Layers, BarChart2 } from 'lucide-react';
 interface ChartsPageProps {
   ticker: string;
   bars: HistoricalBar[];
-  quote: StockQuote;
+  quote?: StockQuote | null;
+  selectedRange?: string;
+  onRangeChange?: (range: string) => void;
+  chartType?: 'Candlestick' | 'Line' | 'candle' | 'line';
 }
 
 type Period = '1M' | '3M' | '6M' | '1Y' | '3Y' | '5Y' | 'Max';
@@ -14,10 +17,15 @@ type ChartType = 'Candlestick' | 'Line';
 export const ChartsPage: React.FC<ChartsPageProps> = ({
   ticker,
   bars,
-  quote
+  quote,
+  selectedRange,
+  onRangeChange,
+  chartType: propChartType
 }) => {
-  const [period, setPeriod] = useState<Period>('1Y');
-  const [chartType, setChartType] = useState<ChartType>('Candlestick');
+  const [period, setPeriod] = useState<Period>((selectedRange as Period) || '1Y');
+  const [chartType, setChartType] = useState<ChartType>(
+    propChartType === 'line' || propChartType === 'Line' ? 'Line' : 'Candlestick'
+  );
   const [showEma20, setShowEma20] = useState(true);
   const [showEma50, setShowEma50] = useState(true);
   const [showEma200, setShowEma200] = useState(false);
@@ -38,26 +46,26 @@ export const ChartsPage: React.FC<ChartsPageProps> = ({
     return bars.slice(-count);
   }, [bars, period]);
 
-  const currSym = quote.currency === 'USD' ? '$' : '₹';
+  const currSym = quote?.currency === 'USD' ? '$' : '₹';
 
   // Compute period gain percentage and explicit start/end observations
   const startBar = filteredBars.length > 0 ? filteredBars[0] : null;
   const endBar = filteredBars.length > 0 ? filteredBars[filteredBars.length - 1] : null;
 
   const periodGainPct = useMemo(() => {
-    if (filteredBars.length < 2) return quote.changePct || 0;
+    if (filteredBars.length < 2) return quote?.changePct || 0;
     const startPrice = filteredBars[0].close;
     const endPrice = filteredBars[filteredBars.length - 1].close;
     if (startPrice <= 0) return 0;
     return Math.round(((endPrice - startPrice) / startPrice) * 1000) / 10;
-  }, [filteredBars, quote.changePct]);
+  }, [filteredBars, quote?.changePct]);
 
   const periodGainAmount = useMemo(() => {
-    if (filteredBars.length < 2) return quote.change || 0;
+    if (filteredBars.length < 2) return quote?.change || 0;
     const startPrice = filteredBars[0].close;
     const endPrice = filteredBars[filteredBars.length - 1].close;
     return Math.round((endPrice - startPrice) * 100) / 100;
-  }, [filteredBars, quote.change]);
+  }, [filteredBars, quote?.change]);
 
   const hasEma200Data = useMemo(() => {
     return filteredBars.some(b => typeof b.ema200 === 'number' && Number.isFinite(b.ema200));
@@ -362,7 +370,7 @@ export const ChartsPage: React.FC<ChartsPageProps> = ({
           {/* Subplot 1: Price Action */}
           <g>
             <text x={paddingLeft} y={15} fill="#64748b" fontSize="9" fontWeight="bold">
-              ax[0]: Price & Moving Averages ({quote.currency || 'INR'})
+              ax[0]: Price & Moving Averages ({quote?.currency || 'INR'})
             </text>
             {/* Grid lines */}
             {[0, 0.25, 0.5, 0.75, 1].map((p, idx) => {
