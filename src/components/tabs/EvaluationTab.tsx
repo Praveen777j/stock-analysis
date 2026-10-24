@@ -18,9 +18,14 @@ export const EvaluationTab: React.FC = () => {
 
       {/* Model Comparison Table */}
       <section>
-        <h4 className="text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
-          Empirical Model Benchmarking (Out-of-Fold Time-Series Splits)
-        </h4>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
+          <h4 className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+            Model Benchmarking Table
+          </h4>
+          <span className="px-2.5 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 self-start sm:self-auto">
+            Illustrative reference values, not measured
+          </span>
+        </div>
         <div className="bg-slate-900/40 border border-slate-800 rounded-lg overflow-x-auto text-xs font-mono">
           <table className="w-full text-left">
             <thead className="bg-slate-900/80 text-slate-400 border-b border-slate-800">

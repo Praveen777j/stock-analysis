@@ -122,9 +122,9 @@ export const SignalBanner: React.FC<SignalBannerProps> = ({ signal }) => {
               </span>
             </div>
             <div className="bg-slate-900/80 border border-slate-800 p-2 rounded-lg text-center">
-              <span className="text-[10px] text-slate-400 block">P&L ({signal.breakdown.fundamentals ? `${Math.round(signal.breakdown.fundamentals.weight * 100)}%` : 'N/A'})</span>
-              <span className={`font-bold ${signal.breakdown.fundamentals ? ((signal.breakdown.fundamentals.score ?? 0) >= 0 ? 'text-emerald-400' : 'text-rose-400') : 'text-slate-500'}`}>
-                {signal.breakdown.fundamentals ? `${(signal.breakdown.fundamentals.score ?? 0) >= 0 ? '+' : ''}${(signal.breakdown.fundamentals.score ?? 0).toFixed(2)}` : 'N/A'}
+              <span className="text-[10px] text-slate-400 block">P&L ({signal.breakdown.fundamentals && signal.breakdown.fundamentals.weight > 0 ? `${Math.round(signal.breakdown.fundamentals.weight * 100)}%` : 'N/A'})</span>
+              <span className={`font-bold ${signal.breakdown.fundamentals && signal.breakdown.fundamentals.score !== null && signal.breakdown.fundamentals.score !== undefined ? (signal.breakdown.fundamentals.score >= 0 ? 'text-emerald-400' : 'text-rose-400') : 'text-slate-500'}`}>
+                {signal.breakdown.fundamentals && signal.breakdown.fundamentals.score !== null && signal.breakdown.fundamentals.score !== undefined ? `${signal.breakdown.fundamentals.score >= 0 ? '+' : ''}${signal.breakdown.fundamentals.score.toFixed(2)}` : 'N/A'}
               </span>
             </div>
             <div className="bg-slate-900/80 border border-slate-800 p-2 rounded-lg text-center">
@@ -134,7 +134,7 @@ export const SignalBanner: React.FC<SignalBannerProps> = ({ signal }) => {
               </span>
             </div>
             <div className="bg-slate-900/80 border border-slate-800 p-2 rounded-lg text-center">
-              <span className="text-[10px] text-slate-400 block">Ensemble ML ({Math.round(signal.breakdown.mlEnsemble.weight * 100)}%)</span>
+              <span className="text-[10px] text-slate-400 block">Rule-based score ({Math.round(signal.breakdown.mlEnsemble.weight * 100)}%)</span>
               <span className={`font-bold ${signal.breakdown.mlEnsemble.score >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                 {signal.breakdown.mlEnsemble.score >= 0 ? '+' : ''}{signal.breakdown.mlEnsemble.score.toFixed(2)}
               </span>

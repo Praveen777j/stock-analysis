@@ -64,7 +64,9 @@ export const TechnicalTab: React.FC<TechnicalTabProps> = ({ technicals, quote, b
         <div className="bg-slate-900/50 border border-slate-800 rounded-lg p-3">
           <span className="text-slate-400">Annualized Volatility (20d)</span>
           <div className="text-lg font-bold font-mono text-slate-200 mt-1">
-            {(technicals.volatility20d * 100).toFixed(1)}%
+            {technicals.volatility20d !== undefined && technicals.volatility20d > 0
+              ? `${technicals.volatility20d.toFixed(1)}% p.a.`
+              : 'N/A'}
           </div>
           <div className="text-[11px] text-slate-500 mt-0.5">Standard Deviation × √252</div>
         </div>

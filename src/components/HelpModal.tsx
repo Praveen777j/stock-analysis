@@ -88,7 +88,7 @@ export const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
                 Rule-based lexicon evaluating contrastive terms and intensifiers.
               </div>
               <div className="bg-slate-950/60 border border-slate-800 p-2.5 rounded-lg text-center">
-                <span className="text-sky-400 font-bold block mb-1">ML Ensemble (15%)</span>
+                <span className="text-sky-400 font-bold block mb-1">Rule-based score (15%)</span>
                 Probabilistic multi-factor classifier margin P(Buy) - P(Sell).
               </div>
             </div>
@@ -184,12 +184,12 @@ export const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
               </div>
 
               <div className="bg-slate-950/40 border border-slate-800/80 p-3 rounded-lg space-y-1">
-                <span className="font-semibold text-slate-200 block">Quantitative Multi-Factor Ensemble</span>
+                <span className="font-semibold text-slate-200 block">Quantitative Multi-Factor Rule-Based Score</span>
                 <p className="text-slate-400">
                   Calculates calibrated probability distribution over Buy, Hold, and Sell states based on multi-indicator momentum and price action vetoes.
                 </p>
                 <div className="font-mono text-[10px] text-sky-400 bg-slate-900 p-1.5 rounded border border-slate-800">
-                  ML Score = P(Buy) - P(Sell) ∈ [-1.0, +1.0]
+                  Rule-based score = P(Buy) - P(Sell) ∈ [-1.0, +1.0]
                 </div>
               </div>
             </div>

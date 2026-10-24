@@ -42,7 +42,7 @@ export const ModelLabPage: React.FC<ModelLabPageProps> = ({
               </h2>
             </div>
             <p className="text-xs text-slate-400 mt-1">
-              Supervised machine learning algorithms, walk-forward out-of-fold validation, SHAP attribution, and realistic backtesting.
+              Supervised algorithms, walk-forward out-of-fold validation, factor contribution attribution, and realistic backtesting.
             </p>
           </div>
 
@@ -68,7 +68,7 @@ export const ModelLabPage: React.FC<ModelLabPageProps> = ({
               }`}
             >
               <Sliders className="w-3.5 h-3.5" />
-              <span>SHAP Attribution</span>
+              <span>Factor contribution</span>
             </button>
             <button
               onClick={() => setActiveTab('backtest')}

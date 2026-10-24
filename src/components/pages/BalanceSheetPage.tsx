@@ -427,12 +427,20 @@ export const BalanceSheetPage: React.FC<BalanceSheetPageProps> = ({
               </strong>
             </span>
             <span>
-              YoY Growth: <strong className={(annualPnL[hoverYearIdx].netProfitGrowthPct || 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}>
-                {(annualPnL[hoverYearIdx].netProfitGrowthPct || 0) >= 0 ? '+' : ''}{annualPnL[hoverYearIdx].netProfitGrowthPct}%
-              </strong>
+              YoY Growth: {annualPnL[hoverYearIdx].netProfitGrowthPct !== undefined && annualPnL[hoverYearIdx].netProfitGrowthPct !== null ? (
+                <strong className={annualPnL[hoverYearIdx].netProfitGrowthPct >= 0 ? 'text-emerald-400' : 'text-rose-400'}>
+                  {annualPnL[hoverYearIdx].netProfitGrowthPct >= 0 ? '+' : ''}{annualPnL[hoverYearIdx].netProfitGrowthPct}%
+                </strong>
+              ) : (
+                <strong className="text-slate-400">N/A</strong>
+              )}
             </span>
             <span>
-              PAT Margin: <strong className="text-indigo-300">{annualPnL[hoverYearIdx].patMarginPct}%</strong>
+              PAT Margin: <strong className="text-indigo-300">
+                {annualPnL[hoverYearIdx].patMarginPct !== undefined && annualPnL[hoverYearIdx].patMarginPct !== null
+                  ? `${annualPnL[hoverYearIdx].patMarginPct}%`
+                  : 'N/A'}
+              </strong>
             </span>
           </div>
         )}
@@ -594,10 +602,17 @@ export const BalanceSheetPage: React.FC<BalanceSheetPageProps> = ({
                   YoY Profit Growth %
                 </td>
                 {annualPnL.map(r => {
-                  const g = r.netProfitGrowthPct ?? 0;
+                  if (r.netProfitGrowthPct === undefined || r.netProfitGrowthPct === null) {
+                    return (
+                      <td key={r.year} className="py-2 px-3 text-right text-slate-500 font-mono text-[11px]">
+                        N/A
+                      </td>
+                    );
+                  }
+                  const g = r.netProfitGrowthPct;
                   const isPos = g >= 0;
                   return (
-                    <td key={r.year} className={`py-2 px-3 text-right ${isPos ? 'text-emerald-400' : 'text-rose-400'}`}>
+                    <td key={r.year} className={`py-2 px-3 text-right font-mono ${isPos ? 'text-emerald-400' : 'text-rose-400'}`}>
                       {isPos ? '+' : ''}{g}%
                     </td>
                   );
@@ -610,8 +625,8 @@ export const BalanceSheetPage: React.FC<BalanceSheetPageProps> = ({
                   Net Profit Margin (PAT %)
                 </td>
                 {annualPnL.map(r => (
-                  <td key={r.year} className="py-2 px-3 text-right text-[11px] font-semibold text-slate-200">
-                    {r.patMarginPct}%
+                  <td key={r.year} className="py-2 px-3 text-right text-[11px] font-semibold text-slate-200 font-mono">
+                    {r.patMarginPct !== undefined && r.patMarginPct !== null ? `${r.patMarginPct}%` : 'N/A'}
                   </td>
                 ))}
               </tr>
@@ -622,8 +637,8 @@ export const BalanceSheetPage: React.FC<BalanceSheetPageProps> = ({
                   Earnings Per Share (EPS ₹)
                 </td>
                 {annualPnL.map(r => (
-                  <td key={r.year} className={`py-2.5 px-3 text-right font-bold ${r.eps >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                    ₹{r.eps.toFixed(1)}
+                  <td key={r.year} className={`py-2.5 px-3 text-right font-bold ${r.eps !== undefined && r.eps >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                    {r.eps !== undefined && r.eps !== null ? `₹${r.eps.toFixed(1)}` : 'N/A'}
                   </td>
                 ))}
               </tr>
@@ -635,7 +650,7 @@ export const BalanceSheetPage: React.FC<BalanceSheetPageProps> = ({
                 </td>
                 {annualPnL.map(r => (
                   <td key={r.year} className="py-2 px-3 text-right text-[11px] font-semibold text-indigo-300">
-                    {r.roePct}%
+                    {r.roePct !== undefined && r.roePct !== null ? `${r.roePct}%` : 'N/A'}
                   </td>
                 ))}
               </tr>
@@ -647,7 +662,7 @@ export const BalanceSheetPage: React.FC<BalanceSheetPageProps> = ({
                 </td>
                 {annualPnL.map(r => (
                   <td key={r.year} className="py-2 px-3 text-right text-[11px]">
-                    {r.debtToEquity}%
+                    {r.debtToEquity !== undefined && r.debtToEquity !== null ? `${r.debtToEquity}%` : 'N/A'}
                   </td>
                 ))}
               </tr>

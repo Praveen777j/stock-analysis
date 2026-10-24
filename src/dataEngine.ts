@@ -367,22 +367,22 @@ export function extractTechnicals(bars: HistoricalBar[]): TechnicalIndicators {
   const n = validBars.length;
   const latest = validBars[n - 1];
 
-  // 20-day annualized volatility from log returns
+  // 20-day annualized volatility from daily returns: std of last 20 daily returns x sqrt(252) x 100
   let vol20 = 0.0;
   if (n >= 21) {
     const slice20 = validBars.slice(-21);
     const rets: number[] = [];
     for (let i = 1; i < slice20.length; i++) {
       if (slice20[i - 1].close > 0 && slice20[i].close > 0) {
-        const lr = Math.log(slice20[i].close / slice20[i - 1].close);
-        if (Number.isFinite(lr)) rets.push(lr);
+        const r = (slice20[i].close - slice20[i - 1].close) / slice20[i - 1].close;
+        if (Number.isFinite(r)) rets.push(r);
       }
     }
     if (rets.length >= 20) {
       const mean = rets.reduce((a, b) => a + b, 0) / rets.length;
       const variance = rets.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / (rets.length - 1);
       if (variance >= 0) {
-        vol20 = Math.round(Math.sqrt(variance) * Math.sqrt(252) * 1000) / 1000;
+        vol20 = Math.round(Math.sqrt(variance) * Math.sqrt(252) * 100 * 10) / 10;
       }
     }
   }
@@ -3424,22 +3424,78 @@ export function computeFinalAssessment(
   const strengthenConditions: string[] = [];
   const invalidationTriggers: string[] = [];
 
+  // Build explicit lists of real bullish and bearish factors for faithful narrative generation
+  const bullishFactors: string[] = [];
+  const bearishFactors: string[] = [];
+
+  if (technicals.ema20 !== undefined) {
+    if (price >= technicals.ema20) {
+      bullishFactors.push(`Price above 20 EMA (${currSym}${technicals.ema20.toFixed(1)})`);
+    } else {
+      bearishFactors.push(`Price below 20 EMA (${currSym}${technicals.ema20.toFixed(1)})`);
+    }
+  }
+  if (technicals.ema50 !== undefined) {
+    if (price >= technicals.ema50) {
+      bullishFactors.push(`Price above 50 EMA (${currSym}${technicals.ema50.toFixed(1)})`);
+    } else {
+      bearishFactors.push(`Price below 50 EMA (${currSym}${technicals.ema50.toFixed(1)})`);
+    }
+  }
+  if (technicals.macdHist !== undefined) {
+    if (technicals.macdHist > 0) {
+      bullishFactors.push(`Positive MACD histogram (+${technicals.macdHist.toFixed(2)})`);
+    } else if (technicals.macdHist < 0) {
+      bearishFactors.push(`Negative MACD histogram (${technicals.macdHist.toFixed(2)})`);
+    }
+  }
+  if (rsi !== undefined) {
+    if (rsi > 70) {
+      bearishFactors.push(`RSI overbought (${rsi.toFixed(1)} > 70)`);
+    } else if (rsi >= 55) {
+      bullishFactors.push(`RSI constructive momentum (${rsi.toFixed(1)})`);
+    } else if (rsi < 45) {
+      bearishFactors.push(`RSI selling pressure (${rsi.toFixed(1)} < 45)`);
+    }
+  }
+  if (expansionCount > 0) {
+    bullishFactors.push(`${expansionCount} corporate expansion catalyst(s)`);
+  }
+  if (cautionaryCount > 0) {
+    bearishFactors.push(`${cautionaryCount} cautionary risk overhang(s)`);
+  }
+
+  const hasConflictingSignals = bullishFactors.length > 0 && bearishFactors.length > 0;
+
   if (isBullishSetup) {
     outcome = 'BUY';
-    headline = `BUY — High-Confluence Bullish Trend Structure on ${ticker}`;
-    rationale = `Price (${currSym}${price.toFixed(1)}) is trading firmly above rising EMA 20 (${currSym}${technicals.ema20?.toFixed(1) ?? 'N/A'}) and EMA 50 (${currSym}${technicals.ema50?.toFixed(1) ?? 'N/A'}). Momentum is healthy (RSI ${rsi?.toFixed(1) ?? 'N/A'}) without overbought climax. Composite evidence score is positive (+${signal.unifiedScore.toFixed(2)}) with zero cautionary corporate overhangs.`;
-    
+    headline = hasConflictingSignals
+      ? `BUY — Bullish Setup with Mixed Signals on ${ticker}`
+      : `BUY — High-Confluence Bullish Trend Structure on ${ticker}`;
+
+    rationale = hasConflictingSignals
+      ? `Mixed signals: Bullish signals include ${bullishFactors.join(', ')}. Bearish signals include ${bearishFactors.join(', ')}. Price (${currSym}${price.toFixed(1)}) maintains constructive positioning above moving averages with net positive momentum (+${signal.unifiedScore.toFixed(2)}).`
+      : `Price (${currSym}${price.toFixed(1)}) is trading firmly above rising EMA 20 (${currSym}${technicals.ema20?.toFixed(1) ?? 'N/A'}) and EMA 50 (${currSym}${technicals.ema50?.toFixed(1) ?? 'N/A'}). Momentum is healthy (RSI ${rsi?.toFixed(1) ?? 'N/A'}) without overbought climax. Composite evidence score is positive (+${signal.unifiedScore.toFixed(2)}) with zero cautionary corporate overhangs.`;
+
     strongestEvidence.push(
-      `Trend: Price is above both EMA 20 and EMA 50, confirming short- and medium-term directional accumulation.`,
+      `Trend: Price is above both EMA 20 and EMA 50, confirming directional alignment.`,
       `Momentum: RSI(14) at ${rsi?.toFixed(1) ?? '50'} represents an optimal non-overbought momentum window.`,
       `Catalysts: ${expansionCount} distinct business expansion events identified in institutional press wire.`
     );
+
+    if (technicals.macdHist !== undefined && technicals.macdHist > 0) {
+      strongestEvidence.push(`MACD Histogram: Positive histogram (+${technicals.macdHist.toFixed(2)}) confirms buyer acceleration.`);
+    }
+
     if (signal.breakdown.finbert?.status === 'LIVE' && signal.breakdown.finbert.score > 0) {
       strongestEvidence.push(`Sentiment: FinBERT verified positive sentiment score (+${signal.breakdown.finbert.score.toFixed(2)}).`);
     } else {
       strongestEvidence.push(`Sentiment: VADER positive compound score (+${sentiment?.vaderCompound.toFixed(2) ?? '0.00'}) with neutral baseline.`);
     }
 
+    if (technicals.macdHist !== undefined && technicals.macdHist < 0) {
+      conflictingEvidence.push(`Negative MACD histogram (${technicals.macdHist.toFixed(2)}) indicates decelerating momentum despite higher price.`);
+    }
     if (technicals.volatility20d > 25) {
       conflictingEvidence.push(`Elevated 20-day historical volatility (${technicals.volatility20d.toFixed(1)}%) requires wider stop padding.`);
     }
@@ -3467,20 +3523,30 @@ export function computeFinalAssessment(
 
   } else if (isBearishSetup) {
     outcome = 'SELL';
-    headline = `SELL / CAPITAL PROTECTION — Deteriorating Structure or Overbought Exhaustion on ${ticker}`;
-    rationale = isOverboughtRsi
+    headline = hasConflictingSignals
+      ? `SELL / CAPITAL PROTECTION — Mixed Signals with Defensive Trend on ${ticker}`
+      : `SELL / CAPITAL PROTECTION — Deteriorating Structure on ${ticker}`;
+
+    rationale = hasConflictingSignals
+      ? `Mixed signals: Bullish signals include ${bullishFactors.join(', ')}. Bearish signals include ${bearishFactors.join(', ')}. While positive momentum appears in ${bullishFactors.slice(0, 2).join(' and ')}, primary moving average breakdown below EMA 20 (${currSym}${technicals.ema20?.toFixed(1) ?? 'N/A'}) mandates defensive capital preservation.`
+      : isOverboughtRsi
       ? `Price (${currSym}${price.toFixed(1)}) has extended into overbought exhaustion (RSI ${rsi?.toFixed(1)} > 70). Risk-reward for fresh long positions is unfavorable. Recommend taking tactical profits or tightening stops.`
       : `Price (${currSym}${price.toFixed(1)}) has broken below critical dynamic moving averages (EMA 20 at ${currSym}${technicals.ema20?.toFixed(1) ?? 'N/A'}). Composite score is defensive (${signal.unifiedScore.toFixed(2)}). Capital preservation rules mandate exiting or trimming long exposure.`;
 
     strongestEvidence.push(
       isOverboughtRsi
         ? `Momentum Climax: RSI at ${rsi?.toFixed(1)} signals extreme statistical extension vulnerable to sharp mean reversion.`
-        : `Structural Breakdown: Price trades below key short-term exponential moving averages.`,
+        : `Structural Breakdown: Price trades below key short-term exponential moving averages (20 EMA).`,
       cautionaryCount > 0
         ? `Corporate Overhang: ${cautionaryCount} distinct cautionary risks or downgrades detected in news intelligence.`
-        : `MACD Histogram: Bearish momentum shift indicated by histogram (${technicals.macdHist?.toFixed(2) ?? 'N/A'}).`
+        : (technicals.macdHist !== undefined && technicals.macdHist < 0)
+        ? `MACD Histogram: Negative histogram (${technicals.macdHist.toFixed(2)}) reflects active seller distribution.`
+        : `Moving Average Resistance: Short-term price action remains constrained below downward-sloping 20-day EMA.`
     );
 
+    if (technicals.macdHist !== undefined && technicals.macdHist > 0) {
+      conflictingEvidence.push(`Positive MACD histogram (+${technicals.macdHist.toFixed(2)}) indicates expanding buyer acceleration, conflicting with the breakdown below moving averages.`);
+    }
     if (isAboveEma50 && !isOverboughtRsi) {
       conflictingEvidence.push(`Price remains marginally above 50-day EMA (${currSym}${technicals.ema50?.toFixed(1)}), offering temporary support.`);
     }
@@ -3508,8 +3574,13 @@ export function computeFinalAssessment(
 
   } else {
     outcome = 'WAIT';
-    headline = `WAIT — Range Consolidation & Mixed Evidence on ${ticker}`;
-    rationale = `Evidence is currently mixed or consolidating without clear directional asymmetry. Price (${currSym}${price.toFixed(1)}) is fluctuating between dynamic support and resistance. RSI (${rsi?.toFixed(1) ?? '50'}) indicates neutral momentum. Preserve cash and await a decisive breakout before committing capital.`;
+    headline = hasConflictingSignals
+      ? `WAIT — Mixed Signals & Range Consolidation on ${ticker}`
+      : `WAIT — Range Consolidation on ${ticker}`;
+
+    rationale = hasConflictingSignals
+      ? `Mixed signals: Bullish signals include ${bullishFactors.join(', ')}. Bearish signals include ${bearishFactors.join(', ')}. The stock is fluctuating between dynamic support and resistance without clear directional asymmetry. Professional strategy dictates waiting for a confirmed breakout before committing capital.`
+      : `Evidence is currently mixed or consolidating without clear directional asymmetry. Price (${currSym}${price.toFixed(1)}) is fluctuating between dynamic support and resistance. RSI (${rsi?.toFixed(1) ?? '50'}) indicates neutral momentum. Preserve cash and await a decisive breakout before committing capital.`;
 
     strongestEvidence.push(
       `Consolidation: Price is bounded within historical volatility bands without established trend breakout.`,
@@ -3518,9 +3589,17 @@ export function computeFinalAssessment(
 
     strongestEvidence.push(
       articlesCount > 0
-        ? `News Tone: Mixed press coverage with no dominant catalyst (${expansionCount} expansions vs ${cautionaryCount} cautions).`
+        ? `News Tone: Press coverage with ${expansionCount} expansion(s) vs ${cautionaryCount} caution(s).`
         : `News Baseline: Neutral baseline active in absence of fresh news catalysts.`
     );
+
+    if (technicals.macdHist !== undefined) {
+      if (technicals.macdHist > 0) {
+        conflictingEvidence.push(`Positive MACD histogram (+${technicals.macdHist.toFixed(2)}) indicates buyer momentum while price consolidates.`);
+      } else if (technicals.macdHist < 0) {
+        conflictingEvidence.push(`Negative MACD histogram (${technicals.macdHist.toFixed(2)}) reflects underlying distribution despite price holding support.`);
+      }
+    }
 
     conflictingEvidence.push(
       `Short-term indicators indicate range-bound chop, while long-term multi-year trend may still be positive.`,

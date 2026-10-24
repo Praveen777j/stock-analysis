@@ -1,6 +1,7 @@
 import dotenv from 'dotenv';
 dotenv.config();
 import express from 'express';
+import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -26,8 +27,21 @@ async function startServer() {
     if (portArg) cliPort = parseInt(portArg.split('=')[1], 10);
   }
 
-  // In production (Render/Cloud Run), honor process.env.PORT. In dev, honor CLI --port or default to 3000.
-  const PORT = cliPort || (process.env.NODE_ENV === 'production' && process.env.PORT ? parseInt(process.env.PORT, 10) : 3000);
+  // Resolve PORT:
+  // Render sets process.env.PORT and process.env.RENDER = 'true'.
+  // Use process.env.PORT whenever it is set. Only use the --port CLI flag or port 3000 when PORT is not set.
+  let PORT: number;
+  if (process.env.RENDER === 'true' && process.env.PORT) {
+    PORT = parseInt(process.env.PORT, 10);
+  } else if (process.env.PORT && process.env.PORT !== '8080') {
+    PORT = parseInt(process.env.PORT, 10);
+  } else if (cliPort) {
+    PORT = cliPort;
+  } else if (process.env.PORT) {
+    PORT = parseInt(process.env.PORT, 10);
+  } else {
+    PORT = 3000;
+  }
 
   app.use(express.json());
 
@@ -380,7 +394,7 @@ async function startServer() {
     await Promise.all(
       indicesToFetch.map(async (idx) => {
         try {
-          const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(idx.symbol)}?range=1d&interval=1d`;
+          const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(idx.symbol)}?range=5d&interval=1d`;
           const resp = await fetch(url, {
             headers: {
               'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
@@ -389,9 +403,21 @@ async function startServer() {
           if (resp.ok) {
             const data = await resp.json();
             const meta = data?.chart?.result?.[0]?.meta;
-            if (meta && typeof meta.regularMarketPrice === 'number') {
-              const price = Math.round(meta.regularMarketPrice * 100) / 100;
-              const prev = typeof meta.chartPreviousClose === 'number' ? meta.chartPreviousClose : price;
+            const quoteCloses: number[] = (data?.chart?.result?.[0]?.indicators?.quote?.[0]?.close || [])
+              .filter((c: any) => typeof c === 'number' && !isNaN(c));
+
+            if (meta && (typeof meta.regularMarketPrice === 'number' || quoteCloses.length > 0)) {
+              const price = Math.round((meta.regularMarketPrice ?? quoteCloses[quoteCloses.length - 1]) * 100) / 100;
+              // Use previous trading day's close (second-last daily bar)
+              let prev = price;
+              if (quoteCloses.length >= 2) {
+                prev = Math.round(quoteCloses[quoteCloses.length - 2] * 100) / 100;
+              } else if (typeof meta.regularMarketPreviousClose === 'number') {
+                prev = Math.round(meta.regularMarketPreviousClose * 100) / 100;
+              } else if (typeof meta.previousClose === 'number') {
+                prev = Math.round(meta.previousClose * 100) / 100;
+              }
+
               const change = Math.round((price - prev) * 100) / 100;
               const changePct = prev > 0 ? Math.round(((price - prev) / prev) * 10000) / 100 : 0;
               results.push({
@@ -501,15 +527,11 @@ async function startServer() {
       const fxMultiplier = (isUsd && usdInrRate) ? usdInrRate : 1.0;
 
       const rawPrice = meta.regularMarketPrice ?? meta.previousClose ?? 0;
-      const rawPrevClose = meta.chartPreviousClose ?? meta.previousClose ?? rawPrice;
       const raw52High = meta.fiftyTwoWeekHigh ?? rawPrice;
       const raw52Low = meta.fiftyTwoWeekLow ?? rawPrice;
 
       // Convert using verified FX multiplier, or preserve exact source price
       const priceVal = Math.round(rawPrice * fxMultiplier * 100) / 100;
-      const prevCloseVal = Math.round(rawPrevClose * fxMultiplier * 100) / 100;
-      const changeVal = Math.round((priceVal - prevCloseVal) * 100) / 100;
-      const changePct = prevCloseVal > 0 ? Math.round((changeVal / prevCloseVal) * 10000) / 100 : 0;
       const high52wVal = Math.round(raw52High * fxMultiplier * 100) / 100;
       const low52wVal = Math.round(raw52Low * fxMultiplier * 100) / 100;
 
@@ -552,6 +574,20 @@ async function startServer() {
           volume: Math.round(v)
         });
       }
+
+      // Calculate previous trading day's close (second-last daily bar)
+      // chartPreviousClose is the price at the START of the 2-year range and must NOT be used for daily change.
+      let prevCloseVal = priceVal;
+      if (bars.length >= 2) {
+        prevCloseVal = bars[bars.length - 2].close;
+      } else if (typeof meta.regularMarketPreviousClose === 'number') {
+        prevCloseVal = Math.round(meta.regularMarketPreviousClose * fxMultiplier * 100) / 100;
+      } else if (typeof meta.previousClose === 'number') {
+        prevCloseVal = Math.round(meta.previousClose * fxMultiplier * 100) / 100;
+      }
+
+      const changeVal = Math.round((priceVal - prevCloseVal) * 100) / 100;
+      const changePct = prevCloseVal > 0 ? Math.round((changeVal / prevCloseVal) * 10000) / 100 : 0;
 
       // Format last trade timestamp
       const lastTradeDate = meta.regularMarketTime
@@ -1672,10 +1708,16 @@ async function startServer() {
   });
 
   // Mount Vite or serve static
-  if (process.env.NODE_ENV === 'production') {
+  // Ensure the app starts on Render with "npm start" and no NODE_ENV set
+  const distHtml = path.resolve(__dirname, 'dist', 'index.html');
+  const isProd = process.env.NODE_ENV === 'production' || 
+                 process.env.RENDER === 'true' || 
+                 (process.env.npm_lifecycle_event === 'start' && fs.existsSync(distHtml));
+
+  if (isProd && fs.existsSync(distHtml)) {
     app.use(express.static(path.resolve(__dirname, 'dist')));
     app.get('*', (req, res) => {
-      res.sendFile(path.resolve(__dirname, 'dist', 'index.html'));
+      res.sendFile(distHtml);
     });
   } else {
     const vite = await createViteServer({

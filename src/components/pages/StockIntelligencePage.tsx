@@ -411,7 +411,9 @@ export const StockIntelligencePage: React.FC<StockIntelligencePageProps> = ({
           <div className="p-4 rounded-xl bg-slate-950/70 border border-slate-800 space-y-2">
             <span className="text-slate-500 text-[10px] uppercase font-bold block">1. Directional Moving Averages</span>
             <div className="text-sm font-bold text-slate-200">
-              {technicals.ema20 !== undefined && quote.price > technicals.ema20 ? 'BULLISH SHORT-TERM ACCUMULATION' : 'TRADING BELOW EMA 20'}
+              {technicals.ema20 !== undefined
+                ? (quote.price >= technicals.ema20 ? 'BULLISH SHORT-TERM (ABOVE 20 EMA)' : 'TRADING BELOW 20 EMA')
+                : 'N/A (CALCULATING)'}
             </div>
             <div className="space-y-1 text-slate-400 pt-1 font-sans text-xs">
               <div className="flex justify-between">
@@ -433,9 +435,28 @@ export const StockIntelligencePage: React.FC<StockIntelligencePageProps> = ({
           <div className="p-4 rounded-xl bg-slate-950/70 border border-slate-800 space-y-2">
             <span className="text-slate-500 text-[10px] uppercase font-bold block">2. Oscillator Momentum</span>
             <div className={`text-sm font-bold ${
-              (technicals.rsi ?? 50) > 70 ? 'text-amber-400' : (technicals.rsi ?? 50) < 35 ? 'text-rose-400' : 'text-emerald-400'
+              technicals.rsi === undefined
+                ? 'text-slate-400'
+                : technicals.rsi > 70
+                ? 'text-amber-400'
+                : technicals.rsi >= 55
+                ? 'text-emerald-400'
+                : technicals.rsi >= 45
+                ? 'text-slate-200'
+                : 'text-rose-400'
             }`}>
-              RSI(14): {technicals.rsi?.toFixed(1) ?? 'N/A'} ({(technicals.rsi ?? 50) > 70 ? 'OVERBOUGHT >70' : (technicals.rsi ?? 50) < 35 ? 'OVERSOLD <35' : 'ACCUMULATION ZONE'})
+              RSI(14): {technicals.rsi !== undefined ? technicals.rsi.toFixed(1) : 'N/A'}{' '}
+              ({technicals.rsi === undefined
+                ? 'N/A'
+                : technicals.rsi > 70
+                ? 'OVERBOUGHT >70'
+                : technicals.rsi >= 55
+                ? 'BULLISH 55–70'
+                : technicals.rsi >= 45
+                ? 'NEUTRAL 45–55'
+                : technicals.rsi >= 30
+                ? 'BEARISH PRESSURE 30–45'
+                : 'OVERSOLD <30'})
             </div>
             <div className="space-y-1 text-slate-400 pt-1 font-sans text-xs">
               <div className="flex justify-between">
@@ -448,7 +469,7 @@ export const StockIntelligencePage: React.FC<StockIntelligencePageProps> = ({
               </div>
               <div className="flex justify-between">
                 <span>Histogram:</span>
-                <span className={`font-mono font-bold ${(technicals.macdHist ?? 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                <span className={`font-mono font-bold ${technicals.macdHist === undefined ? 'text-slate-400' : technicals.macdHist >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                   {technicals.macdHist !== undefined ? (technicals.macdHist >= 0 ? `+${technicals.macdHist.toFixed(2)}` : technicals.macdHist.toFixed(2)) : 'N/A'}
                 </span>
               </div>

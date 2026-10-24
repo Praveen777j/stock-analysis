@@ -702,7 +702,7 @@ export const UpcomingIPOsTab: React.FC = () => {
                 <span className="text-slate-400 text-[10px] block">Current Estimated GMP</span>
                 <span className="text-sm font-bold text-slate-200">
                   {activeIPO.gmpAmount !== undefined
-                    ? `₹${activeIPO.gmpAmount} (${activeIPO.gmpPct ?? 0}% premium)`
+                    ? `₹${activeIPO.gmpAmount}${activeIPO.gmpPct !== undefined ? ` (${activeIPO.gmpPct}% premium)` : ''}`
                     : 'N/A'}
                 </span>
               </div>

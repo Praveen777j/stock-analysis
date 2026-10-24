@@ -389,7 +389,7 @@ export const TechnicalIndicatorsPage: React.FC<TechnicalIndicatorsPageProps> = (
             />
           </div>
           <p className="text-xs text-slate-400 font-sans">
-            {rsi === undefined ? 'Insufficient historical bars (<15)' : rsi > 70 ? 'Overbought (>70) — Cooling Risk' : rsi < 35 ? 'Oversold (<35) — Relief Bounce' : 'Bullish Equilibrium Zone (45–68)'}
+            {rsi === undefined ? 'Insufficient historical bars (<15)' : rsi > 70 ? 'Overbought (>70) — Cooling Risk' : rsi >= 55 ? 'Bullish Momentum (55–70)' : rsi >= 45 ? 'Neutral Equilibrium Zone (45–55)' : rsi >= 30 ? 'Bearish Selling Pressure (30–45)' : 'Oversold (<30) — Relief Bounce Risk'}
           </p>
         </div>
 

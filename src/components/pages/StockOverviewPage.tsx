@@ -566,10 +566,10 @@ export const StockOverviewPage: React.FC<StockOverviewPageProps> = ({
               <div className={`flex items-center gap-1.5 font-mono text-sm font-bold mt-1 ${isBullish ? 'text-emerald-400' : 'text-rose-400'}`}>
                 {isBullish ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
                 <span>
-                  {quote?.change !== undefined ? `${isBullish ? '+' : ''}${quote.change.toFixed(2)}` : '0.00'}
+                  {quote?.change !== undefined ? `${isBullish ? '+' : ''}${quote.change.toFixed(2)}` : 'N/A'}
                 </span>
                 <span>
-                  ({quote?.changePct !== undefined ? `${isBullish ? '+' : ''}${quote.changePct.toFixed(2)}%` : '0.00%'})
+                  {quote?.changePct !== undefined ? `(${isBullish ? '+' : ''}${quote.changePct.toFixed(2)}%)` : '(N/A)'}
                 </span>
                 <span className="text-slate-500 text-xs font-normal ml-1">Today</span>
               </div>
@@ -711,25 +711,25 @@ export const StockOverviewPage: React.FC<StockOverviewPageProps> = ({
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
             <div className="p-3 rounded-lg bg-slate-950/70 border border-slate-800/80">
               <span className="text-slate-500 block text-[10px]">1 Week</span>
-              <div className={`text-base font-bold mt-1 ${(quote?.change1wPct ?? 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+              <div className={`text-base font-bold mt-1 ${quote?.change1wPct === undefined ? 'text-slate-400' : quote.change1wPct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                 {quote?.change1wPct !== undefined ? `${quote.change1wPct >= 0 ? '+' : ''}${quote.change1wPct.toFixed(2)}%` : 'N/A'}
               </div>
             </div>
             <div className="p-3 rounded-lg bg-slate-950/70 border border-slate-800/80">
               <span className="text-slate-500 block text-[10px]">1 Month</span>
-              <div className={`text-base font-bold mt-1 ${(quote?.change1mPct ?? 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+              <div className={`text-base font-bold mt-1 ${quote?.change1mPct === undefined ? 'text-slate-400' : quote.change1mPct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                 {quote?.change1mPct !== undefined ? `${quote.change1mPct >= 0 ? '+' : ''}${quote.change1mPct.toFixed(2)}%` : 'N/A'}
               </div>
             </div>
             <div className="p-3 rounded-lg bg-slate-950/70 border border-slate-800/80">
               <span className="text-slate-500 block text-[10px]">3 Months</span>
-              <div className={`text-base font-bold mt-1 ${(quote?.change3mPct ?? 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+              <div className={`text-base font-bold mt-1 ${quote?.change3mPct === undefined ? 'text-slate-400' : quote.change3mPct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                 {quote?.change3mPct !== undefined ? `${quote.change3mPct >= 0 ? '+' : ''}${quote.change3mPct.toFixed(2)}%` : 'N/A'}
               </div>
             </div>
             <div className="p-3 rounded-lg bg-slate-950/70 border border-slate-800/80">
               <span className="text-slate-500 block text-[10px]">1 Year</span>
-              <div className={`text-base font-bold mt-1 ${(quote?.change1yPct ?? 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+              <div className={`text-base font-bold mt-1 ${quote?.change1yPct === undefined ? 'text-slate-400' : quote.change1yPct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                 {quote?.change1yPct !== undefined ? `${quote.change1yPct >= 0 ? '+' : ''}${quote.change1yPct.toFixed(2)}%` : 'N/A'}
               </div>
             </div>

@@ -10,10 +10,10 @@ export const ExplainabilityTab: React.FC<ExplainabilityTabProps> = ({ signal }) 
     <div className="space-y-6 pt-2">
       <div>
         <h3 className="text-sm font-semibold text-slate-200 border-b border-slate-800 pb-2 mb-3">
-          Explainable AI: SHAP (SHapley Additive exPlanations) Factor Attribution
+          Explainable AI: Factor Contribution Attribution
         </h3>
         <p className="text-xs text-slate-400">
-          Quantifies the exact mathematical contribution of each technical indicator and financial sentiment signal to the model's posterior probability margin.
+          Quantifies the exact mathematical contribution of each technical indicator and financial sentiment signal to the model's decision margin.
         </p>
       </div>
 
@@ -33,7 +33,7 @@ export const ExplainabilityTab: React.FC<ExplainabilityTabProps> = ({ signal }) 
               <div className="flex items-center gap-4">
                 <span className="text-slate-400 font-sans text-[11px] hidden sm:inline">{fc.description}</span>
                 <span className={`font-bold ${fc.impact >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                  {fc.impact >= 0 ? '+' : ''}{fc.impact.toFixed(3)} SHAP
+                  {fc.impact >= 0 ? '+' : ''}{fc.impact.toFixed(3)} Factor contribution
                 </span>
               </div>
             </div>
@@ -41,15 +41,15 @@ export const ExplainabilityTab: React.FC<ExplainabilityTabProps> = ({ signal }) 
         </div>
       </section>
 
-      {/* SHAP Mathematical Foundation Box */}
+      {/* Factor Contribution Mathematical Foundation Box */}
       <div className="bg-slate-900/30 border border-slate-800 rounded-lg p-4 text-xs text-slate-400 space-y-2 leading-relaxed">
         <h4 className="text-slate-200 font-semibold text-xs">
-          Mathematical Grounding: Shapley Values from Cooperative Game Theory
+          Mathematical Grounding: Factor Contribution & Shapley Value Decomposition
         </h4>
         <p>
-          SHAP attributes model prediction output f(x) across input features i in F such that:
+          Decomposes the model decision output f(x) across input features i in F such that:
           <code className="text-emerald-400 font-mono block my-1">f(x) = phi_0 + sum(phi_i(x))</code>
-          where phi_0 is the base expected value across the training dataset and phi_i(x) is the Shapley value measuring the marginal contribution of feature i across all possible feature subsets S of F excluding i.
+          where phi_0 is the base expected value and phi_i(x) is the marginal factor contribution measuring the impact of feature i across all evaluated feature subsets.
         </p>
       </div>
     </div>

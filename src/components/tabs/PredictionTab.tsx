@@ -130,13 +130,15 @@ export const PredictionTab: React.FC<PredictionTabProps> = ({ signal, quote }) =
             <div className="bg-slate-950/60 border border-slate-800/80 p-3 rounded-xl space-y-1">
               <div className="flex items-center justify-between">
                 <span className="text-slate-400 text-[11px]">3. P&L & Debt</span>
-                <span className="text-[10px] text-teal-400 font-bold">{breakdown.fundamentals ? `${Math.round(breakdown.fundamentals.weight * 100)}%` : '0% (N/A)'}</span>
+                <span className="text-[10px] text-teal-400 font-bold">{breakdown.fundamentals && breakdown.fundamentals.weight > 0 ? `${Math.round(breakdown.fundamentals.weight * 100)}%` : 'N/A'}</span>
               </div>
-              <div className={`text-lg font-bold ${(breakdown.fundamentals?.score ?? 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                {(breakdown.fundamentals?.score ?? 0) >= 0 ? '+' : ''}{(breakdown.fundamentals?.score ?? 0).toFixed(2)}
+              <div className={`text-lg font-bold ${breakdown.fundamentals?.score !== null && breakdown.fundamentals?.score !== undefined ? (breakdown.fundamentals.score >= 0 ? 'text-emerald-400' : 'text-rose-400') : 'text-slate-500'}`}>
+                {breakdown.fundamentals?.score !== null && breakdown.fundamentals?.score !== undefined ? `${breakdown.fundamentals.score >= 0 ? '+' : ''}${breakdown.fundamentals.score.toFixed(2)}` : 'N/A'}
               </div>
               <div className="text-[10px] text-slate-400">
-                Contrib: {(breakdown.fundamentals?.contribution ?? 0) >= 0 ? '+' : ''}{(breakdown.fundamentals?.contribution ?? 0).toFixed(3)}
+                {breakdown.fundamentals?.contribution !== null && breakdown.fundamentals?.contribution !== undefined && breakdown.fundamentals.weight > 0
+                  ? `Contrib: ${breakdown.fundamentals.contribution >= 0 ? '+' : ''}${breakdown.fundamentals.contribution.toFixed(3)}`
+                  : 'Contrib: N/A'}
               </div>
             </div>
 
@@ -154,10 +156,10 @@ export const PredictionTab: React.FC<PredictionTabProps> = ({ signal, quote }) =
               </div>
             </div>
 
-            {/* 5. Quantitative ML */}
+            {/* 5. Rule-based score */}
             <div className="bg-slate-950/60 border border-slate-800/80 p-3 rounded-xl space-y-1">
               <div className="flex items-center justify-between">
-                <span className="text-slate-400 text-[11px]">5. ML Ensemble</span>
+                <span className="text-slate-400 text-[11px]">5. Rule-based score</span>
                 <span className="text-[10px] text-sky-400 font-bold">{Math.round(breakdown.mlEnsemble.weight * 100)}%</span>
               </div>
               <div className={`text-lg font-bold ${breakdown.mlEnsemble.score >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
