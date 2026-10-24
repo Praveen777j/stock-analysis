@@ -343,28 +343,7 @@ let localClassifierPipeline: any = null;
 let localClassifierInitPromise: Promise<any> | null = null;
 
 export async function getLocalFinbertPipeline(): Promise<any> {
-  if (localClassifierPipeline) return localClassifierPipeline;
-  if (!localClassifierInitPromise) {
-    localModelStatus = 'LOADING';
-    localClassifierInitPromise = (async () => {
-      try {
-        const { pipeline } = await import('@xenova/transformers');
-        const classifier = await pipeline('text-classification', 'Xenova/finbert', {
-          quantized: true
-        });
-        localClassifierPipeline = classifier;
-        localModelStatus = 'LOADED';
-        localModelError = null;
-        return classifier;
-      } catch (err: any) {
-        localClassifierInitPromise = null;
-        localModelStatus = 'ERROR';
-        localModelError = err?.message || String(err);
-        throw err;
-      }
-    })();
-  }
-  return localClassifierInitPromise;
+  throw new Error('Local FinBERT transformer model has been retired. Active sentiment pipeline uses deterministic VADER + Financial Context Engine (<150MB RSS).');
 }
 
 /**

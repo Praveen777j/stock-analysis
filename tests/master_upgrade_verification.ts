@@ -5,9 +5,10 @@ import {
   getMultiStockComparison
 } from '../src/dataEngine';
 import {
-  runLocalFinbertInference,
-  runFinbertInference
-} from '../src/finbertService';
+  analyzeFinancialSentiment,
+  aggregateArticleSentiment,
+  calculateVaderScore
+} from '../src/financialSentiment';
 import {
   deduplicateAndGroupNewsArticles,
   classifyCorporateEvent
@@ -342,36 +343,43 @@ assert.strictEqual(clusteredResult.eventClusters[0].articleCount, 3, 'Cluster mu
 console.log(`✓ Event clustering verified: 3 Jio IPO articles correctly clustered into 1 distinct catalyst (Cluster: "${clusteredResult.eventClusters[0].title}").`);
 
 // ==============================================================================
-// TEST SUITE 4: FINBERT LOCAL OPEN-SOURCE INFERENCE ENGINE
+// TEST SUITE 4: FINANCIAL SENTIMENT ENGINE (VADER + KEYWORD CONTEXT)
 // ==============================================================================
-console.log('\n[Test Suite 4] Testing FinBERT Free Local Inference Pipeline...');
+console.log('\n[Test Suite 4] Testing Financial Sentiment Engine (VADER + Financial Context)...');
 
-async function testLocalFinbert() {
+async function testFinancialSentimentEngine() {
   const testHeadlines = [
     'Operating revenue surged by 24% with record quarterly profitability.',
     'Heavy debt burdens and widened quarterly loss trigger credit rating downgrade.'
   ];
 
-  console.log('Running genuine local ONNX inference via Transformers.js...');
-  const localRes = await runLocalFinbertInference(testHeadlines);
-  assert(localRes !== null, 'Local result must not be null');
-  assert.strictEqual(localRes.status, 'LIVE', 'Local FinBERT must achieve LIVE status');
-  assert.strictEqual(localRes.engine, 'FINBERT_LOCAL', 'Engine must be tagged as FINBERT_LOCAL');
-  assert(localRes.overallScore !== null, 'Must produce genuine overall score');
-  assert(localRes.items.length === 2, 'Must score both headlines');
-  assert(localRes.items[0]!.score > 0, 'Positive headline must have positive score');
-  assert(localRes.items[1]!.score < 0, 'Negative headline must have negative score');
-  assert(localRes.diagnostics.memoryRssMb !== undefined, 'Must record memory RSS');
-  console.log(`✓ Local FinBERT executed: Score ${localRes.overallScore}, Engine: ${localRes.engine}, RSS: ${localRes.diagnostics.memoryRssMb}MB.`);
+  console.log('Running deterministic VADER + Financial Context Engine analysis...');
+  const posRes = analyzeFinancialSentiment(testHeadlines[0]);
+  const negRes = analyzeFinancialSentiment(testHeadlines[1]);
+
+  assert(posRes.financialScore > 0, 'Positive headline must have positive score');
+  assert.strictEqual(posRes.label, 'POSITIVE', 'Positive headline must have POSITIVE label');
+  assert(posRes.matchedTerms.length > 0, 'Positive headline must match financial terms');
+
+  assert(negRes.financialScore < 0, 'Negative headline must have negative score');
+  assert.strictEqual(negRes.label, 'NEGATIVE', 'Negative headline must have NEGATIVE label');
+  assert(negRes.matchedTerms.length > 0, 'Negative headline must match financial terms');
+
+  const aggregate = aggregateArticleSentiment([posRes, negRes]);
+  assert(aggregate.totalArticles === 2, 'Aggregate must evaluate both articles');
+  assert(aggregate.matchedCatalysts.length > 0, 'Must record matched catalysts');
+  assert(aggregate.matchedRisks.length > 0, 'Must record matched risks');
+
+  console.log(`✓ Financial Sentiment Engine executed: Pos ${posRes.financialScore}, Neg ${negRes.financialScore}, Aggregate ${aggregate.overallScore}.`);
 
   // Test empty input
-  const emptyRes = await runLocalFinbertInference([]);
-  assert.strictEqual(emptyRes.status, 'UNAVAILABLE');
-  assert.strictEqual(emptyRes.diagnostics.reason, 'EMPTY_INPUT');
-  console.log('✓ Empty input handled honestly without crash.');
+  const emptyRes = analyzeFinancialSentiment('');
+  assert.strictEqual(emptyRes.financialScore, 0);
+  assert.strictEqual(emptyRes.label, 'NEUTRAL');
+  console.log('✓ Empty input handled cleanly without crash.');
 }
 
-await testLocalFinbert();
+await testFinancialSentimentEngine();
 
 console.log('\n======================================================');
 console.log('ALL MASTER ENGINEERING UPGRADE VERIFICATION TESTS PASSED!');

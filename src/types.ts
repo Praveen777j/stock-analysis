@@ -107,6 +107,15 @@ export interface NewsArticle {
   corporateEventId?: string;
   corporateEventTitle?: string;
   corporateEventType?: 'EXPANSION' | 'RISK' | 'ROUTINE';
+  // Financial Context Engine attributes
+  financialScore?: number;
+  financialMagnitude?: number;
+  evidenceStrength?: 'VERY_STRONG' | 'STRONG' | 'MODERATE' | 'WEAK' | 'NEUTRAL' | 'UNCERTAIN' | 'INSUFFICIENT';
+  matchedTerms?: string[];
+  contextCategories?: string[];
+  isHeadlineOnly?: boolean;
+  isUncertainOrAttributed?: boolean;
+  isMixed?: boolean;
 }
 
 export interface EventCluster {
@@ -150,6 +159,12 @@ export interface RedditResult {
 export interface SentimentData {
   vaderCompound: number;
   vaderStatus?: 'AVAILABLE' | 'UNAVAILABLE';
+  financialScore?: number;
+  financialMagnitude?: number;
+  evidenceStrength?: 'VERY_STRONG' | 'STRONG' | 'MODERATE' | 'WEAK' | 'NEUTRAL' | 'UNCERTAIN' | 'INSUFFICIENT';
+  matchedCatalysts?: string[];
+  matchedRisks?: string[];
+  matchedContextCategories?: string[];
   finbertScore: number | null;
   finbertStatus?: 'LIVE' | 'UNAVAILABLE';
   distilbertScore?: number | null;
@@ -167,8 +182,8 @@ export interface SentimentData {
   dataStatus?: 'LIVE' | 'EMPTY' | 'UNAVAILABLE';
   finbertDiagnostic?: string;
   finbertReason?: 'MISSING_TOKEN' | 'INVALID_CREDENTIALS' | 'INSUFFICIENT_ACCESS' | 'CREDITS_EXHAUSTED' | 'EMPTY_INPUT' | 'AUTH_ERROR' | 'RATE_LIMITED' | 'UNSUPPORTED_ENDPOINT' | 'MODEL_LOADING' | 'MODEL_UNAVAILABLE' | 'TIMEOUT' | 'NETWORK_ERROR' | 'MALFORMED_RESPONSE' | 'SERVICE_UNAVAILABLE';
-  sentimentMethod?: 'FINBERT_LOCAL' | 'FINBERT_REMOTE' | 'FINBERT_VADER_HYBRID' | 'VADER_FALLBACK' | 'DISTILBERT_VADER' | 'UNAVAILABLE';
-  sentimentEngine?: 'FINBERT_LOCAL' | 'FINBERT_REMOTE' | 'VADER_FALLBACK' | 'DISTILBERT_VADER' | 'UNAVAILABLE';
+  sentimentMethod?: 'FINANCIAL_CONTEXT_VADER' | 'VADER_FALLBACK' | 'FINBERT_LOCAL' | 'FINBERT_REMOTE' | 'FINBERT_VADER_HYBRID' | 'DISTILBERT_VADER' | 'UNAVAILABLE';
+  sentimentEngine?: 'FINANCIAL_CONTEXT_VADER' | 'VADER_FALLBACK' | 'FINBERT_LOCAL' | 'FINBERT_REMOTE' | 'DISTILBERT_VADER' | 'UNAVAILABLE';
   distinctEventsCount?: number;
   expansionCatalystsCount?: number;
   cautionaryOverhangsCount?: number;

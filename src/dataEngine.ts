@@ -1913,10 +1913,16 @@ export function computeModelSignal(
     signal = 'HOLD';
   }
 
-  // --- Unified Hybrid Model Synthesis (FinBERT + VADER + Technicals + ML) ---
-  const isFinbertLive = sentiment?.finbertStatus === 'LIVE' && sentiment?.finbertScore !== null;
-  const finbertScore = isFinbertLive ? Math.max(-1, Math.min(1, sentiment.finbertScore!)) : 0;
-  const vaderScore = Math.max(-1, Math.min(1, sentiment.vaderCompound));
+  // --- Unified Hybrid Model Synthesis (VADER + Financial Context + Technicals + ML) ---
+  const hasNewsData = (sentiment?.newsCount ?? 0) > 0 && sentiment?.dataStatus !== 'UNAVAILABLE';
+  const activeSentimentScore = Math.max(-1, Math.min(1,
+    typeof sentiment?.financialScore === 'number' && !isNaN(sentiment.financialScore)
+      ? sentiment.financialScore
+      : (typeof sentiment?.vaderCompound === 'number' && !isNaN(sentiment.vaderCompound) ? sentiment.vaderCompound : 0)
+  ));
+  const isFinbertLive = false; // FinBERT retired from active runtime pipeline
+  const finbertScore = 0;
+  const vaderScore = activeSentimentScore;
 
   // Technical component (-1.0 to +1.0)
   let rsiFactor = 0;
@@ -1976,52 +1982,40 @@ export function computeModelSignal(
     : 0;
 
   // Re-normalize weights dynamically:
-  // If FinBERT is offline, redistribute its weight to VADER fallback and live engines.
   // If corporate news is completely unavailable, exclude news sentiment entirely and redistribute to remaining engines.
   const hasFundData = hasValidFundamentalMetric;
-  const hasNewsData = (sentiment?.newsCount ?? 0) > 0 && sentiment?.dataStatus !== 'UNAVAILABLE';
   let wTech: number;
-  let wFinbert: number;
+  let wFinbert = 0.00;
   let wVader: number;
   let wFund: number;
   let wMl: number;
 
-  if (isFinbertLive) {
-    wTech = hasFundData ? 0.30 : 0.35;
-    wFinbert = hasFundData ? 0.25 : 0.30;
-    wVader = hasFundData ? 0.15 : 0.15;
-    wFund = hasFundData ? 0.15 : 0.00;
-    wMl = hasFundData ? 0.15 : 0.20;
-  } else if (hasNewsData) {
-    // FinBERT transformer service unavailable: cleanly redistribute weight to VADER fallback and live engines
-    wFinbert = 0.00;
+  if (hasNewsData) {
     wTech = hasFundData ? 0.40 : 0.45;
     wVader = hasFundData ? 0.25 : 0.30;
     wFund = hasFundData ? 0.15 : 0.00;
     wMl = hasFundData ? 0.20 : 0.25;
   } else {
-    // Both FinBERT and news sentiment are unavailable: redistribute 100% of weight to technicals, fundamentals, ML
-    wFinbert = 0.00;
-    wVader = 0.00;
+    // News sentiment unavailable: redistribute 100% of weight to technicals, fundamentals, ML
     wTech = hasFundData ? 0.50 : 0.60;
+    wVader = 0.00;
     wFund = hasFundData ? 0.20 : 0.00;
     wMl = hasFundData ? 0.30 : 0.40;
   }
 
-  const finbertContribution = isFinbertLive ? Math.round(finbertScore * wFinbert * 100) / 100 : 0;
-  const vaderContribution = hasNewsData ? Math.round(vaderScore * wVader * 100) / 100 : 0;
+  const finbertContribution = 0;
+  const vaderContribution = hasNewsData ? Math.round(activeSentimentScore * wVader * 100) / 100 : 0;
   const techContribution = Math.round(techScore * wTech * 100) / 100;
   const fundContribution = hasFundData ? Math.round(fundScore * wFund * 100) / 100 : 0;
   const mlContribution = Math.round(mlScore * wMl * 100) / 100;
 
-  const unifiedScore = Math.round((finbertContribution + vaderContribution + techContribution + fundContribution + mlContribution) * 100) / 100;
+  const unifiedScore = Math.round((vaderContribution + techContribution + fundContribution + mlContribution) * 100) / 100;
 
   let exactAction: 'STRONG BUY' | 'BUY' | 'HOLD' | 'SELL' | 'STRONG SELL' = 'HOLD';
   let unifiedConf = 0.65;
 
   // Exact Decision Mapping & Calibrated Confidence Bands
-  // When FinBERT is offline and only VADER is active, cap maximum confidence to reflect data-source limitations honestly
-  const confidenceCap = isFinbertLive ? 0.96 : (hasNewsData ? 0.78 : 0.70);
+  const confidenceCap = hasNewsData ? 0.88 : 0.72;
 
   if (unifiedScore >= 0.35) {
     exactAction = 'STRONG BUY';
@@ -2054,11 +2048,9 @@ export function computeModelSignal(
 
   const currSym = quote.currency === 'USD' ? '$' : '₹';
 
-  // Executive summary strictly reflecting data sources without claiming false FinBERT confirmation
-  const newsSentimentPhrase = isFinbertLive
-    ? `FinBERT transformer sentiment (${finbertScore >= 0 ? '+' : ''}${finbertScore.toFixed(2)})`
-    : hasNewsData
-    ? `VADER sentiment (${vaderScore >= 0 ? '+' : ''}${vaderScore.toFixed(2)}, FinBERT offline fallback)`
+  // Executive summary strictly reflecting data sources
+  const newsSentimentPhrase = hasNewsData
+    ? `Financial sentiment (${activeSentimentScore >= 0 ? '+' : ''}${activeSentimentScore.toFixed(2)})`
     : 'technical trend factors (news sentiment unavailable)';
 
   let executiveSummary = '';
@@ -2067,7 +2059,7 @@ export function computeModelSignal(
   } else if (exactAction.includes('SELL')) {
     executiveSummary = `Bearish ${newsSentimentPhrase} combined with ${trendDiff < 0 ? 'negative moving average spread' : 'elevated selling pressure'} and an active distribution trend triggers an exact ${exactAction} signal for capital preservation.`;
   } else {
-    executiveSummary = `Balanced momentum factors (RSI ${rsi !== undefined ? rsi.toFixed(0) : 'N/A'}) and neutral composite score (${unifiedScore >= 0 ? '+' : ''}${unifiedScore.toFixed(2)}) produce an exact HOLD recommendation (${isFinbertLive ? 'FinBERT verified' : hasNewsData ? 'VADER fallback active' : 'news unavailable'}).`;
+    executiveSummary = `Balanced momentum factors (RSI ${rsi !== undefined ? rsi.toFixed(0) : 'N/A'}) and neutral composite score (${unifiedScore >= 0 ? '+' : ''}${unifiedScore.toFixed(2)}) produce an exact HOLD recommendation (${hasNewsData ? 'Financial Sentiment Engine active' : 'news unavailable'}).`;
   }
 
   // Exact Additive Linear Factor Attributions:
@@ -2088,18 +2080,14 @@ export function computeModelSignal(
       description: 'Short-term to intermediate moving average alignment'
     },
     {
-      feature: isFinbertLive
-        ? 'News Sentiment (FinBERT)'
-        : hasNewsData
-        ? 'News Sentiment (VADER Fallback)'
+      feature: hasNewsData
+        ? 'News Sentiment (VADER + Context Engine)'
         : 'News Sentiment (Unavailable)',
-      value: isFinbertLive ? (sentiment.finbertScore ?? 0) : (hasNewsData ? (sentiment.vaderCompound || 0) : 0),
-      impact: Math.round((isFinbertLive ? finbertContribution : (hasNewsData ? vaderContribution : 0)) * 1000) / 1000,
-      direction: (isFinbertLive ? finbertScore : vaderScore) >= 0 ? 'POSITIVE' : 'NEGATIVE',
-      description: isFinbertLive
-        ? 'FinBERT semantic analysis of corporate news'
-        : hasNewsData
-        ? 'VADER lexical analysis fallback (FinBERT offline due to provider credits)'
+      value: hasNewsData ? activeSentimentScore : 0,
+      impact: Math.round((hasNewsData ? vaderContribution : 0) * 1000) / 1000,
+      direction: activeSentimentScore >= 0 ? 'POSITIVE' : 'NEGATIVE',
+      description: hasNewsData
+        ? 'Deterministic financial keyword & lexical analysis of corporate disclosures'
         : 'Corporate news sentiment unavailable; excluded from algorithmic scoring'
     },
     {

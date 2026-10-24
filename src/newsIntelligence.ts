@@ -35,6 +35,14 @@ export interface ClassifiedArticle {
   corporateEventId?: string;
   corporateEventTitle?: string;
   corporateEventType: 'EXPANSION' | 'RISK' | 'ROUTINE';
+  financialScore?: number;
+  financialMagnitude?: number;
+  evidenceStrength?: 'VERY_STRONG' | 'STRONG' | 'MODERATE' | 'WEAK' | 'NEUTRAL' | 'UNCERTAIN' | 'INSUFFICIENT';
+  matchedTerms?: string[];
+  contextCategories?: string[];
+  isHeadlineOnly?: boolean;
+  isUncertainOrAttributed?: boolean;
+  isMixed?: boolean;
 }
 
 export interface GroupedNewsResult {
@@ -358,7 +366,14 @@ export function deduplicateAndGroupNewsArticles(rawArticles: any[]): GroupedNews
       isCatalyst: classification.isCatalyst,
       corporateEventId: classification.corporateEventId,
       corporateEventTitle: classification.corporateEventTitle,
-      corporateEventType: classification.corporateEventType
+      corporateEventType: classification.corporateEventType,
+      financialScore: art.financialScore ?? art.vaderScore,
+      evidenceStrength: art.evidenceStrength || 'NEUTRAL',
+      matchedTerms: art.matchedTerms || [],
+      contextCategories: art.contextCategories || [],
+      isHeadlineOnly: Boolean(art.isHeadlineOnly),
+      isUncertainOrAttributed: Boolean(art.isUncertainOrAttributed),
+      isMixed: Boolean(art.isMixed)
     };
 
     classifiedArticles.push(classified);
