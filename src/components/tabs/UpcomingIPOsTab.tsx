@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { IPODetails } from '../../types';
-import { UPCOMING_IPOS_CATALOG, searchIPOs } from '../../ipoCatalog';
+import { IPODetails, IPOStatus } from '../../types';
+import { IPO_CATALOG_DISCLOSURE } from '../../ipoCatalog';
 import {
   Sparkles,
   TrendingUp,
@@ -19,12 +19,17 @@ import {
   FileText,
   Flame,
   Award,
-  Activity
+  Activity,
+  Info,
+  Clock,
+  Radio
 } from 'lucide-react';
 
 export const UpcomingIPOsTab: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterStatus, setFilterStatus] = useState<'ALL' | 'UPCOMING' | 'OPEN_NOW' | 'LISTED' | 'SME'>('ALL');
+  const [filterStatus, setFilterStatus] = useState<
+    'ALL' | 'UPCOMING' | 'OPEN_NOW' | 'CLOSED_PENDING' | 'LISTED' | 'SME'
+  >('ALL');
   const [ipos, setIpos] = useState<IPODetails[]>([]);
   const [selectedIPO, setSelectedIPO] = useState<IPODetails | null>(null);
   const [dataStatus, setDataStatus] = useState<string>('LOADING');
@@ -74,17 +79,29 @@ export const UpcomingIPOsTab: React.FC = () => {
 
   const filteredIPOs = ipos.filter(ipo => {
     const q = searchQuery.trim().toLowerCase();
+    const name = (ipo.name || ipo.companyName || '').toLowerCase();
+    const symbol = (ipo.symbol || '').toLowerCase();
+    const sector = (ipo.sector || '').toLowerCase();
+    const industry = (ipo.industry || '').toLowerCase();
+
     const matchesQuery = !q ||
-      ipo.companyName.toLowerCase().includes(q) ||
-      ipo.symbol.toLowerCase().includes(q) ||
-      ipo.sector.toLowerCase().includes(q) ||
-      ipo.industry.toLowerCase().includes(q);
+      name.includes(q) ||
+      symbol.includes(q) ||
+      sector.includes(q) ||
+      industry.includes(q);
 
     if (!matchesQuery) return false;
-    if (filterStatus === 'UPCOMING') return ipo.status === 'UPCOMING';
-    if (filterStatus === 'OPEN_NOW') return ipo.status === 'OPEN NOW';
-    if (filterStatus === 'LISTED') return ipo.status === 'LISTED';
-    if (filterStatus === 'SME') return ipo.ipoType === 'SME';
+    if (filterStatus === 'UPCOMING') return ipo.status === 'Upcoming' || ipo.status === 'UPCOMING';
+    if (filterStatus === 'OPEN_NOW') return ipo.status === 'Open' || ipo.status === 'OPEN NOW';
+    if (filterStatus === 'CLOSED_PENDING') {
+      return (
+        ipo.status === 'Closed (allotment pending)' ||
+        ipo.status === 'Allotment done' ||
+        ipo.status === 'CLOSED'
+      );
+    }
+    if (filterStatus === 'LISTED') return ipo.status === 'Listed' || ipo.status === 'LISTED';
+    if (filterStatus === 'SME') return ipo.market === 'SME' || ipo.ipoType === 'SME';
     return true;
   });
 
@@ -125,13 +142,40 @@ export const UpcomingIPOsTab: React.FC = () => {
     }
   };
 
-  const isProfitable = activeIPO ? activeIPO.netProfitLossCr > 0 : false;
-  const isFreshHeavy = activeIPO ? activeIPO.freshIssueCr >= activeIPO.ofsCr : false;
+  const getStatusBadgeClass = (status: string) => {
+    switch (status) {
+      case 'Open':
+      case 'OPEN NOW':
+        return 'bg-emerald-950 text-emerald-400 border-emerald-700 animate-pulse';
+      case 'Upcoming':
+      case 'UPCOMING':
+        return 'bg-indigo-950 text-indigo-300 border-indigo-700';
+      case 'Closed (allotment pending)':
+      case 'CLOSED':
+        return 'bg-amber-950/90 text-amber-300 border-amber-800';
+      case 'Allotment done':
+        return 'bg-cyan-950 text-cyan-300 border-cyan-800';
+      case 'Listed':
+      case 'LISTED':
+        return 'bg-blue-950 text-blue-400 border-blue-800';
+      case 'Postponed':
+      case 'POSTPONED':
+        return 'bg-rose-950 text-rose-300 border-rose-800';
+      case 'Withdrawn':
+      case 'CANCELLED':
+        return 'bg-slate-800 text-slate-400 border-slate-700';
+      default:
+        return 'bg-slate-900 text-slate-400 border-slate-800';
+    }
+  };
+
+  const isProfitable = activeIPO ? (activeIPO.netProfitLossCr || 0) > 0 : false;
+  const isFreshHeavy = activeIPO ? (activeIPO.freshIssueCr || 0) >= (activeIPO.ofsCr || 0) : false;
 
   return (
-    <div className="space-y-6 pt-2">
-      {/* 1. Header Banner & Key Stats */}
-      <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4">
+    <div className="space-y-6 pt-2 font-sans">
+      {/* 0. Limited Curated Catalog Statutory Notice */}
+      <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-3 font-mono text-xs">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-slate-800">
           <div>
             <div className="flex items-center gap-2">
@@ -142,10 +186,8 @@ export const UpcomingIPOsTab: React.FC = () => {
                 IPO Intelligence & Quantitative Audit
               </h3>
             </div>
-            <p className="text-xs text-slate-400 mt-1 max-w-2xl">
-              {dataStatus === 'LIVE_EXCHANGE_DATA'
-                ? 'Live National Stock Exchange (NSE) primary market feed combined with statutory historical exchange disclosures.'
-                : 'Verified Indian primary market pipeline and historical exchange disclosures. Separated into Upcoming DRHP Filings, Currently Open Issues, and Recently Listed issues.'}
+            <p className="text-xs text-slate-400 mt-1 max-w-2xl font-sans">
+              Indian primary market pipeline, verified filings, and news-reported offerings with dynamic date-based status resolution.
             </p>
           </div>
 
@@ -156,38 +198,46 @@ export const UpcomingIPOsTab: React.FC = () => {
                 : 'bg-indigo-950/80 text-indigo-400 border-indigo-800'
             }`}>
               <Activity className="w-3.5 h-3.5" />
-              {dataStatus === 'LIVE_EXCHANGE_DATA' ? 'Live NSE Feed' : 'Verified Catalog'} · {ipos.length} Disclosures
+              {dataStatus === 'LIVE_EXCHANGE_DATA' ? 'Live Exchange Feed' : 'Verified Catalog'} · {ipos.length} Tracked Issues
             </span>
           </div>
         </div>
 
+        {/* Limited Catalog Notice Banner */}
+        <div className="flex items-start gap-2 bg-slate-950/80 border border-slate-800/80 rounded-xl p-3 text-slate-300 text-[11px] font-sans">
+          <Info className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+          <span>{IPO_CATALOG_DISCLOSURE}</span>
+        </div>
+
         {/* 4 Quick Stat Strip */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-mono">
-          <div className="bg-slate-950/60 border border-slate-800 p-3 rounded-xl">
-            <span className="text-slate-400 text-[11px] block">Recently Listed</span>
-            <div className="text-lg font-bold text-blue-400 mt-0.5">
-              {ipos.filter(i => i.status === 'LISTED').length} Issues
-            </div>
-            <div className="text-[10px] text-slate-500">Verified NSE/BSE listed</div>
-          </div>
-          <div className="bg-slate-950/60 border border-slate-800 p-3 rounded-xl">
-            <span className="text-slate-400 text-[11px] block">Upcoming DRHP Filings</span>
-            <div className="text-lg font-bold text-slate-100 mt-0.5">
-              {ipos.filter(i => i.status === 'UPCOMING').length} Issues
-            </div>
-            <div className="text-[10px] text-slate-500">Scheduled issue dates</div>
-          </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-mono pt-1">
           <div className="bg-slate-950/60 border border-slate-800 p-3 rounded-xl">
             <span className="text-slate-400 text-[11px] block">Currently Open</span>
             <div className="text-lg font-bold text-emerald-400 mt-0.5">
-              {ipos.filter(i => i.status === 'OPEN NOW').length} Active
+              {ipos.filter(i => i.status === 'Open' || i.status === 'OPEN NOW').length} Active
             </div>
             <div className="text-[10px] text-slate-500">Active bidding window</div>
           </div>
           <div className="bg-slate-950/60 border border-slate-800 p-3 rounded-xl">
-            <span className="text-slate-400 text-[11px] block">Exchange Disclosures</span>
-            <div className="text-lg font-bold text-indigo-400 mt-0.5">NSE / BSE</div>
-            <div className="text-[10px] text-slate-500">Official regulatory filing data</div>
+            <span className="text-slate-400 text-[11px] block">Closed / Allotment Pending</span>
+            <div className="text-lg font-bold text-amber-400 mt-0.5">
+              {ipos.filter(i => i.status === 'Closed (allotment pending)' || i.status === 'Allotment done').length} Issues
+            </div>
+            <div className="text-[10px] text-slate-500">Bidding ended; awaiting basis</div>
+          </div>
+          <div className="bg-slate-950/60 border border-slate-800 p-3 rounded-xl">
+            <span className="text-slate-400 text-[11px] block">Upcoming Issues</span>
+            <div className="text-lg font-bold text-indigo-400 mt-0.5">
+              {ipos.filter(i => i.status === 'Upcoming' || i.status === 'UPCOMING').length} Issues
+            </div>
+            <div className="text-[10px] text-slate-500">Future scheduled dates</div>
+          </div>
+          <div className="bg-slate-950/60 border border-slate-800 p-3 rounded-xl">
+            <span className="text-slate-400 text-[11px] block">Historical Listings</span>
+            <div className="text-lg font-bold text-blue-400 mt-0.5">
+              {ipos.filter(i => i.status === 'Listed' || i.status === 'LISTED' || i.isHistorical).length} Verified
+            </div>
+            <div className="text-[10px] text-slate-500">Completed public debuts</div>
           </div>
         </div>
       </div>
@@ -198,10 +248,10 @@ export const UpcomingIPOsTab: React.FC = () => {
           <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
           <input
             type="text"
-            placeholder="Search IPOs (e.g. Swiggy, Hyundai, NSDL)..."
+            placeholder="Search IPOs (e.g. Jio, Swiggy, Hyundai)..."
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors"
+            className="w-full pl-9 pr-4 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors font-mono"
           />
         </div>
 
@@ -217,16 +267,6 @@ export const UpcomingIPOsTab: React.FC = () => {
             All ({ipos.length})
           </button>
           <button
-            onClick={() => setFilterStatus('UPCOMING')}
-            className={`px-3 py-1.5 rounded-lg font-semibold transition-colors ${
-              filterStatus === 'UPCOMING'
-                ? 'bg-emerald-500 text-slate-950 font-bold'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
-            }`}
-          >
-            Upcoming IPOs ({ipos.filter(i => i.status === 'UPCOMING').length})
-          </button>
-          <button
             onClick={() => setFilterStatus('OPEN_NOW')}
             className={`px-3 py-1.5 rounded-lg font-semibold transition-colors ${
               filterStatus === 'OPEN_NOW'
@@ -234,7 +274,27 @@ export const UpcomingIPOsTab: React.FC = () => {
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
             }`}
           >
-            Currently Open ({ipos.filter(i => i.status === 'OPEN NOW').length})
+            Open ({ipos.filter(i => i.status === 'Open' || i.status === 'OPEN NOW').length})
+          </button>
+          <button
+            onClick={() => setFilterStatus('CLOSED_PENDING')}
+            className={`px-3 py-1.5 rounded-lg font-semibold transition-colors ${
+              filterStatus === 'CLOSED_PENDING'
+                ? 'bg-emerald-500 text-slate-950 font-bold'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+            }`}
+          >
+            Closed / Pending ({ipos.filter(i => i.status === 'Closed (allotment pending)' || i.status === 'Allotment done').length})
+          </button>
+          <button
+            onClick={() => setFilterStatus('UPCOMING')}
+            className={`px-3 py-1.5 rounded-lg font-semibold transition-colors ${
+              filterStatus === 'UPCOMING'
+                ? 'bg-emerald-500 text-slate-950 font-bold'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+            }`}
+          >
+            Upcoming ({ipos.filter(i => i.status === 'Upcoming' || i.status === 'UPCOMING').length})
           </button>
           <button
             onClick={() => setFilterStatus('LISTED')}
@@ -244,7 +304,7 @@ export const UpcomingIPOsTab: React.FC = () => {
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
             }`}
           >
-            Recently Listed ({ipos.filter(i => i.status === 'LISTED').length})
+            Listed ({ipos.filter(i => i.status === 'Listed' || i.status === 'LISTED').length})
           </button>
           <button
             onClick={() => setFilterStatus('SME')}
@@ -254,7 +314,7 @@ export const UpcomingIPOsTab: React.FC = () => {
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
             }`}
           >
-            SME ({ipos.filter(i => i.ipoType === 'SME').length})
+            SME ({ipos.filter(i => i.market === 'SME' || i.ipoType === 'SME').length})
           </button>
         </div>
       </div>
@@ -265,14 +325,16 @@ export const UpcomingIPOsTab: React.FC = () => {
         <div className="lg:col-span-5 space-y-3">
           <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider font-mono flex items-center justify-between">
             <span>Listing Pipeline ({filteredIPOs.length})</span>
-            <span className="text-[10px] text-slate-500 font-normal">Click to test background</span>
+            <span className="text-[10px] text-slate-500 font-normal">Click to view audit</span>
           </h4>
 
           <div className="space-y-2.5 max-h-[750px] overflow-y-auto pr-1">
             {filteredIPOs.length > 0 ? (
               filteredIPOs.map(ipo => {
-                const isSelected = activeIPO.id === ipo.id;
+                const isSelected = activeIPO?.id === ipo.id;
                 const vStyle = getVerdictStyle(ipo.verdict);
+                const badgeClass = getStatusBadgeClass(ipo.status);
+
                 return (
                   <div
                     key={ipo.id}
@@ -284,35 +346,43 @@ export const UpcomingIPOsTab: React.FC = () => {
                     }`}
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <div>
+                      <div className="space-y-1">
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="font-bold text-slate-100 text-sm">{ipo.companyName}</span>
+                          <span className="font-bold text-slate-100 text-sm">
+                            {ipo.name || ipo.companyName}
+                          </span>
                           <span className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold uppercase border ${
-                            ipo.ipoType === 'SME'
+                            ipo.market === 'SME' || ipo.ipoType === 'SME'
                               ? 'bg-purple-950 text-purple-300 border-purple-800'
                               : 'bg-slate-800 text-slate-300 border-slate-700'
                           }`}>
-                            {ipo.ipoType || 'Mainboard'}
+                            {ipo.market || ipo.ipoType || 'Mainboard'}
                           </span>
+                          {ipo.isHistorical && (
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-slate-800 text-slate-400 border border-slate-700">
+                              Historical
+                            </span>
+                          )}
+                          {ipo.statusSource === 'Unverified (from news)' && (
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-amber-950 text-amber-300 border border-amber-800">
+                              From News
+                            </span>
+                          )}
                         </div>
-                        <div className="flex items-center gap-2 mt-0.5 font-mono text-[11px] text-slate-400">
+
+                        <div className="flex items-center gap-2 font-mono text-[11px] text-slate-400 flex-wrap">
                           <span className="font-semibold text-slate-300">{ipo.symbol}</span>
                           <span>·</span>
-                          <span>Open: <strong className="text-slate-200">{ipo.openDate}</strong></span>
+                          <span>Open: <strong className="text-slate-200">{ipo.openDate || 'Unverified'}</strong></span>
                           <span>·</span>
                           <span>{ipo.sector}</span>
                         </div>
                       </div>
+
                       <span
-                        className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold tracking-wider uppercase border ${
-                          ipo.status === 'OPEN NOW'
-                            ? 'bg-emerald-950 text-emerald-400 border-emerald-700 animate-pulse'
-                            : ipo.status === 'LISTED'
-                            ? 'bg-blue-950 text-blue-400 border-blue-800'
-                            : 'bg-amber-950/80 text-amber-300 border-amber-800'
-                        }`}
+                        className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold tracking-wider uppercase border shrink-0 text-center ${badgeClass}`}
                       >
-                        {ipo.status === 'LISTED' ? 'RECENTLY LISTED' : ipo.status}
+                        {ipo.status}
                       </span>
                     </div>
 
@@ -320,26 +390,28 @@ export const UpcomingIPOsTab: React.FC = () => {
                     <div className="grid grid-cols-3 gap-2 mt-3 pt-2.5 border-t border-slate-800/70 font-mono text-[11px]">
                       <div>
                         <span className="text-[10px] text-slate-500 block">Price Band</span>
-                        <span className="font-bold text-slate-200">{ipo.priceBand}</span>
+                        <span className="font-bold text-slate-200">
+                          {ipo.priceBand && ipo.priceBand.trim() ? ipo.priceBand : 'Unverified'}
+                        </span>
                       </div>
                       <div>
                         <span className="text-[10px] text-slate-500 block">Issue Size</span>
-                        <span className="font-bold text-slate-200">₹{ipo.issueSizeCr.toLocaleString()} Cr</span>
+                        <span className="font-bold text-slate-200">
+                          {ipo.issueSizeCr > 0 ? `₹${ipo.issueSizeCr.toLocaleString()} Cr` : 'Unverified'}
+                        </span>
                       </div>
                       <div>
-                        <span className="text-[10px] text-slate-500 block">
-                          {ipo.status === 'LISTED' ? 'Listing Debut' : 'Filing Stage'}
-                        </span>
-                        <span className={`font-bold ${ipo.status === 'LISTED' ? 'text-blue-400' : 'text-amber-400'}`}>
-                          {ipo.status === 'LISTED' ? (ipo.listingPrice ? `₹${ipo.listingPrice}` : `Listed ${ipo.listingDate}`) : 'DRHP Clearance'}
+                        <span className="text-[10px] text-slate-500 block">Status Basis</span>
+                        <span className="font-bold text-slate-300 truncate block">
+                          {ipo.statusSource || (ipo.isHistorical ? 'Historical Filing' : 'Exchange Notice')}
                         </span>
                       </div>
                     </div>
 
-                    {/* Verdict Badge Mini */}
+                    {/* Verdict & Exchange */}
                     <div className="mt-2.5 pt-2 border-t border-slate-800/60 flex items-center justify-between">
                       <span className={`px-2 py-0.5 rounded text-[10px] font-mono ${vStyle.badge}`}>
-                        {ipo.verdict || 'STATUTORY RECORD'}
+                        {ipo.verdict || (ipo.isHistorical ? 'HISTORICAL FILING' : 'DISCLOSURE')}
                       </span>
                       <span className="text-[11px] font-mono text-slate-400">
                         {ipo.exchange}
@@ -351,17 +423,9 @@ export const UpcomingIPOsTab: React.FC = () => {
             ) : (
               <div className="p-8 text-center text-xs font-mono text-slate-400 bg-slate-900/40 border border-slate-800 rounded-xl space-y-2">
                 <AlertTriangle className="w-5 h-5 text-amber-400 mx-auto" />
-                <p className="font-semibold text-slate-200">
-                  {filterStatus === 'OPEN_NOW'
-                    ? 'No IPOs Currently Open For Subscription'
-                    : filterStatus === 'UPCOMING'
-                    ? 'No Live Upcoming Schedules Declared'
-                    : 'No IPO records match this filter.'}
-                </p>
+                <p className="font-semibold text-slate-200">No IPO records match this filter.</p>
                 <p className="text-[11px] text-slate-500 max-w-xs mx-auto">
-                  {filterStatus === 'OPEN_NOW'
-                    ? 'Official primary market bidding on NSE/BSE occurs strictly during notified exchange hours (10:00 AM – 5:00 PM IST on bidding days).'
-                    : 'Upcoming issues require finalized SEBI approval and exchange notifications.'}
+                  Try switching the filter to ALL or clearing your search keywords.
                 </p>
               </div>
             )}
@@ -372,410 +436,282 @@ export const UpcomingIPOsTab: React.FC = () => {
         <div className="lg:col-span-7 bg-slate-900/60 border border-slate-800 rounded-2xl p-5 space-y-5">
           {activeIPO ? (
             <>
-              {/* Company Title & External Website */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-800">
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <Building2 className="w-5 h-5 text-emerald-400" />
-                <h3 className="text-lg font-bold text-slate-100 font-mono">
-                  {activeIPO.companyName}
-                </h3>
-                <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase border ${
-                  activeIPO.ipoType === 'SME'
-                    ? 'bg-purple-950 text-purple-300 border-purple-800'
-                    : 'bg-slate-800 text-slate-300 border-slate-700'
-                }`}>
-                  {activeIPO.ipoType || 'Mainboard'} IPO
-                </span>
-              </div>
-              <div className="text-xs text-slate-400 mt-0.5 font-mono">
-                {activeIPO.symbol} · {activeIPO.exchange} · Open: <strong className="text-slate-200">{activeIPO.openDate}</strong> · {activeIPO.industry}
-              </div>
-            </div>
-
-            {activeIPO.website && (
-              <a
-                href={activeIPO.website}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-mono font-semibold transition-all shrink-0"
-              >
-                <span>Official Website</span>
-                <ExternalLink className="w-3.5 h-3.5" />
-              </a>
-            )}
-          </div>
-
-          {/* Master Quantitative Verdict Banner */}
-          <div className={`p-4 rounded-xl border ${getVerdictStyle(activeIPO.verdict).bg} space-y-2`}>
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <Award className="w-5 h-5" />
-                <span className="text-xs font-mono font-bold uppercase tracking-wider">
-                  Statutory Regulatory Summary
-                </span>
-              </div>
-              <span className={`px-2.5 py-0.5 rounded text-xs ${getVerdictStyle(activeIPO.verdict).badge}`}>
-                {activeIPO.verdict || 'OFFICIAL DISCLOSURE'}
-              </span>
-            </div>
-
-            <div className="text-lg font-bold font-mono tracking-tight text-slate-100">
-              {activeIPO.status === 'LISTED'
-                ? `Historical Exchange Filing · Listed on ${activeIPO.listingDate}`
-                : `DRHP Draft Prospectus Filed with SEBI`}
-            </div>
-
-            <p className="text-xs leading-relaxed opacity-90 font-sans">
-              <strong>Regulatory Prospectus Summary: </strong>
-              {activeIPO.verdictRationale}
-            </p>
-
-            <div className="flex items-center gap-4 text-xs font-mono pt-1">
-              <span>Status: <strong className="uppercase">{activeIPO.status}</strong></span>
-              <span>Retail Lot: <strong>{activeIPO.lotSize > 0 ? `${activeIPO.lotSize} Shares (₹${activeIPO.minInvestment.toLocaleString()})` : 'Pending Price Band Notice'}</strong></span>
-            </div>
-          </div>
-
-          {/* 1. Business Model & Operations */}
-          <div className="space-y-2">
-            <h5 className="text-xs font-bold text-slate-300 uppercase tracking-wider font-mono flex items-center gap-1.5">
-              <FileText className="w-4 h-4 text-emerald-400" />
-              1. Business Model & Core Operations
-            </h5>
-            <p className="text-xs text-slate-300 leading-relaxed bg-slate-950/60 p-3.5 rounded-xl border border-slate-800">
-              {activeIPO.businessSummary}
-            </p>
-          </div>
-
-          {/* 2. Financial Background Audit (P&L & Solvency) */}
-          <div className="space-y-2">
-            <h5 className="text-xs font-bold text-slate-300 uppercase tracking-wider font-mono flex items-center gap-1.5">
-              <DollarSign className="w-4 h-4 text-emerald-400" />
-              2. Financial Statement Disclosures (P&L & Debt Obligations)
-            </h5>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 font-mono text-xs">
-              {/* Annual Revenue */}
-              <div className="bg-slate-950/60 border border-slate-800 p-3 rounded-xl">
-                <span className="text-[11px] text-slate-500 block">Annual Sales</span>
-                <div className="text-base font-bold text-slate-100 mt-0.5">
-                  ₹{activeIPO.annualRevenueCr.toLocaleString()} Cr
-                </div>
-                <div className="text-[10px] text-emerald-400 mt-0.5">
-                  {activeIPO.revenueYoYGrowthPct !== 0 ? `${activeIPO.revenueYoYGrowthPct > 0 ? '+' : ''}${activeIPO.revenueYoYGrowthPct}% YoY` : 'Audited Year'}
-                </div>
-              </div>
-
-              {/* Net Profit / Loss */}
-              <div className="bg-slate-950/60 border border-slate-800 p-3 rounded-xl">
-                <span className="text-[11px] text-slate-500 block">Net Profit / Loss (PAT)</span>
-                <div
-                  className={`text-base font-bold mt-0.5 ${
-                    isProfitable ? 'text-emerald-400' : 'text-rose-400'
-                  }`}
-                >
-                  {isProfitable ? `₹${activeIPO.netProfitLossCr} Cr` : `-₹${Math.abs(activeIPO.netProfitLossCr)} Cr`}
-                </div>
-                <div className="text-[10px] text-slate-500 mt-0.5">
-                  Margin: {activeIPO.profitMarginPct.toFixed(1)}%
-                </div>
-              </div>
-
-              {/* Debt to Equity */}
-              <div className="bg-slate-950/60 border border-slate-800 p-3 rounded-xl">
-                <span className="text-[11px] text-slate-500 block">Debt / Equity</span>
-                <div
-                  className={`text-base font-bold mt-0.5 ${
-                    activeIPO.debtToEquity < 50 ? 'text-emerald-400' : 'text-amber-400'
-                  }`}
-                >
-                  {activeIPO.debtToEquity}%
-                </div>
-                <div className="text-[10px] text-slate-500 mt-0.5">
-                  {activeIPO.debtToEquity < 30 ? 'Pristine balance sheet' : 'Capital gearing'}
-                </div>
-              </div>
-
-              {/* Valuation P/E vs Peers */}
-              <div className="bg-slate-950/60 border border-slate-800 p-3 rounded-xl">
-                <span className="text-[11px] text-slate-500 block">Issue P/E vs Peers</span>
-                <div className="text-base font-bold text-slate-100 mt-0.5">
-                  {activeIPO.postIssuePe > 0 ? `${activeIPO.postIssuePe}x` : 'N/A (Loss/DRHP)'}
-                </div>
-                <div className="text-[10px] text-slate-400 mt-0.5">
-                  {activeIPO.peerAveragePe > 0 ? `Peers: ${activeIPO.peerAveragePe}x` : 'Peers: Disclosed in RHP'}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* 3. Issue Structure: Fresh Capital vs Promoters OFS */}
-          <div className="space-y-2">
-            <h5 className="text-xs font-bold text-slate-300 uppercase tracking-wider font-mono flex items-center gap-1.5">
-              <Layers className="w-4 h-4 text-emerald-400" />
-              3. Issue Structure: Capital Allocation
-            </h5>
-            <div className="bg-slate-950/60 border border-slate-800 p-3.5 rounded-xl space-y-2 text-xs font-mono">
-              <div className="flex items-center justify-between text-xs">
-                <span>
-                  Fresh Issue: <strong className="text-emerald-400">₹{activeIPO.freshIssueCr.toLocaleString()} Cr</strong> (Company Expansion)
-                </span>
-                <span>
-                  Offer For Sale: <strong className="text-rose-400">₹{activeIPO.ofsCr.toLocaleString()} Cr</strong> (Promoter/Investor OFS)
-                </span>
-              </div>
-              <div className="h-2.5 bg-slate-800 rounded-full overflow-hidden flex">
-                <div
-                  style={{
-                    width: `${
-                      activeIPO.issueSizeCr > 0
-                        ? Math.round((activeIPO.freshIssueCr / activeIPO.issueSizeCr) * 100)
-                        : 0
-                    }%`
-                  }}
-                  className="bg-emerald-500 transition-all"
-                  title="Fresh Issue"
-                />
-                <div
-                  style={{
-                    width: `${
-                      activeIPO.issueSizeCr > 0
-                        ? Math.round((activeIPO.ofsCr / activeIPO.issueSizeCr) * 100)
-                        : 100
-                    }%`
-                  }}
-                  className="bg-rose-500 transition-all"
-                  title="Offer for Sale"
-                />
-              </div>
-              <div className="text-[11px] text-slate-400 font-sans mt-1">
-                {isFreshHeavy
-                  ? '✓ Fresh Capital Priority: Greater portion of issue proceeds funds balance sheet expansion.'
-                  : '⚠ OFS Component: Capital proceeds flow primarily to selling shareholders.'}
-              </div>
-            </div>
-          </div>
-
-          {/* 4. Audited Strengths vs Red Flags / Risks */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 text-xs">
-            {/* Core Strengths */}
-            <div className="bg-emerald-950/20 border border-emerald-900/60 p-3.5 rounded-xl space-y-2">
-              <h6 className="font-bold text-emerald-400 font-mono flex items-center gap-1.5">
-                <CheckCircle2 className="w-4 h-4" />
-                Key Disclosed Strengths
-              </h6>
-              <ul className="space-y-1.5 text-slate-300 text-[11px] list-disc list-inside">
-                {activeIPO.strengths.map((str, i) => (
-                  <li key={i}>{str}</li>
-                ))}
-              </ul>
-            </div>
-
-            {/* Red Flags / Risks */}
-            <div className="bg-rose-950/20 border border-rose-900/60 p-3.5 rounded-xl space-y-2">
-              <h6 className="font-bold text-rose-400 font-mono flex items-center gap-1.5">
-                <AlertTriangle className="w-4 h-4" />
-                Key Disclosed Risks & Downside Factors
-              </h6>
-              <ul className="space-y-1.5 text-slate-300 text-[11px] list-disc list-inside">
-                {activeIPO.redFlags.map((rf, i) => (
-                  <li key={i}>{rf}</li>
-                ))}
-              </ul>
-            </div>
-          </div>
-
-          {/* 5. Institutional Listing-Day Playbook (Execution Strategy) */}
-          {activeIPO.listingDayPlaybook && (
-            <div className="p-4 bg-slate-950/70 border border-indigo-900/60 rounded-xl space-y-2.5">
-              <div className="flex items-center justify-between pb-2 border-b border-slate-800">
-                <h6 className="text-xs font-bold text-slate-100 font-mono flex items-center gap-1.5">
-                  <Flame className="w-4 h-4 text-indigo-400" />
-                  Listing Day Execution Playbook (10:00 AM Market Open Strategy)
-                </h6>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-indigo-950 text-indigo-300 border border-indigo-800">
-                  Institutional Directive
-                </span>
-              </div>
-
-              <div className="space-y-2 text-xs font-sans">
-                <div className="bg-slate-900/80 p-2.5 rounded-lg border border-slate-800">
-                  <span className="font-mono text-emerald-400 font-bold block text-[11px] uppercase">
-                    Scenario A · If Opens at Premium:
-                  </span>
-                  <p className="text-slate-300 text-[11px] mt-0.5 leading-relaxed">
-                    {activeIPO.listingDayPlaybook.ifOpensPremium}
-                  </p>
-                </div>
-
-                <div className="bg-slate-900/80 p-2.5 rounded-lg border border-slate-800">
-                  <span className="font-mono text-rose-400 font-bold block text-[11px] uppercase">
-                    Scenario B · If Opens Flat or at Discount:
-                  </span>
-                  <p className="text-slate-300 text-[11px] mt-0.5 leading-relaxed">
-                    {activeIPO.listingDayPlaybook.ifOpensFlat}
-                  </p>
-                </div>
-
-                <div className="text-[11px] text-slate-400 font-mono pt-1">
-                  <strong>Risk & Supply Warning: </strong>
-                  {activeIPO.listingDayPlaybook.trailStopLossRule}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* 6. Institutional Anchor Book & Valuation Matrix */}
-          {(activeIPO.anchorBook || activeIPO.valuationMatrix) && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 text-xs">
-              {/* Anchor Book */}
-              {activeIPO.anchorBook && (
-                <div className="bg-slate-950/60 border border-slate-800 p-3.5 rounded-xl space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-slate-200 font-mono">QIB Anchor Book</span>
-                    <span className="font-mono text-emerald-400 font-bold">₹{activeIPO.anchorBook.totalCr.toLocaleString()} Cr</span>
-                  </div>
-                  <div className="text-[11px] text-slate-400">
-                    Marquee Institutions:
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {activeIPO.anchorBook.marqueeInvestors.map((inv, idx) => (
-                        <span key={idx} className="px-1.5 py-0.5 rounded bg-slate-900 text-slate-300 border border-slate-800 text-[10px]">
-                          {inv}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="text-[10px] text-slate-500 font-mono pt-1 border-t border-slate-800/80">
-                    Lock-in Expiry: 50% on {activeIPO.anchorBook.lockin30dDate} · 50% on {activeIPO.anchorBook.lockin90dDate}
-                  </div>
-                </div>
-              )}
-
-              {/* Valuation & Fair Value Matrix */}
-              {activeIPO.valuationMatrix && (
-                <div className="bg-slate-950/60 border border-slate-800 p-3.5 rounded-xl space-y-2 font-mono">
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-slate-200">DCF Fair Value</span>
-                    <span className="text-emerald-400 font-bold">₹{activeIPO.valuationMatrix.fairValueEst}</span>
-                  </div>
-                  <div className="grid grid-cols-3 gap-1.5 text-center pt-1 text-[10px]">
-                    <div className="bg-slate-900 p-1.5 rounded border border-slate-800">
-                      <span className="text-slate-500 block">Safety Margin</span>
-                      <span className={`font-bold ${activeIPO.valuationMatrix.marginOfSafetyPct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                        {activeIPO.valuationMatrix.marginOfSafetyPct >= 0 ? '+' : ''}{activeIPO.valuationMatrix.marginOfSafetyPct}%
-                      </span>
-                    </div>
-                    <div className="bg-slate-900 p-1.5 rounded border border-slate-800">
-                      <span className="text-slate-500 block">EV/EBITDA</span>
-                      <span className="font-bold text-slate-200">{activeIPO.valuationMatrix.evToEbitda}x</span>
-                    </div>
-                    <div className="bg-slate-900 p-1.5 rounded border border-slate-800">
-                      <span className="text-slate-500 block">P/Sales</span>
-                      <span className="font-bold text-slate-200">{activeIPO.valuationMatrix.priceToSales}x</span>
-                    </div>
-                  </div>
-                  {activeIPO.biddingCategoryStrategy && (
-                    <div className="text-[10px] text-slate-400 font-sans pt-1 border-t border-slate-800/80">
-                      Allotment Probability: <strong className="text-indigo-400 font-mono">{activeIPO.biddingCategoryStrategy.allotmentOdds}</strong>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* 7. Grey Market Premium (GMP) & Verification Audit */}
-          <div className="bg-slate-950/60 border border-slate-800 p-3.5 rounded-xl space-y-2 font-mono text-xs">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider block">
-                Grey Market Premium (GMP) — Unofficial Market Observation
-              </span>
-              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                activeIPO.gmpAmount !== undefined ? 'bg-indigo-950 text-indigo-300 border border-indigo-800' : 'bg-slate-800 text-slate-400'
-              }`}>
-                {activeIPO.gmpAmount !== undefined ? 'OBSERVED' : 'N/A (NO VERIFIED OBSERVATION)'}
-              </span>
-            </div>
-
-            <div className="p-3 bg-slate-900/80 rounded-lg border border-slate-800/80 flex items-center justify-between">
-              <div>
-                <span className="text-slate-400 text-[10px] block">Current Estimated GMP</span>
-                <span className="text-sm font-bold text-slate-200">
-                  {activeIPO.gmpAmount !== undefined
-                    ? `₹${activeIPO.gmpAmount}${activeIPO.gmpPct !== undefined ? ` (${activeIPO.gmpPct}% premium)` : ''}`
-                    : 'N/A'}
-                </span>
-              </div>
-              <div className="text-right">
-                <span className="text-slate-400 text-[10px] block">Observation Timestamp</span>
-                <span className="text-xs text-slate-300 font-sans">
-                  {activeIPO.gmpUpdated || 'N/A (Unofficial; not fabricated)'}
-                </span>
-              </div>
-            </div>
-
-            {activeIPO.gmpHistory && activeIPO.gmpHistory.length > 0 && (
-              <div className="grid grid-cols-4 gap-2 pt-1">
-                {activeIPO.gmpHistory.map((step, idx) => (
-                  <div key={idx} className="bg-slate-900/80 border border-slate-800 p-2 rounded-lg text-center">
-                    <span className="text-[10px] text-slate-500 block">{step.date}</span>
-                    <span className={`font-bold text-xs ${step.gmpPct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                      {step.gmpPct >= 0 ? '+' : ''}{step.gmpPct}%
+              {/* Company Title & External Link */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-800">
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Building2 className="w-5 h-5 text-emerald-400" />
+                    <h3 className="text-lg font-bold text-slate-100 font-mono">
+                      {activeIPO.name || activeIPO.companyName}
+                    </h3>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase border ${
+                      activeIPO.market === 'SME' || activeIPO.ipoType === 'SME'
+                        ? 'bg-purple-950 text-purple-300 border-purple-800'
+                        : 'bg-slate-800 text-slate-300 border-slate-700'
+                    }`}>
+                      {activeIPO.market || activeIPO.ipoType || 'Mainboard'} IPO
                     </span>
-                    <span className="text-[10px] text-slate-400 block">(₹{step.gmpPrice})</span>
+                    {activeIPO.statusSource === 'Unverified (from news)' && (
+                      <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-950 text-amber-300 border border-amber-800">
+                        Unverified (from news)
+                      </span>
+                    )}
                   </div>
-                ))}
-              </div>
-            )}
-            <p className="text-[10px] text-slate-500 font-sans leading-relaxed">
-              GMP is an unofficial, unregulated OTC estimate. Displayed only when an identifiable source provides a current timestamped observation. Expected listing prices and subscription multiples are never fabricated from missing observations.
-            </p>
-          </div>
+                  <div className="text-xs text-slate-400 mt-0.5 font-mono">
+                    {activeIPO.symbol} · {activeIPO.exchange} · Open: <strong className="text-slate-200">{activeIPO.openDate || 'Unverified'}</strong> · {activeIPO.industry}
+                  </div>
+                </div>
 
-          {/* 8. Source Attribution, Subscription Multiples & Timestamps */}
-          <div className="pt-2 border-t border-slate-800 space-y-2 text-xs font-mono text-slate-400">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                Open: <strong className="text-slate-200">{activeIPO.openDate}</strong> · Close: <strong className="text-slate-200">{activeIPO.closeDate}</strong> · Listing: <strong className="text-slate-200">{activeIPO.listingDate}</strong>
-              </div>
-              <div className="flex items-center gap-2">
-                <span>Subscription Total:</span>
-                <span className="px-2 py-0.5 rounded bg-slate-800 text-emerald-400 font-bold border border-slate-700">
-                  {activeIPO.subscription?.total ? `${activeIPO.subscription.total}x` : 'N/A (Filing pending)'}
-                </span>
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center justify-between text-[11px] text-slate-500 pt-1 border-t border-slate-800/60 font-sans">
-              <span className="flex items-center gap-1 font-mono">
-                Source: {activeIPO.sourceUrl ? (
-                  <a href={activeIPO.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-emerald-400 hover:underline">
-                    {activeIPO.sourceUrl}
+                {activeIPO.website && (
+                  <a
+                    href={activeIPO.website}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-mono font-semibold transition-all shrink-0"
+                  >
+                    <span>Website</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
                   </a>
-                ) : 'National Stock Exchange (NSE) Statutory Filing'}
-              </span>
-              <span>Updated: {activeIPO.lastUpdated || 'Current session'}</span>
+                )}
+              </div>
+
+              {/* Status & Timing Verification Banner */}
+              <div className={`p-4 rounded-xl border ${getVerdictStyle(activeIPO.verdict).bg} space-y-2`}>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <Award className="w-5 h-5" />
+                    <span className="text-xs font-mono font-bold uppercase tracking-wider">
+                      Status & Date Verification Audit
+                    </span>
+                  </div>
+                  <span className={`px-2.5 py-0.5 rounded text-xs ${getVerdictStyle(activeIPO.verdict).badge}`}>
+                    {activeIPO.status}
+                  </span>
+                </div>
+
+                <div className="text-base font-bold font-mono tracking-tight text-slate-100">
+                  {activeIPO.isHistorical
+                    ? `Historical Filing · Listed on ${activeIPO.listingDate}`
+                    : `Current Status: ${activeIPO.status}`}
+                </div>
+
+                <p className="text-xs leading-relaxed opacity-90 font-sans">
+                  <strong>Verification Audit: </strong>
+                  {activeIPO.verdictRationale || 'Calculated dynamically against today\'s date in IST from filing/press records.'}
+                </p>
+
+                {/* Key Lifecycle Timestamps */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-slate-800/80 font-mono text-[11px]">
+                  <div>
+                    <span className="text-slate-400 text-[10px] block">Open Date</span>
+                    <span className="font-bold text-slate-200">{activeIPO.openDate || 'Unverified'}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 text-[10px] block">Close Date</span>
+                    <span className="font-bold text-slate-200">{activeIPO.closeDate || 'Unverified'}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 text-[10px] block">Allotment</span>
+                    <span className="font-bold text-slate-200">
+                      {activeIPO.allotmentDate || activeIPO.dates?.allotmentDate || 'Unverified'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 text-[10px] block">Listing Date</span>
+                    <span className="font-bold text-slate-200">{activeIPO.listingDate || 'Unverified'}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Source News Article Links (Mandatory for News-Derived IPOs like Jio Platforms) */}
+              {activeIPO.articleLinks && activeIPO.articleLinks.length > 0 && (
+                <div className="p-3.5 bg-amber-950/20 border border-amber-800/60 rounded-xl space-y-2 font-mono text-xs">
+                  <div className="flex items-center gap-1.5 font-bold text-amber-300">
+                    <ExternalLink className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Reported News Articles & Sources (Unverified from DRHP):</span>
+                  </div>
+                  <div className="space-y-1">
+                    {activeIPO.articleLinks.map((link, lIdx) => (
+                      <a
+                        key={lIdx}
+                        href={link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[11px] text-emerald-400 hover:text-emerald-300 hover:underline flex items-center gap-1 truncate"
+                      >
+                        <span className="truncate">{link}</span>
+                        <ExternalLink className="w-2.5 h-2.5 shrink-0" />
+                      </a>
+                    ))}
+                  </div>
+                  <p className="text-[10px] text-slate-400 font-sans">
+                    Price band, lot size, and official basis of allotment are left unverified until confirmed by official exchange circulars.
+                  </p>
+                </div>
+              )}
+
+              {/* 1. Business Model & Core Operations */}
+              <div className="space-y-2">
+                <h5 className="text-xs font-bold text-slate-300 uppercase tracking-wider font-mono flex items-center gap-1.5">
+                  <FileText className="w-4 h-4 text-emerald-400" />
+                  1. Business Model & Core Operations
+                </h5>
+                <p className="text-xs text-slate-300 leading-relaxed bg-slate-950/60 p-3.5 rounded-xl border border-slate-800 font-sans">
+                  {activeIPO.businessSummary}
+                </p>
+              </div>
+
+              {/* 2. Financial Disclosures */}
+              <div className="space-y-2">
+                <h5 className="text-xs font-bold text-slate-300 uppercase tracking-wider font-mono flex items-center gap-1.5">
+                  <DollarSign className="w-4 h-4 text-emerald-400" />
+                  2. Financial Statement Disclosures
+                </h5>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 font-mono text-xs">
+                  <div className="bg-slate-950/60 border border-slate-800 p-3 rounded-xl">
+                    <span className="text-[11px] text-slate-500 block">Annual Sales</span>
+                    <div className="text-base font-bold text-slate-100 mt-0.5">
+                      {activeIPO.annualRevenueCr > 0 ? `₹${activeIPO.annualRevenueCr.toLocaleString()} Cr` : 'Unverified'}
+                    </div>
+                    <div className="text-[10px] text-emerald-400 mt-0.5">
+                      {activeIPO.revenueYoYGrowthPct !== 0 ? `${activeIPO.revenueYoYGrowthPct > 0 ? '+' : ''}${activeIPO.revenueYoYGrowthPct}% YoY` : 'Audited Year'}
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-950/60 border border-slate-800 p-3 rounded-xl">
+                    <span className="text-[11px] text-slate-500 block">Net Profit / Loss</span>
+                    <div
+                      className={`text-base font-bold mt-0.5 ${
+                        isProfitable ? 'text-emerald-400' : 'text-rose-400'
+                      }`}
+                    >
+                      {activeIPO.netProfitLossCr !== 0
+                        ? (isProfitable ? `₹${activeIPO.netProfitLossCr} Cr` : `-₹${Math.abs(activeIPO.netProfitLossCr)} Cr`)
+                        : 'Unverified'}
+                    </div>
+                    <div className="text-[10px] text-slate-500 mt-0.5">
+                      Margin: {activeIPO.profitMarginPct ? `${activeIPO.profitMarginPct.toFixed(1)}%` : 'N/A'}
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-950/60 border border-slate-800 p-3 rounded-xl">
+                    <span className="text-[11px] text-slate-500 block">Debt / Equity</span>
+                    <div className="text-base font-bold mt-0.5 text-slate-200">
+                      {activeIPO.debtToEquity > 0 ? `${activeIPO.debtToEquity}%` : 'Unverified'}
+                    </div>
+                    <div className="text-[10px] text-slate-500 mt-0.5">Solvency ratio</div>
+                  </div>
+
+                  <div className="bg-slate-950/60 border border-slate-800 p-3 rounded-xl">
+                    <span className="text-[11px] text-slate-500 block">Price Band & Lot Size</span>
+                    <div className="text-sm font-bold text-slate-200 mt-0.5 truncate">
+                      {activeIPO.priceBand && activeIPO.priceBand.trim() ? activeIPO.priceBand : 'Unverified'}
+                    </div>
+                    <div className="text-[10px] text-slate-400 mt-0.5">
+                      {activeIPO.lotSize > 0 ? `Lot: ${activeIPO.lotSize} shares` : 'Lot: Unverified'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 3. Strengths vs Red Flags */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 text-xs">
+                <div className="bg-emerald-950/20 border border-emerald-900/60 p-3.5 rounded-xl space-y-2">
+                  <h6 className="font-bold text-emerald-400 font-mono flex items-center gap-1.5">
+                    <CheckCircle2 className="w-4 h-4" />
+                    Key Disclosed Strengths
+                  </h6>
+                  <ul className="space-y-1.5 text-slate-300 text-[11px] list-disc list-inside">
+                    {activeIPO.strengths.map((str, i) => (
+                      <li key={i}>{str}</li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div className="bg-rose-950/20 border border-rose-900/60 p-3.5 rounded-xl space-y-2">
+                  <h6 className="font-bold text-rose-400 font-mono flex items-center gap-1.5">
+                    <AlertTriangle className="w-4 h-4" />
+                    Key Disclosed Risks & Factors
+                  </h6>
+                  <ul className="space-y-1.5 text-slate-300 text-[11px] list-disc list-inside">
+                    {activeIPO.redFlags.map((rf, i) => (
+                      <li key={i}>{rf}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+
+              {/* 4. Grey Market Premium (GMP) - Kept Honest as N/A unless real timestamped observation exists */}
+              <div className="bg-slate-950/60 border border-slate-800 p-3.5 rounded-xl space-y-2 font-mono text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider block">
+                    Grey Market Premium (GMP)
+                  </span>
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                    activeIPO.gmpAmount !== undefined ? 'bg-indigo-950 text-indigo-300 border border-indigo-800' : 'bg-slate-800 text-slate-400'
+                  }`}>
+                    {activeIPO.gmpAmount !== undefined ? 'OBSERVED' : 'N/A (NO VERIFIED OBSERVATION)'}
+                  </span>
+                </div>
+
+                <div className="p-3 bg-slate-900/80 rounded-lg border border-slate-800/80 flex items-center justify-between">
+                  <div>
+                    <span className="text-slate-400 text-[10px] block">Current Estimated GMP</span>
+                    <span className="text-sm font-bold text-slate-200">
+                      {activeIPO.gmpAmount !== undefined
+                        ? `₹${activeIPO.gmpAmount}${activeIPO.gmpPct !== undefined ? ` (${activeIPO.gmpPct}% premium)` : ''}`
+                        : 'N/A'}
+                    </span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-slate-400 text-[10px] block">Observation Timestamp</span>
+                    <span className="text-xs text-slate-300 font-sans">
+                      {activeIPO.gmpUpdated || 'N/A (Unofficial; not fabricated)'}
+                    </span>
+                  </div>
+                </div>
+
+                <p className="text-[10px] text-slate-500 font-sans leading-relaxed">
+                  GMP is an unregulated over-the-counter estimate. It is displayed as N/A unless an identifiable, timestamped observation exists.
+                </p>
+              </div>
+
+              {/* 5. Source Attribution & Verification Details */}
+              <div className="pt-2 border-t border-slate-800 space-y-2 text-xs font-mono text-slate-400">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    Status Source: <strong className="text-slate-200">{activeIPO.statusSource || 'Exchange Statutory Filing'}</strong>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span>Subscription:</span>
+                    <span className="px-2 py-0.5 rounded bg-slate-800 text-emerald-400 font-bold border border-slate-700">
+                      {activeIPO.subscription?.total ? `${activeIPO.subscription.total}x` : 'N/A (Pending notice)'}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center justify-between text-[11px] text-slate-500 pt-1 border-t border-slate-800/60 font-sans">
+                  <span className="flex items-center gap-1 font-mono">
+                    Official Reference: {activeIPO.sourceUrl ? (
+                      <a href={activeIPO.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-emerald-400 hover:underline">
+                        {activeIPO.sourceUrl}
+                      </a>
+                    ) : 'National Stock Exchange (NSE) / SEBI Filing'}
+                  </span>
+                  <span>Last Verified: {activeIPO.lastVerified || '2026-10-25'}</span>
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="py-24 text-center text-xs font-mono text-slate-400 space-y-3">
+              <Calendar className="w-8 h-8 text-slate-600 mx-auto" />
+              <div className="text-slate-200 font-bold text-sm">
+                No IPO Selected
+              </div>
+              <p className="text-[11px] text-slate-500 max-w-sm mx-auto leading-relaxed">
+                Select an issue from the listing pipeline on the left to examine prospectus disclosures and metrics.
+              </p>
             </div>
-          </div>
-        </>
-      ) : (
-        <div className="py-24 text-center text-xs font-mono text-slate-400 space-y-3">
-          <Calendar className="w-8 h-8 text-slate-600 mx-auto" />
-          <div className="text-slate-200 font-bold text-sm">
-            {filterStatus === 'OPEN_NOW'
-              ? 'No IPOs Currently Open'
-              : filterStatus === 'UPCOMING'
-              ? 'No Upcoming Exchange Schedules Declared'
-              : 'No IPO Selected'}
-          </div>
-          <p className="text-[11px] text-slate-500 max-w-sm mx-auto leading-relaxed">
-            {filterStatus === 'OPEN_NOW'
-              ? 'Official primary market bidding on NSE/BSE occurs strictly during notified exchange hours (10:00 AM – 5:00 PM IST on bidding days).'
-              : filterStatus === 'UPCOMING'
-              ? 'Upcoming issues require finalized SEBI approval and exchange notifications. Switch to "Recently Listed" to view verified historical offerings.'
-              : 'Select an IPO from the pipeline to review detailed prospectus filings and metrics.'}
-          </p>
-        </div>
-      )}
+          )}
         </div>
       </div>
     </div>

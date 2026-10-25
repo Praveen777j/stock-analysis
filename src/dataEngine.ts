@@ -1759,14 +1759,17 @@ export async function fetchLiveBenchmark(ticker: string): Promise<BenchmarkData>
 export async function fetchLiveNewsAndSentiment(
   ticker: string,
   companyName: string,
-  quote?: Partial<StockQuote>
+  quote?: Partial<StockQuote>,
+  forceRefresh?: boolean
 ): Promise<SentimentData> {
   const cleanTicker = ticker.trim().toUpperCase();
   try {
-    const res = await fetch(`/api/news/${encodeURIComponent(cleanTicker)}?companyName=${encodeURIComponent(companyName)}&changePct=${quote?.changePct || 0}`);
+    const refreshQuery = forceRefresh ? '&refresh=true' : '';
+    const res = await fetch(`/api/news/${encodeURIComponent(cleanTicker)}?companyName=${encodeURIComponent(companyName)}&changePct=${quote?.changePct || 0}${refreshQuery}`);
     if (res.ok) {
       const data = await res.json();
       const articles: NewsArticle[] = Array.isArray(data.articles) ? data.articles : [];
+      const globalMarketNews: NewsArticle[] = Array.isArray(data.globalMarketNews) ? data.globalMarketNews : [];
       const redditRes: RedditResult = data.reddit || {
         status: 'EMPTY',
         message: 'Social sentiment data unavailable (Reddit API feed credentials required for live forum stream)',
@@ -1777,9 +1780,10 @@ export async function fetchLiveNewsAndSentiment(
         bearishPct: 0
       };
 
-      const hasNews = articles.length > 0;
+      const hasNews = articles.length > 0 || globalMarketNews.length > 0;
       return {
         vaderCompound: data.vaderCompound || 0.0,
+        financialScore: data.financialScore !== undefined ? data.financialScore : data.overallScore,
         finbertScore: (data.finbertScore !== undefined && data.finbertScore !== null) ? data.finbertScore : null,
         finbertStatus: data.finbertStatus || (data.finbertScore !== null && data.finbertScore !== undefined ? 'LIVE' : 'UNAVAILABLE'),
         finbertDiagnostic: data.finbertDiagnostic,
@@ -1789,8 +1793,18 @@ export async function fetchLiveNewsAndSentiment(
         overallScore: data.overallScore || 0.0,
         label: data.label || 'NEUTRAL',
         articles,
+        globalMarketNews,
+        sourcesUsed: data.sourcesUsed,
+        sourcesFailed: data.sourcesFailed,
+        sourcesStatus: data.sourcesStatus,
+        sourcesSummary: data.sourcesSummary,
+        isPartialFailure: data.isPartialFailure,
+        isStale: data.isStale,
+        cachedAt: data.cachedAt,
+        cacheTimestamp: data.cacheTimestamp,
+        eventClusters: data.eventClusters,
         reddit: redditRes,
-        dataStatus: hasNews ? 'LIVE' : 'UNAVAILABLE',
+        dataStatus: articles.length > 0 ? 'LIVE' : (globalMarketNews.length > 0 ? 'LIVE' : 'UNAVAILABLE'),
         distinctEventsCount: data.distinctEventsCount,
         expansionCatalystsCount: data.expansionCatalystsCount,
         cautionaryOverhangsCount: data.cautionaryOverhangsCount

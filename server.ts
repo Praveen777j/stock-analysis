@@ -6,8 +6,8 @@ import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { analyzeFinancialSentiment, aggregateArticleSentiment, calculateVaderScore } from './src/financialSentiment';
-import { extractCleanArticleData, deduplicateAndGroupNewsArticles } from './src/newsIntelligence';
-import { UPCOMING_IPOS_CATALOG } from './src/ipoCatalog';
+import { extractCleanArticleData, deduplicateAndGroupNewsArticles, aggregateMultiSourceNews, ACTIVE_NEWS_SOURCES, FAILED_NEWS_SOURCES_DISCLOSURE } from './src/newsIntelligence';
+import { UPCOMING_IPOS_CATALOG, getEnrichedIPOs, calculateIPOStatus, IPO_CATALOG_DISCLOSURE } from './src/ipoCatalog';
 import { UNIVERSE_CATALOG } from './src/universeCatalog';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -937,30 +937,14 @@ async function startServer() {
 
         // Status calculation respecting Indian market timezone and cancellation/postponement flags
         const rawStatus = (item.status || '').toLowerCase();
-        let status: 'UPCOMING' | 'OPEN NOW' | 'CLOSED' | 'LISTED' | 'CANCELLED' | 'POSTPONED' = 'UPCOMING';
-        if (rawStatus.includes('cancel') || rawStatus.includes('withdrawn')) {
-          status = 'CANCELLED';
-        } else if (rawStatus.includes('postpone') || rawStatus.includes('deferred')) {
-          status = 'POSTPONED';
-        } else if (rawStatus.includes('listed')) {
-          status = 'LISTED';
-        } else if (startIso && endIso) {
-          if (istDateStr >= startIso && istDateStr <= endIso) {
-            status = 'OPEN NOW';
-          } else if (istDateStr < startIso) {
-            status = 'UPCOMING';
-          } else {
-            status = 'CLOSED';
-          }
-        } else if (startIso) {
-          if (istDateStr < startIso) {
-            status = 'UPCOMING';
-          } else {
-            status = 'OPEN NOW';
-          }
-        } else {
-          status = 'UPCOMING';
-        }
+        const status = calculateIPOStatus({
+          openDate: startParsed?.iso || item.issueStartDate,
+          closeDate: endParsed?.iso || item.issueEndDate,
+          isPostponed: rawStatus.includes('postpone') || rawStatus.includes('deferred'),
+          isWithdrawn: rawStatus.includes('cancel') || rawStatus.includes('withdrawn'),
+          isVerifiedListed: rawStatus.includes('listed'),
+          todayIst: istDateStr
+        });
 
         let minPrice = 0;
         let maxPrice = 0;
@@ -991,7 +975,9 @@ async function startServer() {
           exchange: isSme ? 'NSE SME' : 'NSE / BSE',
           ipoType: isSme ? 'SME' : 'Mainboard',
           dataStatus: 'LIVE_EXCHANGE_DATA',
+          statusSource: 'NSE Official Issue Circular',
           sourceUrl: 'https://www.nseindia.com/market-data/all-upcoming-issues',
+          lastVerified: istDateStr,
           lastUpdated: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) + ' IST',
           sector: isSme ? 'SME Emerging' : 'Diversified',
           industry: isSme ? 'Specialized Manufacturing & Services' : 'Commercial Enterprises',
@@ -1027,225 +1013,32 @@ async function startServer() {
             'Market volatility and institutional subscription demand during bidding window'
           ],
           subscription: roundedSub ? { qib: 0, nii: 0, retail: 0, total: roundedSub } : undefined,
-          gmpAmount: undefined, // GMP is unofficial: shown only when an identifiable source provides a current timestamped observation
+          gmpAmount: undefined,
           gmpPct: undefined,
           gmpUpdated: undefined,
-          verdict: status === 'OPEN NOW' ? 'STRONG APPLY' : 'APPLY FOR LISTING GAINS',
+          verdict: status === 'Open' ? 'STRONG APPLY' : 'APPLY FOR LISTING GAINS',
           verdictRationale: `Exchange issue registered on NSE. Current total subscription: ${roundedSub ? `${roundedSub}x` : 'Filing updates in progress'}.`
         });
       }
 
-      // Reference catalog for verified listed issues
-      const referenceCatalog = [
-        {
-          id: 'swiggy',
-          companyName: 'Swiggy Limited',
-          symbol: 'SWIGGY',
-          exchange: 'NSE / BSE',
-          ipoType: 'Mainboard',
-          dataStatus: 'REFERENCE_CATALOG',
-          sector: 'Consumer Discretionary',
-          industry: 'Hyperlocal Food Delivery & Quick Commerce',
-          status: 'LISTED',
-          openDate: '06 Nov 2024',
-          closeDate: '08 Nov 2024',
-          listingDate: '13 Nov 2024',
-          priceBand: '₹371 – ₹390',
-          minPrice: 371,
-          maxPrice: 390,
-          issuePrice: 390,
-          listingPrice: 412,
-          issueSizeCr: 11327,
-          freshIssueCr: 4499,
-          ofsCr: 6828,
-          lotSize: 38,
-          minInvestment: 14820,
-          retailQuotaPct: 10,
-          website: 'https://www.swiggy.com',
-          businessSummary: "Swiggy is one of India's leading consumer tech platforms, pioneering online food delivery and quick commerce via Instamart.",
-          revenueYoYGrowthPct: 36.1,
-          annualRevenueCr: 11247,
-          netProfitLossCr: -2350,
-          profitMarginPct: -20.89,
-          debtToEquity: 18.4,
-          postIssuePe: 0,
-          peerAveragePe: 85.4,
-          promoterHoldingPostPct: 0.0,
-          strengths: ['Rapid growth in Instamart dark stores', 'High brand recall across metro areas'],
-          redFlags: ['Historical net losses at filing', 'Intense quick commerce competition'],
-          verdict: 'HISTORICAL FILING',
-          verdictRationale: 'Statutory historical disclosure: Swiggy listed on NSE/BSE on 13 Nov 2024.'
-        },
-        {
-          id: 'hyundai',
-          companyName: 'Hyundai Motor India Limited',
-          symbol: 'HYUNDAI',
-          exchange: 'NSE / BSE',
-          ipoType: 'Mainboard',
-          dataStatus: 'REFERENCE_CATALOG',
-          sector: 'Consumer Cyclical',
-          industry: 'Automobile OEM & Electric Vehicles',
-          status: 'LISTED',
-          openDate: '15 Oct 2024',
-          closeDate: '17 Oct 2024',
-          listingDate: '22 Oct 2024',
-          priceBand: '₹1,865 – ₹1,960',
-          minPrice: 1865,
-          maxPrice: 1960,
-          issuePrice: 1960,
-          listingPrice: 1934,
-          issueSizeCr: 27870,
-          freshIssueCr: 0,
-          ofsCr: 27870,
-          lotSize: 7,
-          minInvestment: 13720,
-          retailQuotaPct: 35,
-          website: 'https://www.hyundai.com/in',
-          businessSummary: 'Hyundai Motor India is the second-largest passenger car OEM in India with ~15% market share.',
-          revenueYoYGrowthPct: 15.8,
-          annualRevenueCr: 69829,
-          netProfitLossCr: 6060,
-          profitMarginPct: 8.68,
-          debtToEquity: 0.1,
-          postIssuePe: 26.3,
-          peerAveragePe: 28.5,
-          promoterHoldingPostPct: 82.5,
-          strengths: ['Consistent profitability with ₹6,060 Cr PAT', 'Zero net debt balance sheet'],
-          redFlags: ['100% OFS component from Korean parent'],
-          verdict: 'HISTORICAL FILING',
-          verdictRationale: 'Statutory historical disclosure: Hyundai Motor India listed on 22 Oct 2024.'
-        },
-        {
-          id: 'ntpc-green',
-          companyName: 'NTPC Green Energy Limited',
-          symbol: 'NTPCGREEN',
-          exchange: 'NSE / BSE',
-          ipoType: 'Mainboard',
-          dataStatus: 'REFERENCE_CATALOG',
-          sector: 'Utilities & Renewables',
-          industry: 'Solar, Wind & Green Hydrogen Generation',
-          status: 'LISTED',
-          openDate: '19 Nov 2024',
-          closeDate: '22 Nov 2024',
-          listingDate: '27 Nov 2024',
-          priceBand: '₹102 – ₹108',
-          minPrice: 102,
-          maxPrice: 108,
-          issuePrice: 108,
-          listingPrice: 111.5,
-          issueSizeCr: 10000,
-          freshIssueCr: 10000,
-          ofsCr: 0,
-          lotSize: 138,
-          minInvestment: 14904,
-          retailQuotaPct: 10,
-          website: 'https://www.ngel.in',
-          businessSummary: 'NTPC Green Energy is the renewable energy arm of Maharatna PSU NTPC Limited.',
-          revenueYoYGrowthPct: 109.4,
-          annualRevenueCr: 1962,
-          netProfitLossCr: 344,
-          profitMarginPct: 17.53,
-          debtToEquity: 98.5,
-          postIssuePe: 60.5,
-          peerAveragePe: 45.2,
-          promoterHoldingPostPct: 89.0,
-          strengths: ['100% fresh issue proceeds', 'Long-term 25-year PPAs'],
-          redFlags: ['Capital intensive utility buildout'],
-          verdict: 'HISTORICAL FILING',
-          verdictRationale: 'Statutory historical disclosure: NTPC Green Energy listed on 27 Nov 2024.'
-        },
-        {
-          id: 'bajaj-housing',
-          companyName: 'Bajaj Housing Finance Limited',
-          symbol: 'BAJAJHFL',
-          exchange: 'NSE / BSE',
-          ipoType: 'Mainboard',
-          dataStatus: 'REFERENCE_CATALOG',
-          sector: 'Financial Services',
-          industry: 'Housing Finance Company (HFC)',
-          status: 'LISTED',
-          openDate: '09 Sep 2024',
-          closeDate: '11 Sep 2024',
-          listingDate: '16 Sep 2024',
-          priceBand: '₹66 – ₹70',
-          minPrice: 66,
-          maxPrice: 70,
-          issuePrice: 70,
-          listingPrice: 150,
-          issueSizeCr: 6560,
-          freshIssueCr: 3560,
-          ofsCr: 3000,
-          lotSize: 214,
-          minInvestment: 14980,
-          retailQuotaPct: 35,
-          website: 'https://www.bajajhousingfinance.in',
-          businessSummary: 'Bajaj Housing Finance is an upper-layer Non-Banking Financial Company offering prime retail mortgage loans.',
-          revenueYoYGrowthPct: 34.2,
-          annualRevenueCr: 7617,
-          netProfitLossCr: 1731,
-          profitMarginPct: 22.72,
-          debtToEquity: 580.0,
-          postIssuePe: 33.5,
-          peerAveragePe: 24.2,
-          promoterHoldingPostPct: 88.75,
-          strengths: ['Prestigious Bajaj Group pedigree', 'Low Gross NPA (<0.3%) in prime retail mortgage'],
-          redFlags: ['High balance sheet leverage inherent to housing finance'],
-          verdict: 'HISTORICAL FILING',
-          verdictRationale: 'Statutory historical disclosure: Bajaj Housing Finance listed on 16 Sep 2024.'
-        },
-        {
-          id: 'paramount-sme',
-          companyName: 'Paramount Dye Tec Limited',
-          symbol: 'PARAMOUNT',
-          exchange: 'NSE SME',
-          ipoType: 'SME',
-          dataStatus: 'REFERENCE_CATALOG',
-          sector: 'Industrials',
-          industry: 'Textile Yarn Dyeing & Recycled Fibers',
-          status: 'LISTED',
-          openDate: '03 Oct 2024',
-          closeDate: '07 Oct 2024',
-          listingDate: '10 Oct 2024',
-          priceBand: '₹111 – ₹117',
-          minPrice: 111,
-          maxPrice: 117,
-          issuePrice: 117,
-          listingPrice: 118,
-          issueSizeCr: 28.43,
-          freshIssueCr: 28.43,
-          ofsCr: 0,
-          lotSize: 1200,
-          minInvestment: 140400,
-          retailQuotaPct: 35,
-          website: 'https://www.paramountdyetec.com',
-          businessSummary: 'Paramount Dye Tec is a specialized yarn dyeing enterprise processing fibers for commercial garment manufacturers.',
-          revenueYoYGrowthPct: 18.2,
-          annualRevenueCr: 42.5,
-          netProfitLossCr: 4.8,
-          profitMarginPct: 11.29,
-          debtToEquity: 42.1,
-          postIssuePe: 14.8,
-          peerAveragePe: 21.0,
-          promoterHoldingPostPct: 69.5,
-          strengths: ['100% fresh issue funding capacity expansion', 'Healthy EBITDA margins'],
-          redFlags: ['SME segment with larger lot size and lower secondary liquidity'],
-          verdict: 'HISTORICAL FILING',
-          verdictRationale: 'Statutory historical disclosure: Paramount Dye Tec listed on NSE SME on 10 Oct 2024.'
-        }
-      ];
+      // Load curated catalog with statuses dynamically calculated against IST date
+      const catalogIPOs = getEnrichedIPOs(istDateStr);
 
       // Merge and deduplicate by symbol
-      const allIPOs = [...parsedLiveIPOs];
-      for (const ref of referenceCatalog) {
-        if (!seenSymbols.has(ref.symbol.toUpperCase())) {
-          allIPOs.push(ref);
+      const allIPOs: any[] = [...parsedLiveIPOs];
+      for (const catIpo of catalogIPOs) {
+        const symbolKey = (catIpo.symbol || catIpo.id).toUpperCase();
+        if (!seenSymbols.has(symbolKey)) {
+          seenSymbols.add(symbolKey);
+          allIPOs.push(catIpo);
         }
       }
 
       return res.json({
         count: allIPOs.length,
         liveCount: parsedLiveIPOs.length,
-        dataStatus: parsedLiveIPOs.length > 0 ? 'LIVE_EXCHANGE_DATA' : (liveNseError ? 'UNAVAILABLE' : 'REFERENCE_CATALOG'),
+        dataStatus: parsedLiveIPOs.length > 0 ? 'LIVE_EXCHANGE_DATA' : (liveNseError ? 'REFERENCE_CATALOG' : 'REFERENCE_CATALOG'),
+        disclosure: IPO_CATALOG_DISCLOSURE,
         ipos: allIPOs
       });
     } catch (e: any) {
@@ -1434,115 +1227,20 @@ async function startServer() {
       const ticker = req.params.ticker.trim();
       const cleanName = ticker.replace('.NS', '').replace('.BO', '');
       const companyName = (req.query.companyName as string) || cleanName;
+      const forceRefresh = req.query.refresh === 'true';
 
-      const rawFetchedArticles: Array<{
-        title: string;
-        publisher: string;
-        date: string;
-        pubTimestamp?: number;
-        summary: string;
-        url: string;
-        vaderScore: number;
-        financialScore: number;
-        finbertScore: number | null;
-        distilbertScore: number | null;
-        sentimentLabel: 'POSITIVE' | 'NEUTRAL' | 'NEGATIVE';
-        evidenceStrength: 'VERY_STRONG' | 'STRONG' | 'MODERATE' | 'WEAK' | 'NEUTRAL' | 'UNCERTAIN' | 'INSUFFICIENT';
-        matchedTerms: string[];
-        contextCategories: string[];
-        isHeadlineOnly: boolean;
-        isUncertainOrAttributed: boolean;
-        isMixed: boolean;
-      }> = [];
-
-      // 1. Fetch genuine articles from Google News RSS with clean decoding & canonical URL extraction
-      try {
-        const queryTerm = encodeURIComponent(`${companyName} stock OR shares`);
-        const c = new AbortController();
-        const id = setTimeout(() => c.abort(), 4000);
-
-        const gNewsRes = await fetch(
-          `https://news.google.com/rss/search?q=${queryTerm}&hl=en-IN&gl=IN&ceid=IN:en`,
-          {
-            signal: c.signal,
-            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
-          }
-        );
-        clearTimeout(id);
-
-        if (gNewsRes.ok) {
-          const xml = await gNewsRes.text();
-          const itemRegex = /<item>[\s\S]*?<title>(.*?)<\/title>[\s\S]*?<link>(.*?)<\/link>[\s\S]*?<pubDate>(.*?)<\/pubDate>[\s\S]*?<description>(.*?)<\/description>(?:[\s\S]*?<source[^>]*>(.*?)<\/source>)?/g;
-          let match;
-          const seenTitles = new Set<string>();
-
-          while ((match = itemRegex.exec(xml)) !== null && rawFetchedArticles.length < 15) {
-            const rawTitleTag = match[1];
-            const rawLinkTag = match[2];
-            const rawPubDateTag = match[3];
-            const rawDescTag = match[4];
-            const rawSourceTag = match[5];
-
-            const pubDate = rawPubDateTag
-              ? new Date(rawPubDateTag).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
-              : 'Recent';
-
-            // Extract canonical title, valid URL, decoded summary and publisher without raw HTML
-            const cleaned = extractCleanArticleData(rawTitleTag, rawLinkTag, rawDescTag, rawSourceTag);
-
-            // Exclude generic automated quote pages (e.g. "Stock Price Today Live", "Share Price NSE")
-            const isGenericQuote = /share price today|stock price today|live updates.*share price|today's share price/i.test(cleaned.title);
-            if (isGenericQuote) continue;
-
-            // Check if title is duplicate
-            const titleKey = cleaned.title.toLowerCase().replace(/[^a-z0-9]/g, '');
-            if (seenTitles.has(titleKey)) continue;
-            seenTitles.add(titleKey);
-
-            // Execute deterministic VADER + Financial Context Engine analysis
-            const sentAnalysis = analyzeFinancialSentiment(cleaned.title, cleaned.summary);
-
-            const pubTimestamp = rawPubDateTag ? new Date(rawPubDateTag).getTime() : 0;
-
-            rawFetchedArticles.push({
-              title: cleaned.title,
-              publisher: cleaned.publisher,
-              date: pubDate,
-              pubTimestamp,
-              summary: cleaned.summary,
-              url: cleaned.url,
-              vaderScore: sentAnalysis.vaderScore,
-              financialScore: sentAnalysis.financialScore,
-              finbertScore: null,
-              distilbertScore: null,
-              sentimentLabel: sentAnalysis.label,
-              evidenceStrength: sentAnalysis.evidenceStrength,
-              matchedTerms: sentAnalysis.matchedTerms,
-              contextCategories: sentAnalysis.contextCategories,
-              isHeadlineOnly: sentAnalysis.isHeadlineOnly,
-              isUncertainOrAttributed: sentAnalysis.isUncertainOrAttributed,
-              isMixed: sentAnalysis.isMixed
-            });
-          }
-        }
-      } catch (_) {
-        // Genuine network or timeout failure handled gracefully
-      }
-
-      // Sort strictly by publication timestamp descending (newest first)
-      rawFetchedArticles.sort((a, b) => (b.pubTimestamp || 0) - (a.pubTimestamp || 0));
-
-      // Group corporate events and separate stories count from distinct corporate events count
-      const groupedData = deduplicateAndGroupNewsArticles(rawFetchedArticles as any);
-      const articles = groupedData.articles;
-      const distinctEventsCount = groupedData.distinctEventsCount;
-      const expansionCatalystsCount = groupedData.expansionCatalystsCount;
-      const cautionaryOverhangsCount = groupedData.cautionaryOverhangsCount;
-
+      // Aggregate from all verified, active RSS publishers with fault isolation, timeouts & cache
+      const multiNews = await aggregateMultiSourceNews(ticker, companyName, { forceRefresh });
+      const articles = multiNews.articles;
+      const globalMarketNews = multiNews.globalMarketNews;
+      const distinctEventsCount = multiNews.distinctEventsCount;
+      const expansionCatalystsCount = multiNews.expansionCatalystsCount;
+      const cautionaryOverhangsCount = multiNews.cautionaryOverhangsCount;
       const hasRealNews = articles.length > 0;
 
-      // Run aggregate sentiment across all articles
-      const articleSentiments = articles.map(a => ({
+      // Run aggregate sentiment across verified company articles (or global market news if company has none)
+      const targetArticlesForSentiment = articles.length > 0 ? articles : globalMarketNews.slice(0, 5);
+      const articleSentiments = targetArticlesForSentiment.map(a => ({
         financialScore: a.financialScore ?? a.vaderScore,
         vaderScore: a.vaderScore,
         label: a.sentimentLabel || 'NEUTRAL',
@@ -1688,10 +1386,19 @@ async function startServer() {
         distinctEventsCount,
         expansionCatalystsCount,
         cautionaryOverhangsCount,
-        eventClusters: groupedData.eventClusters || [],
+        eventClusters: multiNews.eventClusters || [],
         label,
         dataStatus: hasRealNews ? 'LIVE' : 'UNAVAILABLE',
         articles,
+        globalMarketNews,
+        sourcesUsed: multiNews.sourcesUsed,
+        sourcesFailed: multiNews.sourcesFailed,
+        sourcesStatus: multiNews.sourcesStatus,
+        sourcesSummary: multiNews.sourcesSummary,
+        isPartialFailure: multiNews.isPartialFailure,
+        isStale: multiNews.isStale,
+        cachedAt: multiNews.cachedAt,
+        cacheTimestamp: multiNews.cacheTimestamp,
         reddit: {
           status: redditPosts.length > 0 ? 'SUCCESS' : redditStatus,
           message: redditPosts.length > 0 ? `${redditPosts.length} relevant discussions found on Reddit` : (redditMessage || 'Social sentiment data unavailable (Reddit API credentials required).'),
@@ -1704,6 +1411,34 @@ async function startServer() {
       });
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
+    }
+  });
+
+  // --- API: Source Transparency & Active RSS Feeds ---
+  app.get('/api/news-sources', (req, res) => {
+    return res.json({
+      activeSources: ACTIVE_NEWS_SOURCES,
+      failedSourcesDisclosure: FAILED_NEWS_SOURCES_DISCLOSURE,
+      disclosure: 'Aggregates only verified public RSS feeds that allow programmatic syndication. Inactive/blocked feeds (e.g. Reuters, Yahoo Finance RSS) are intentionally excluded.'
+    });
+  });
+
+  // --- API: Global Market & Macro News Wire ---
+  app.get('/api/news-global', async (req, res) => {
+    try {
+      const forceRefresh = req.query.refresh === 'true';
+      const multiNews = await aggregateMultiSourceNews('MARKET', 'Indian & Global Financial Markets', { forceRefresh });
+      return res.json({
+        articles: multiNews.globalMarketNews,
+        sourcesUsed: multiNews.sourcesUsed,
+        sourcesFailed: multiNews.sourcesFailed,
+        sourcesStatus: multiNews.sourcesStatus,
+        sourcesSummary: multiNews.sourcesSummary,
+        isPartialFailure: multiNews.isPartialFailure,
+        cachedAt: multiNews.cachedAt
+      });
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message || 'Failed to fetch global market news' });
     }
   });
 

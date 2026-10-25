@@ -495,6 +495,15 @@ export default function App() {
               <NewsIntelligencePage
                 sentiment={safeSentiment}
                 quote={safeQuote}
+                isLoading={isLoading}
+                onRefresh={async () => {
+                  try {
+                    const fresh = await fetchLiveNewsAndSentiment(currentTicker, safeQuote.companyName, safeQuote, true);
+                    setSentiment(fresh);
+                  } catch (e) {
+                    console.error('Refresh news failed:', e);
+                  }
+                }}
               />
             )}
 

@@ -13,7 +13,7 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "test": "tsx tests/financial_sentiment.ts && tsx tests/audit_verification.ts && tsx tests/data_integrations.ts && tsx tests/master_upgrade_verification.ts"
+    "test": "tsx tests/financial_sentiment.ts && tsx tests/audit_verification.ts && tsx tests/data_integrations.ts && tsx tests/master_upgrade_verification.ts && tsx tests/news_intelligence_suite.ts && tsx tests/ipo_status_suite.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

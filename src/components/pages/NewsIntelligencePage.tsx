@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { SentimentData, StockQuote, NewsArticle, EventCluster } from '../../types';
-import { cleanHtmlText, isValidArticleUrl } from '../../newsIntelligence';
+import { cleanHtmlText, isValidArticleUrl, ACTIVE_NEWS_SOURCES, FAILED_NEWS_SOURCES_DISCLOSURE } from '../../newsIntelligence';
+import { fetchLiveNewsAndSentiment } from '../../dataEngine';
 import {
   Newspaper,
   CheckCircle2,
@@ -18,19 +19,57 @@ import {
   AlertTriangle,
   Brain,
   Scale,
-  Info
+  Info,
+  RefreshCw,
+  Globe,
+  Radio,
+  AlertCircle
 } from 'lucide-react';
 
 interface NewsIntelligencePageProps {
   sentiment: SentimentData;
   quote: StockQuote;
+  isLoading?: boolean;
+  onRefresh?: () => Promise<void>;
 }
 
-export const NewsIntelligencePage: React.FC<NewsIntelligencePageProps> = ({ sentiment, quote }) => {
+export const NewsIntelligencePage: React.FC<NewsIntelligencePageProps> = ({
+  sentiment: initialSentiment,
+  quote,
+  isLoading: propIsLoading = false,
+  onRefresh
+}) => {
+  const [activeSentiment, setActiveSentiment] = useState<SentimentData>(initialSentiment);
   const [filterType, setFilterType] = useState<'ALL' | 'BULLISH' | 'BEARISH' | 'NEUTRAL'>('ALL');
   const [searchTerm, setSearchTerm] = useState('');
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
 
+  // Sync when initialSentiment changes from parent
+  useEffect(() => {
+    setActiveSentiment(initialSentiment);
+  }, [initialSentiment]);
+
+  const handleRefreshWire = async () => {
+    setIsRefreshing(true);
+    setRefreshError(null);
+    try {
+      if (onRefresh) {
+        await onRefresh();
+      } else {
+        const fresh = await fetchLiveNewsAndSentiment(quote.ticker, quote.companyName, quote, true);
+        setActiveSentiment(fresh);
+      }
+    } catch (e: any) {
+      setRefreshError(e.message || 'Failed to refresh news feed');
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  const sentiment = activeSentiment;
   const articles = sentiment.articles || [];
+  const globalMarketNews = sentiment.globalMarketNews || [];
   const eventClusters: EventCluster[] = sentiment.eventClusters || [];
 
   const distinctExpansionCount = sentiment.expansionCatalystsCount ?? 0;
@@ -41,15 +80,12 @@ export const NewsIntelligencePage: React.FC<NewsIntelligencePageProps> = ({ sent
   const negCount = articles.filter(a => a.sentimentLabel === 'NEGATIVE' || a.vaderScore <= -0.05).length;
   const neuCount = Math.max(0, articles.length - posCount - negCount);
 
-  // FinBERT model status & score
-  const isFinbertLive = sentiment.finbertStatus === 'LIVE' && sentiment.finbertScore !== null;
-  const finbertScore = sentiment.finbertScore;
-  const finbertDiagnostic = sentiment.finbertDiagnostic || (sentiment.finbertStatus === 'UNAVAILABLE' ? 'Model unavailable; VADER fallback engaged' : undefined);
-  const finbertReason = sentiment.finbertReason;
-
-  // DistilBERT model status & score
-  const isDistilbertLive = sentiment.distilbertStatus === 'AVAILABLE' && typeof sentiment.distilbertScore === 'number' && sentiment.distilbertScore !== null;
-  const distilbertScore = sentiment.distilbertScore;
+  // Active sources & failure tracking
+  const sourcesUsed = sentiment.sourcesUsed || ACTIVE_NEWS_SOURCES.map(s => s.name);
+  const sourcesFailed = sentiment.sourcesFailed || [];
+  const isPartialFailure = Boolean(sentiment.isPartialFailure);
+  const isStale = Boolean(sentiment.isStale);
+  const sourcesSummary = sentiment.sourcesSummary || `${sourcesUsed.length} active news sources responded`;
 
   // Single Concise News Conclusion
   const getConciseNewsTone = (): {
@@ -60,8 +96,8 @@ export const NewsIntelligencePage: React.FC<NewsIntelligencePageProps> = ({ sent
     if (articles.length === 0) {
       return {
         tone: 'Insufficient relevant coverage',
-        explanation: `Zero verified institutional news stories or regulatory disclosures are currently indexed for ${quote.ticker}. Market decisions should rely on price action and audited fundamentals.`,
-        modelAgreement: 'Models inactive due to lack of news inputs.'
+        explanation: `Zero verified institutional news stories or regulatory disclosures are currently indexed specifically for ${quote.ticker}. See Global Market News below for macro developments.`,
+        modelAgreement: 'Company-specific sentiment inactive due to lack of direct headline inputs.'
       };
     }
 
@@ -94,7 +130,8 @@ export const NewsIntelligencePage: React.FC<NewsIntelligencePageProps> = ({ sent
 
   const financialContextScore = sentiment.financialScore !== undefined ? sentiment.financialScore : sentiment.overallScore;
 
-  const filteredArticles = articles.filter(a => {
+  // Company articles filtered by tone & search
+  const filteredCompanyArticles = articles.filter(a => {
     const isBull = a.sentimentLabel === 'POSITIVE' || a.vaderScore >= 0.05;
     const isBear = a.sentimentLabel === 'NEGATIVE' || a.vaderScore <= -0.05;
     const isNeu = !isBull && !isBear;
@@ -107,13 +144,103 @@ export const NewsIntelligencePage: React.FC<NewsIntelligencePageProps> = ({ sent
       const cleanTitle = cleanHtmlText(a.title).toLowerCase();
       const cleanSummary = cleanHtmlText(a.summary).toLowerCase();
       const cleanPub = cleanHtmlText(a.publisher).toLowerCase();
+      const cleanComp = cleanHtmlText(a.relatedCompany || '').toLowerCase();
+      return cleanTitle.includes(q) || cleanSummary.includes(q) || cleanPub.includes(q) || cleanComp.includes(q);
+    }
+    return true;
+  });
+
+  // Global market news filtered by search
+  const filteredGlobalArticles = globalMarketNews.filter(a => {
+    if (searchTerm.trim()) {
+      const q = searchTerm.toLowerCase();
+      const cleanTitle = cleanHtmlText(a.title).toLowerCase();
+      const cleanSummary = cleanHtmlText(a.summary).toLowerCase();
+      const cleanPub = cleanHtmlText(a.publisher).toLowerCase();
       return cleanTitle.includes(q) || cleanSummary.includes(q) || cleanPub.includes(q);
     }
     return true;
   });
 
+  const isLoadingState = propIsLoading || isRefreshing;
+
   return (
     <div className="space-y-6 pt-1 max-w-6xl mx-auto font-sans">
+      {/* 0. Source Transparency, Response Status & Retry Action Bar */}
+      <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 space-y-3 font-mono text-xs">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+          <div className="flex items-center gap-2 flex-wrap">
+            <Radio className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span className="font-bold text-slate-200 uppercase tracking-wider text-xs">
+              Live Verified RSS Network
+            </span>
+            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-800">
+              {sourcesSummary}
+            </span>
+            {isStale && (
+              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-950 text-amber-300 border border-amber-800">
+                Stale Cache
+              </span>
+            )}
+            {sentiment.cachedAt && (
+              <span className="text-[11px] text-slate-500 font-mono">
+                Cached {sentiment.cachedAt} (120s TTL)
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleRefreshWire}
+              disabled={isLoadingState}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500 hover:bg-emerald-400 text-slate-950 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isLoadingState ? 'animate-spin' : ''}`} />
+              <span>{isLoadingState ? 'Refreshing Wire...' : 'Refresh Wire'}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Active Sources Badges Strip */}
+        <div className="space-y-2">
+          <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
+            <span>Verified Sources Responding:</span>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {sourcesUsed.map((src, sIdx) => (
+              <span
+                key={sIdx}
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium bg-slate-950 border border-slate-800 text-slate-300"
+              >
+                <CheckCircle2 className="w-2.5 h-2.5 text-emerald-400 shrink-0" />
+                {src}
+              </span>
+            ))}
+          </div>
+        </div>
+
+        {/* Partial Failure Warning Alert (if any feed timed out or failed) */}
+        {isPartialFailure && (
+          <div className="bg-amber-950/40 border border-amber-800/80 rounded-xl p-3 flex items-start gap-2 text-amber-300 text-xs">
+            <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <span className="font-bold">Partial Feed Notice:</span>
+              <p className="text-[11px] text-amber-200/90 font-sans">
+                {sourcesSummary}. Failed or unreachable: {sourcesFailed.join(', ')}. Articles from all responsive sources are preserved and displayed below.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Non-Claim of Complete Global Coverage Disclosure */}
+        <div className="flex items-start gap-1.5 text-[10px] text-slate-500 font-sans pt-1 border-t border-slate-800/60">
+          <Info className="w-3 h-3 text-slate-500 shrink-0 mt-0.5" />
+          <span>
+            Feeds are polled directly from free public RSS endpoints (Google News, Economic Times, Moneycontrol, Livemint, Business Standard, CNBC, BBC Business). Inactive/paywalled feeds (such as discontinued Reuters open RSS) are excluded. This does not claim exhaustive global press coverage.
+          </span>
+        </div>
+      </div>
+
       {/* 1. Overall News Tone Banner */}
       <div className={`p-5 sm:p-6 rounded-2xl border shadow-sm space-y-3 font-mono ${
         newsConclusion.tone === 'Positive news tone'
@@ -265,7 +392,7 @@ export const NewsIntelligencePage: React.FC<NewsIntelligencePageProps> = ({ sent
             </div>
           </div>
 
-          {/* Card 4: Evidence & Confidence */}
+          {/* Card 4: Evidence & Memory */}
           <div className="bg-slate-950/80 border border-slate-800/80 rounded-xl p-4 space-y-2">
             <div className="flex items-center justify-between">
               <span className="font-bold text-slate-200 text-xs font-sans">Evidence & Memory</span>
@@ -334,14 +461,18 @@ export const NewsIntelligencePage: React.FC<NewsIntelligencePageProps> = ({ sent
         </div>
       )}
 
-      {/* 4. Article Feed Header, Filters & Search */}
+      {/* 4. Company Article Feed Header, Filters & Search */}
       <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-5 space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
-          <div className="flex items-center gap-2">
-            <h3 className="text-sm font-bold text-slate-200 font-mono uppercase tracking-wider">
-              Chronological Financial News Wire ({articles.length})
-            </h3>
-            <span className="text-xs text-slate-500 font-mono">Sorted newest to oldest</span>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-bold text-slate-200 font-mono uppercase tracking-wider">
+                Company News Wire — {quote.ticker} ({articles.length})
+              </h3>
+            </div>
+            <p className="text-[11px] text-slate-400 font-sans mt-0.5">
+              Ranked by company ticker, name, and aliases first · Deduplicated across publishers
+            </p>
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
@@ -376,37 +507,85 @@ export const NewsIntelligencePage: React.FC<NewsIntelligencePageProps> = ({ sent
           </div>
         </div>
 
-        {/* Article Cards List */}
-        {filteredArticles.length > 0 ? (
+        {/* Company Article Cards List */}
+        {isLoadingState && articles.length === 0 ? (
+          <div className="p-8 text-center text-slate-400 font-mono text-xs space-y-2">
+            <RefreshCw className="w-6 h-6 text-emerald-400 animate-spin mx-auto mb-2" />
+            <p className="font-semibold text-slate-200">Aggregating live news from verified RSS publishers...</p>
+            <p className="text-[11px] text-slate-500">Querying Economic Times, Moneycontrol, Livemint, Business Standard, CNBC & Google News</p>
+          </div>
+        ) : filteredCompanyArticles.length > 0 ? (
           <div className="space-y-3">
-            {filteredArticles.map((article, idx) => {
+            {filteredCompanyArticles.map((article, idx) => {
               const isPositive = article.sentimentLabel === 'POSITIVE' || article.vaderScore >= 0.05;
               const isNegative = article.sentimentLabel === 'NEGATIVE' || article.vaderScore <= -0.05;
 
               return (
                 <div
                   key={idx}
-                  className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-4 hover:border-slate-700 transition-all space-y-2 group"
+                  className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-4 hover:border-slate-700 transition-all space-y-2.5 group"
                 >
                   <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
-                    <div className="space-y-1">
+                    <div className="space-y-1.5 flex-1">
+                      {/* Related Company & Publisher Header */}
+                      <div className="flex flex-wrap items-center gap-2 text-[11px] font-mono">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-950/70 border border-emerald-800 text-emerald-300 font-semibold">
+                          <Building className="w-3 h-3 text-emerald-400 shrink-0" />
+                          {article.relatedCompany || quote.companyName || quote.ticker}
+                        </span>
+
+                        <span className="font-semibold text-slate-300">
+                          {article.publisher || 'Financial Wire'}
+                        </span>
+
+                        <span>•</span>
+
+                        {/* Date and Age Flags */}
+                        <span className="flex items-center gap-1 text-slate-400">
+                          <Clock className="w-3 h-3 text-slate-500 shrink-0" />
+                          {article.date}
+                        </span>
+
+                        {article.isBreaking && !article.isOld && (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[10px] font-bold bg-rose-950 text-rose-300 border border-rose-800">
+                            <Flame className="w-2.5 h-2.5 text-rose-400" />
+                            Breaking
+                          </span>
+                        )}
+
+                        {article.isOld && (
+                          <span className="px-1.5 py-0.2 rounded text-[10px] font-medium bg-slate-900 text-slate-400 border border-slate-800">
+                            Older Article
+                          </span>
+                        )}
+
+                        {article.isInvalidOrMissingDate && (
+                          <span className="text-[10px] text-slate-500 italic">
+                            (Date unverified)
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Clickable Headline */}
                       <a
                         href={article.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-sm font-semibold text-slate-100 hover:text-emerald-400 transition-colors inline-flex items-start gap-1.5"
+                        className="text-sm font-semibold text-slate-100 hover:text-emerald-400 transition-colors inline-flex items-start gap-1.5 leading-snug"
                       >
                         <span>{cleanHtmlText(article.title)}</span>
                         <ExternalLink className="w-3.5 h-3.5 shrink-0 opacity-0 group-hover:opacity-100 text-emerald-400 mt-0.5 transition-opacity" />
                       </a>
 
-                      <p className="text-xs text-slate-400 leading-relaxed font-sans">
-                        {cleanHtmlText(article.summary)}
-                      </p>
+                      {article.summary && (
+                        <p className="text-xs text-slate-400 leading-relaxed font-sans line-clamp-2">
+                          {cleanHtmlText(article.summary)}
+                        </p>
+                      )}
                     </div>
 
                     {/* Sentiment Label Badge */}
-                    <div className="flex items-center gap-2 shrink-0 font-mono">
+                    <div className="flex items-center gap-2 shrink-0 font-mono self-start sm:self-auto">
                       <span className={`px-2.5 py-1 rounded-md text-[11px] font-bold border ${
                         isPositive
                           ? 'bg-emerald-950/80 text-emerald-400 border-emerald-800'
@@ -419,17 +598,8 @@ export const NewsIntelligencePage: React.FC<NewsIntelligencePageProps> = ({ sent
                     </div>
                   </div>
 
-                  {/* Metadata Footer: Publisher, Date, and Scores */}
+                  {/* Metadata Footer: Scores & Catalysts */}
                   <div className="flex flex-wrap items-center justify-between text-[11px] text-slate-500 font-mono pt-2 border-t border-slate-800/60 gap-2">
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold text-slate-300">{article.publisher || 'Financial Wire'}</span>
-                      <span>•</span>
-                      <span className="flex items-center gap-1">
-                        <Clock className="w-3 h-3 text-slate-500" />
-                        {article.date}
-                      </span>
-                    </div>
-
                     <div className="flex flex-wrap items-center gap-3">
                       <span>VADER: <strong className={isPositive ? 'text-emerald-400' : isNegative ? 'text-rose-400' : 'text-slate-300'}>
                         {article.vaderScore >= 0 ? '+' : ''}{article.vaderScore.toFixed(2)}
@@ -448,7 +618,18 @@ export const NewsIntelligencePage: React.FC<NewsIntelligencePageProps> = ({ sent
                         <span className="text-[10px] text-slate-500 italic">Headline</span>
                       )}
                     </div>
+
+                    <a
+                      href={article.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[11px] text-emerald-400 hover:text-emerald-300 inline-flex items-center gap-1 font-semibold"
+                    >
+                      <span>Read Original</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
                   </div>
+
                   {article.matchedTerms && article.matchedTerms.length > 0 && (
                     <div className="flex flex-wrap items-center gap-1.5 pt-1 text-[10px] text-slate-400 font-mono">
                       <span className="text-slate-500">Matched Catalysts/Risks:</span>
@@ -464,10 +645,114 @@ export const NewsIntelligencePage: React.FC<NewsIntelligencePageProps> = ({ sent
             })}
           </div>
         ) : (
-          <div className="p-8 text-center text-slate-500 font-mono text-xs space-y-1">
-            <AlertTriangle className="w-6 h-6 text-slate-600 mx-auto mb-2" />
-            <p className="text-slate-300 font-semibold">No news articles match your filter criteria.</p>
-            <p className="text-[11px]">Clear search or change tone filter to view all indexed articles.</p>
+          <div className="p-8 text-center text-slate-500 font-mono text-xs space-y-2">
+            <AlertTriangle className="w-6 h-6 text-slate-600 mx-auto mb-1" />
+            <p className="text-slate-300 font-semibold">
+              {articles.length === 0
+                ? `No company-specific articles found for ${quote.ticker}.`
+                : 'No articles match your active filter criteria.'}
+            </p>
+            <p className="text-[11px]">
+              {articles.length === 0
+                ? 'Check the Global Market News section below for macroeconomic updates, or click Refresh Wire.'
+                : 'Clear search keyword or switch the tone filter to ALL to view indexed stories.'}
+            </p>
+            {articles.length === 0 && (
+              <button
+                onClick={handleRefreshWire}
+                disabled={isLoadingState}
+                className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isLoadingState ? 'animate-spin' : ''}`} />
+                <span>Retry Feeds</span>
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* 5. Dedicated "Global Market News & Macro Wire" Section (Always Has Items) */}
+      <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-5 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+          <div>
+            <div className="flex items-center gap-2">
+              <Globe className="w-4 h-4 text-cyan-400" />
+              <h3 className="text-sm font-bold text-slate-200 font-mono uppercase tracking-wider">
+                Global Market News & Macro Wire ({globalMarketNews.length})
+              </h3>
+            </div>
+            <p className="text-[11px] text-slate-400 font-sans mt-0.5">
+              Live macro financial wire from Economic Times, Moneycontrol, Livemint, Business Standard, CNBC & BBC
+            </p>
+          </div>
+
+          <span className="text-[11px] text-slate-500 font-mono">
+            Always indexed regardless of single stock volume
+          </span>
+        </div>
+
+        {filteredGlobalArticles.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {filteredGlobalArticles.map((article, idx) => {
+              const isPositive = article.sentimentLabel === 'POSITIVE' || article.vaderScore >= 0.05;
+              const isNegative = article.sentimentLabel === 'NEGATIVE' || article.vaderScore <= -0.05;
+
+              return (
+                <div
+                  key={idx}
+                  className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-3.5 hover:border-slate-700 transition-all space-y-2 flex flex-col justify-between group"
+                >
+                  <div className="space-y-1.5">
+                    {/* Header: Publisher & Date */}
+                    <div className="flex items-center justify-between text-[10px] font-mono text-slate-400">
+                      <span className="font-semibold text-slate-300">{article.publisher || 'Financial Wire'}</span>
+                      <span className="flex items-center gap-1 text-slate-500">
+                        <Clock className="w-2.5 h-2.5" />
+                        {article.date}
+                      </span>
+                    </div>
+
+                    {/* Headline */}
+                    <a
+                      href={article.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs font-semibold text-slate-200 hover:text-cyan-400 transition-colors inline-flex items-start gap-1 line-clamp-2"
+                    >
+                      <span>{cleanHtmlText(article.title)}</span>
+                      <ExternalLink className="w-3 h-3 shrink-0 opacity-0 group-hover:opacity-100 text-cyan-400 transition-opacity mt-0.5" />
+                    </a>
+
+                    {article.summary && (
+                      <p className="text-[11px] text-slate-400 line-clamp-2 font-sans">
+                        {cleanHtmlText(article.summary)}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Footer: Related Topic & Sentiment */}
+                  <div className="flex items-center justify-between text-[10px] font-mono pt-2 border-t border-slate-800/60">
+                    <span className="text-slate-500">
+                      {article.relatedCompany || 'Macro & Markets'}
+                    </span>
+
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${
+                      isPositive
+                        ? 'bg-emerald-950/80 text-emerald-400 border-emerald-800'
+                        : isNegative
+                        ? 'bg-rose-950/80 text-rose-400 border-rose-800'
+                        : 'bg-slate-900 text-slate-400 border-slate-800'
+                    }`}>
+                      {article.sentimentLabel || 'NEUTRAL'} ({article.vaderScore >= 0 ? '+' : ''}{article.vaderScore.toFixed(2)})
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="p-6 text-center text-slate-500 font-mono text-xs">
+            No global market news matches your filter criteria.
           </div>
         )}
       </div>

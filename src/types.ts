@@ -116,6 +116,14 @@ export interface NewsArticle {
   isHeadlineOnly?: boolean;
   isUncertainOrAttributed?: boolean;
   isMixed?: boolean;
+  // Enhanced Multi-Source Intelligence attributes
+  pubTimestamp?: number;
+  relatedCompany?: string;
+  relevanceScore?: number;
+  isOld?: boolean;
+  isBreaking?: boolean;
+  isInvalidOrMissingDate?: boolean;
+  sourceCategory?: 'COMPANY_SPECIFIC' | 'GLOBAL_MARKET' | 'INDIAN_BUSINESS';
 }
 
 export interface EventCluster {
@@ -188,6 +196,21 @@ export interface SentimentData {
   expansionCatalystsCount?: number;
   cautionaryOverhangsCount?: number;
   eventClusters?: EventCluster[];
+  // Multi-Source Intelligence & Fault-Tolerance status
+  sourcesUsed?: string[];
+  sourcesFailed?: string[];
+  sourcesStatus?: Array<{
+    name: string;
+    status: 'SUCCESS' | 'FAILED' | 'CACHED';
+    itemCount: number;
+    error?: string;
+  }>;
+  sourcesSummary?: string;
+  isPartialFailure?: boolean;
+  isStale?: boolean;
+  cachedAt?: string;
+  cacheTimestamp?: number;
+  globalMarketNews?: NewsArticle[];
 }
 
 export interface AnnualFinancialRow {
@@ -421,18 +444,48 @@ export interface ModelComparisonMetric {
   totalReturn: number;
 }
 
+export type IPOStatus =
+  | 'Upcoming'
+  | 'Open'
+  | 'Closed (allotment pending)'
+  | 'Allotment done'
+  | 'Listed'
+  | 'Postponed'
+  | 'Withdrawn'
+  | 'Unverified'
+  | 'OPEN NOW'
+  | 'CLOSED'
+  | 'CANCELLED'
+  | 'UPCOMING'
+  | 'LISTED'
+  | 'POSTPONED';
+
 export interface IPODetails {
   id: string;
+  name?: string;
   companyName: string;
   symbol: string;
+  market?: 'Mainboard' | 'SME';
   exchange: 'NSE / BSE' | 'NSE' | 'BSE' | 'NSE SME' | 'BSE SME' | 'NASDAQ / NYSE' | string;
   sector: string;
   industry: string;
-  status: 'OPEN NOW' | 'UPCOMING' | 'CLOSED' | 'LISTED' | 'CANCELLED' | 'POSTPONED';
+  status: IPOStatus;
   ipoType?: 'Mainboard' | 'SME';
+  dates?: {
+    openDate: string;
+    closeDate: string;
+    allotmentDate?: string;
+    listingDate?: string;
+  };
   openDate: string;
   closeDate: string;
+  allotmentDate?: string;
   listingDate: string;
+  statusSource?: string;
+  lastVerified?: string;
+  isHistorical?: boolean;
+  isVerifiedListed?: boolean;
+  articleLinks?: string[];
   priceBand: string;
   minPrice: number;
   maxPrice: number;

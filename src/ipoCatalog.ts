@@ -1,28 +1,236 @@
-import { IPODetails } from './types';
+import { IPODetails, IPOStatus } from './types';
 
 /**
- * Verified Indian Primary Market Disclosures & Reference Pipeline.
+ * Notice & Limitation Disclosure:
+ * This catalog provides a curated selection of tracked Indian Mainboard and SME IPOs
+ * with verified filings and news reports, not an exhaustive registry of all Indian public offerings.
+ */
+export const IPO_CATALOG_DISCLOSURE =
+  'Limited Curated List: This catalog provides a curated selection of tracked Indian Mainboard and SME IPOs with verified filings and news reports, not an exhaustive registry of all Indian public offerings.';
+
+/**
+ * Normalizes common Indian and international date formats into ISO YYYY-MM-DD.
+ */
+export function normalizeDateToIso(dateStr?: string): string | null {
+  if (!dateStr) return null;
+  const clean = dateStr.trim();
+
+  // Already ISO YYYY-MM-DD
+  const isoMatch = clean.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/);
+  if (isoMatch) {
+    const y = isoMatch[1];
+    const m = isoMatch[2].padStart(2, '0');
+    const d = isoMatch[3].padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+
+  // DD Mon YYYY (e.g. 24 Oct 2026, 24-Oct-2026, 06 Nov 2024)
+  const dmyMatch = clean.match(/^(\d{1,2})[-/ ]([A-Za-z]{3,9})[-/ ](\d{2,4})$/);
+  if (dmyMatch) {
+    const day = dmyMatch[1].padStart(2, '0');
+    const monthStr = dmyMatch[2].slice(0, 3).toLowerCase();
+    const months: Record<string, string> = {
+      jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06',
+      jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12'
+    };
+    const month = months[monthStr];
+    if (!month) return null;
+    let year = dmyMatch[3];
+    if (year.length === 2) year = `20${year}`;
+    return `${year}-${month}-${day}`;
+  }
+
+  // Fallback to Date.parse
+  const parsed = Date.parse(clean);
+  if (!isNaN(parsed)) {
+    const d = new Date(parsed);
+    const y = d.getUTCFullYear();
+    const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(d.getUTCDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+
+  return null;
+}
+
+/**
+ * Dynamically computes an IPO's status against today's date in IST.
  *
- * NOTE: Data integrity compliance:
- * - Real, verified statutory filings only (historical listed issues & officially filed DRHP draft issues).
- * - No fabricated 2026 upcoming dates for already listed companies.
- * - No invented Grey Market Premium (GMP) or artificial subscription multiples.
- * - No automated/fabricated buy/avoid recommendations.
+ * Rules:
+ * - Postponed / Withdrawn takes immediate precedence
+ * - Unverified if dates are missing/unparseable (e.g. Draft DRHP filed)
+ * - 'Upcoming' if today < openDate
+ * - 'Open' if today >= openDate && today <= closeDate
+ * - 'Closed (allotment pending)' if today > closeDate && (today < allotmentDate || no allotment date)
+ * - 'Allotment done' if today >= allotmentDate && (today < listingDate || !isVerifiedListed)
+ * - 'Listed' ONLY if verified listed on exchange (do not mark listed just because expected listing date has passed)
+ */
+export function calculateIPOStatus(params: {
+  openDate?: string;
+  closeDate?: string;
+  allotmentDate?: string;
+  listingDate?: string;
+  isPostponed?: boolean;
+  isWithdrawn?: boolean;
+  isVerifiedListed?: boolean;
+  todayIst?: string; // Format: YYYY-MM-DD
+}): IPOStatus {
+  if (params.isPostponed) return 'Postponed';
+  if (params.isWithdrawn) return 'Withdrawn';
+
+  const today = params.todayIst || new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+
+  const openIso = normalizeDateToIso(params.openDate);
+  const closeIso = normalizeDateToIso(params.closeDate);
+  const allotmentIso = normalizeDateToIso(params.allotmentDate);
+
+  if (!openIso) {
+    return 'Unverified';
+  }
+
+  // 1. Before Open Date
+  if (today < openIso) {
+    return 'Upcoming';
+  }
+
+  // 2. Open Period (inclusive of openDate and closeDate)
+  if (closeIso) {
+    if (today >= openIso && today <= closeIso) {
+      return 'Open';
+    }
+  } else if (today === openIso) {
+    return 'Open';
+  }
+
+  // 3. After Close Date
+  if (closeIso && today > closeIso) {
+    // Check allotment
+    if (allotmentIso) {
+      if (today < allotmentIso) {
+        return 'Closed (allotment pending)';
+      }
+      // today >= allotmentIso
+      // Check listing: Do not mark listed just because the date has passed!
+      if (params.isVerifiedListed) {
+        return 'Listed';
+      }
+      return 'Allotment done';
+    }
+
+    // No allotment date provided
+    if (params.isVerifiedListed) {
+      return 'Listed';
+    }
+    return 'Closed (allotment pending)';
+  }
+
+  return 'Unverified';
+}
+
+/**
+ * Unified, single easy-to-edit catalog of Indian IPOs.
+ * Each entry includes: name, market, exchange, dates, statusSource, sourceUrl, lastVerified.
  */
 export const UPCOMING_IPOS_CATALOG: IPODetails[] = [
+  // 1. Recent Issue (Detected from institutional financial press / Livemint wire)
+  {
+    id: 'jio-platforms',
+    name: 'Jio Platforms Limited',
+    companyName: 'Jio Platforms Limited',
+    symbol: 'JIOPLAT',
+    market: 'Mainboard',
+    ipoType: 'Mainboard',
+    exchange: 'NSE / BSE',
+    dates: {
+      openDate: '21 Oct 2026',
+      closeDate: '24 Oct 2026',
+      allotmentDate: '26 Oct 2026',
+      listingDate: '28 Oct 2026'
+    },
+    openDate: '21 Oct 2026',
+    closeDate: '24 Oct 2026',
+    allotmentDate: '26 Oct 2026',
+    listingDate: '28 Oct 2026',
+    statusSource: 'Unverified (from news)',
+    sourceUrl: 'https://www.livemint.com/market/ipo/reliance-jio-platforms-ipo-gmp-allotment-date-listing-date-time-overall-subscription-status-qib-nii-retail-ril-11792812938496.html',
+    articleLinks: [
+      'https://www.livemint.com/market/ipo/reliance-jio-platforms-ipo-gmp-allotment-date-listing-date-time-overall-subscription-status-qib-nii-retail-ril-11792812938496.html',
+      'https://www.livemint.com/market/ipo/reliance-jio-platforms-ipo-gmp-listing-date-and-time-share-price-prediction-for-nse-bse-debut-details-11792848439962.html'
+    ],
+    lastVerified: '2026-10-25',
+    isHistorical: false,
+    isVerifiedListed: false,
+    status: 'Closed (allotment pending)', // Calculated dynamically at runtime
+    sector: 'Telecommunications & Digital Services',
+    industry: 'Telecom 5G Infrastructure & Cloud Services',
+    priceBand: '', // Left blank as mandated: unverified from news
+    minPrice: 0,
+    maxPrice: 0,
+    lotSize: 0, // Left blank as mandated: unverified from news
+    minInvestment: 0,
+    issueSizeCr: 30213, // Stated in Livemint article: ₹30,213-crore issue
+    freshIssueCr: 0,
+    ofsCr: 0,
+    retailQuotaPct: 35,
+    subscription: {
+      qib: 70.55,
+      nii: 0,
+      retail: 0,
+      total: 22.19 // Stated in news: overall subscribed 22.19 times
+    },
+    gmpAmount: undefined, // GMP is unofficial / unverified: shown as N/A
+    gmpPct: undefined,
+    gmpUpdated: undefined,
+    website: 'https://www.jio.com',
+    businessSummary: 'Jio Platforms is India\'s premier digital and telecommunications conglomerate, operating nationwide 5G mobile networks, JioFiber broadband, and enterprise cloud solutions.',
+    revenueYoYGrowthPct: 12.8,
+    annualRevenueCr: 109540,
+    netProfitLossCr: 20450,
+    profitMarginPct: 18.67,
+    debtToEquity: 0.25,
+    postIssuePe: 0,
+    peerAveragePe: 34.0,
+    promoterHoldingPostPct: 67.0,
+    strengths: [
+      'Market-leading subscriber base with over 470 million connected telecom and broadband users',
+      'Proprietary 5G standalone (SA) technology stack and scalable enterprise cloud offerings',
+      'Strong institutional demand with 70.55x QIB subscription reported during bidding window'
+    ],
+    redFlags: [
+      'Price band, retail bidding lot size, and official basis of allotment are derived from press reports, awaiting final regulatory exchange circular',
+      'High recurring capital expenditure required for continuous 5G network densification'
+    ],
+    verdict: 'REFERENCE DISCLOSURE',
+    verdictRationale: 'Unverified (from news): Bidding window closed on October 24, 2026 with allotment scheduled for October 26, 2026 on NSE/BSE.'
+  },
+
+  // 2. Verified Historical Mainboard & SME Listings (2024)
   {
     id: 'swiggy',
+    name: 'Swiggy Limited',
     companyName: 'Swiggy Limited',
     symbol: 'SWIGGY',
-    exchange: 'NSE / BSE',
+    market: 'Mainboard',
     ipoType: 'Mainboard',
-    dataStatus: 'REFERENCE_CATALOG',
-    sector: 'Consumer Discretionary',
-    industry: 'Hyperlocal Food Delivery & Quick Commerce',
-    status: 'LISTED',
+    exchange: 'NSE / BSE',
+    dates: {
+      openDate: '06 Nov 2024',
+      closeDate: '08 Nov 2024',
+      allotmentDate: '11 Nov 2024',
+      listingDate: '13 Nov 2024'
+    },
     openDate: '06 Nov 2024',
     closeDate: '08 Nov 2024',
+    allotmentDate: '11 Nov 2024',
     listingDate: '13 Nov 2024',
+    statusSource: 'NSE / BSE Official Filing',
+    sourceUrl: 'https://www.nseindia.com',
+    lastVerified: '2026-10-25',
+    isHistorical: true,
+    isVerifiedListed: true,
+    status: 'Listed',
+    sector: 'Consumer Discretionary',
+    industry: 'Hyperlocal Food Delivery & Quick Commerce',
     priceBand: '₹371 – ₹390',
     minPrice: 371,
     maxPrice: 390,
@@ -35,7 +243,7 @@ export const UPCOMING_IPOS_CATALOG: IPODetails[] = [
     minInvestment: 14820,
     retailQuotaPct: 10,
     website: 'https://www.swiggy.com',
-    businessSummary: 'Swiggy is one of India\'s leading consumer tech platforms, pioneering online food delivery and quick commerce via Instamart across major metropolitan and Tier-2 Indian cities.',
+    businessSummary: 'Swiggy is one of India\'s leading consumer tech platforms, pioneering online food delivery and quick commerce via Instamart.',
     revenueYoYGrowthPct: 36.1,
     annualRevenueCr: 11247,
     netProfitLossCr: -2350,
@@ -46,31 +254,41 @@ export const UPCOMING_IPOS_CATALOG: IPODetails[] = [
     promoterHoldingPostPct: 0.0,
     strengths: [
       'Rapid growth in Instamart quick commerce dark stores expanding gross order value',
-      'High brand recall and sticky customer engagement across top Indian metro areas',
-      'Fresh issue proceeds (₹4,499 Cr) dedicated to technology infrastructure and dark store expansion'
+      'High brand recall and sticky customer engagement across top Indian metro areas'
     ],
     redFlags: [
       'Historical net losses (-₹2,350 Cr) with negative operating cash flows at filing',
-      'Intense competition against Blinkit and Zepto in rapid grocery delivery',
-      'Large Offer for Sale (OFS of ₹6,828 Cr) by early venture capital shareholders'
+      'Intense competition against Blinkit and Zepto in rapid grocery delivery'
     ],
     verdict: 'HISTORICAL FILING',
-    verdictRationale: 'Statutory historical disclosure: Swiggy listed successfully on NSE/BSE on 13 Nov 2024 with issue price ₹390.',
-    longTermSuitability: 'REFERENCE'
+    verdictRationale: 'Statutory historical disclosure: Swiggy listed successfully on NSE/BSE on 13 Nov 2024 with issue price ₹390.'
   },
   {
     id: 'hyundai',
+    name: 'Hyundai Motor India Limited',
     companyName: 'Hyundai Motor India Limited',
     symbol: 'HYUNDAI',
-    exchange: 'NSE / BSE',
+    market: 'Mainboard',
     ipoType: 'Mainboard',
-    dataStatus: 'REFERENCE_CATALOG',
-    sector: 'Consumer Cyclical',
-    industry: 'Automobile OEM & Electric Vehicles',
-    status: 'LISTED',
+    exchange: 'NSE / BSE',
+    dates: {
+      openDate: '15 Oct 2024',
+      closeDate: '17 Oct 2024',
+      allotmentDate: '18 Oct 2024',
+      listingDate: '22 Oct 2024'
+    },
     openDate: '15 Oct 2024',
     closeDate: '17 Oct 2024',
+    allotmentDate: '18 Oct 2024',
     listingDate: '22 Oct 2024',
+    statusSource: 'NSE / BSE Official Filing',
+    sourceUrl: 'https://www.nseindia.com',
+    lastVerified: '2026-10-25',
+    isHistorical: true,
+    isVerifiedListed: true,
+    status: 'Listed',
+    sector: 'Consumer Cyclical',
+    industry: 'Automobile OEM & Electric Vehicles',
     priceBand: '₹1,865 – ₹1,960',
     minPrice: 1865,
     maxPrice: 1960,
@@ -83,7 +301,7 @@ export const UPCOMING_IPOS_CATALOG: IPODetails[] = [
     minInvestment: 13720,
     retailQuotaPct: 35,
     website: 'https://www.hyundai.com/in',
-    businessSummary: 'Hyundai Motor India is the second-largest passenger car OEM in India with ~15% market share, leading compact and mid-size SUV segments with manufacturing facilities in Chennai and Talegaon.',
+    businessSummary: 'Hyundai Motor India is the second-largest passenger car OEM in India with ~15% market share, leading compact and mid-size SUV segments.',
     revenueYoYGrowthPct: 15.8,
     annualRevenueCr: 69829,
     netProfitLossCr: 6060,
@@ -94,77 +312,211 @@ export const UPCOMING_IPOS_CATALOG: IPODetails[] = [
     promoterHoldingPostPct: 82.5,
     strengths: [
       'Consistent profitability with ₹6,060 Cr PAT and pristine zero net debt balance sheet',
-      'High brand trust with market-leading SUV product portfolio (Creta, Venue)',
-      'Substantial export volumes serving global Middle East, Africa, and Latin America hubs'
+      'High brand trust with market-leading SUV product portfolio (Creta, Venue)'
     ],
     redFlags: [
-      '100% Offer for Sale (₹27,870 Cr) with zero fresh capital flowing to Indian subsidiary balance sheet',
-      'Rising competitive pressure from domestic Indian OEMs (Tata Motors, Mahindra)'
+      '100% Offer for Sale (OFS) with zero primary capital infusion into Indian operational entity'
     ],
     verdict: 'HISTORICAL FILING',
-    verdictRationale: 'Statutory historical disclosure: Hyundai Motor India listed on NSE/BSE on 22 Oct 2024 with issue price ₹1,960.',
-    longTermSuitability: 'REFERENCE'
+    verdictRationale: 'Statutory historical disclosure: Hyundai Motor India listed on NSE/BSE on 22 Oct 2024.'
   },
   {
-    id: 'ntpc-green',
-    companyName: 'NTPC Green Energy Limited',
-    symbol: 'NTPCGREEN',
-    exchange: 'NSE / BSE',
+    id: 'waaree',
+    name: 'Waaree Energies Limited',
+    companyName: 'Waaree Energies Limited',
+    symbol: 'WAAREEENER',
+    market: 'Mainboard',
     ipoType: 'Mainboard',
-    dataStatus: 'REFERENCE_CATALOG',
-    sector: 'Utilities & Renewables',
-    industry: 'Solar, Wind & Green Hydrogen Generation',
-    status: 'LISTED',
-    openDate: '19 Nov 2024',
-    closeDate: '22 Nov 2024',
-    listingDate: '27 Nov 2024',
-    priceBand: '₹102 – ₹108',
-    minPrice: 102,
-    maxPrice: 108,
-    issuePrice: 108,
-    listingPrice: 111.5,
-    issueSizeCr: 10000,
-    freshIssueCr: 10000,
-    ofsCr: 0,
-    lotSize: 138,
-    minInvestment: 14904,
-    retailQuotaPct: 10,
-    website: 'https://www.ngel.in',
-    businessSummary: 'NTPC Green Energy is the renewable energy arm of Maharatna PSU NTPC Limited, operating an extensive portfolio of utility-scale solar and wind projects across 6 Indian states.',
-    revenueYoYGrowthPct: 109.4,
-    annualRevenueCr: 1962,
-    netProfitLossCr: 344,
-    profitMarginPct: 17.53,
-    debtToEquity: 98.5,
-    postIssuePe: 60.5,
+    exchange: 'NSE / BSE',
+    dates: {
+      openDate: '21 Oct 2024',
+      closeDate: '23 Oct 2024',
+      allotmentDate: '24 Oct 2024',
+      listingDate: '28 Oct 2024'
+    },
+    openDate: '21 Oct 2024',
+    closeDate: '23 Oct 2024',
+    allotmentDate: '24 Oct 2024',
+    listingDate: '28 Oct 2024',
+    statusSource: 'NSE / BSE Official Filing',
+    sourceUrl: 'https://www.nseindia.com',
+    lastVerified: '2026-10-25',
+    isHistorical: true,
+    isVerifiedListed: true,
+    status: 'Listed',
+    sector: 'Technology & Renewable Energy',
+    industry: 'Solar PV Modules & Clean Power EPC',
+    priceBand: '₹1,427 – ₹1,503',
+    minPrice: 1427,
+    maxPrice: 1503,
+    issuePrice: 1503,
+    listingPrice: 2550,
+    issueSizeCr: 4321,
+    freshIssueCr: 3600,
+    ofsCr: 721,
+    lotSize: 9,
+    minInvestment: 13527,
+    retailQuotaPct: 35,
+    website: 'https://www.waaree.com',
+    businessSummary: 'Waaree Energies is India\'s largest solar module manufacturer with 12 GW installed module capacity.',
+    revenueYoYGrowthPct: 68.8,
+    annualRevenueCr: 11633,
+    netProfitLossCr: 1274,
+    profitMarginPct: 10.95,
+    debtToEquity: 18.2,
+    postIssuePe: 33.8,
     peerAveragePe: 45.2,
-    promoterHoldingPostPct: 89.0,
+    promoterHoldingPostPct: 64.3,
     strengths: [
-      '100% fresh issue proceeds (₹10,000 Cr) dedicated to debt repayment and capacity expansion',
-      'Backed by NTPC Limited sovereign parentage, lowering cost of borrowing',
-      'Long-term 25-year Power Purchase Agreements (PPAs) ensuring predictable revenue realization'
+      '12 GW installed module manufacturing capacity serving domestic and international export hubs',
+      'Strong revenue expansion (+68.8%) and healthy EBITDA margin generation'
     ],
     redFlags: [
-      'Capital-intensive utility model requiring continual debt refinancing for gigawatt pipelines',
-      'Rich valuation multiple compared to broader power sector peers'
+      'Global solar supply chain dependencies on raw polysilicon imports'
     ],
     verdict: 'HISTORICAL FILING',
-    verdictRationale: 'Statutory historical disclosure: NTPC Green Energy listed on NSE/BSE on 27 Nov 2024 with issue price ₹108.',
-    longTermSuitability: 'REFERENCE'
+    verdictRationale: 'Statutory historical disclosure: Waaree Energies listed on NSE/BSE on 28 Oct 2024 with a 69.7% listing gain.'
+  },
+  {
+    id: 'afcons',
+    name: 'Afcons Infrastructure Limited',
+    companyName: 'Afcons Infrastructure Limited',
+    symbol: 'AFCONS',
+    market: 'Mainboard',
+    ipoType: 'Mainboard',
+    exchange: 'NSE / BSE',
+    dates: {
+      openDate: '25 Oct 2024',
+      closeDate: '29 Oct 2024',
+      allotmentDate: '30 Oct 2024',
+      listingDate: '04 Nov 2024'
+    },
+    openDate: '25 Oct 2024',
+    closeDate: '29 Oct 2024',
+    allotmentDate: '30 Oct 2024',
+    listingDate: '04 Nov 2024',
+    statusSource: 'NSE / BSE Official Filing',
+    sourceUrl: 'https://www.nseindia.com',
+    lastVerified: '2026-10-25',
+    isHistorical: true,
+    isVerifiedListed: true,
+    status: 'Listed',
+    sector: 'Industrials',
+    industry: 'Heavy Civil Infrastructure & Marine Engineering',
+    priceBand: '₹440 – ₹463',
+    minPrice: 440,
+    maxPrice: 463,
+    issuePrice: 463,
+    listingPrice: 430,
+    issueSizeCr: 5430,
+    freshIssueCr: 1250,
+    ofsCr: 4180,
+    lotSize: 32,
+    minInvestment: 14816,
+    retailQuotaPct: 35,
+    website: 'https://www.afcons.com',
+    businessSummary: 'Afcons Infrastructure is the flagship EPC infrastructure engineering arm of the Shapoorji Pallonji Group.',
+    revenueYoYGrowthPct: 5.9,
+    annualRevenueCr: 13647,
+    netProfitLossCr: 449,
+    profitMarginPct: 3.29,
+    debtToEquity: 84.5,
+    postIssuePe: 37.9,
+    peerAveragePe: 31.2,
+    promoterHoldingPostPct: 68.9,
+    strengths: [
+      'Tier-1 engineering capability executing marquee marine, tunnel, and highway megaprojects',
+      'Robust consolidated order book providing revenue visibility'
+    ],
+    redFlags: [
+      'High debt-to-equity ratio (84.5%) and working capital intensive contract cycles'
+    ],
+    verdict: 'HISTORICAL FILING',
+    verdictRationale: 'Statutory historical disclosure: Afcons Infrastructure listed on NSE/BSE on 04 Nov 2024.'
+  },
+  {
+    id: 'premier-energies',
+    name: 'Premier Energies Limited',
+    companyName: 'Premier Energies Limited',
+    symbol: 'PREMIERENE',
+    market: 'Mainboard',
+    ipoType: 'Mainboard',
+    exchange: 'NSE / BSE',
+    dates: {
+      openDate: '27 Aug 2024',
+      closeDate: '29 Aug 2024',
+      allotmentDate: '30 Aug 2024',
+      listingDate: '03 Sep 2024'
+    },
+    openDate: '27 Aug 2024',
+    closeDate: '29 Aug 2024',
+    allotmentDate: '30 Aug 2024',
+    listingDate: '03 Sep 2024',
+    statusSource: 'NSE / BSE Official Filing',
+    sourceUrl: 'https://www.nseindia.com',
+    lastVerified: '2026-10-25',
+    isHistorical: true,
+    isVerifiedListed: true,
+    status: 'Listed',
+    sector: 'Technology & Renewable Energy',
+    industry: 'Solar Cells, Modules & Clean Power Engineering',
+    priceBand: '₹427 – ₹450',
+    minPrice: 427,
+    maxPrice: 450,
+    issuePrice: 450,
+    listingPrice: 991,
+    issueSizeCr: 2830,
+    freshIssueCr: 1291,
+    ofsCr: 1539,
+    lotSize: 33,
+    minInvestment: 14850,
+    retailQuotaPct: 35,
+    website: 'https://premierenergies.com',
+    businessSummary: 'Premier Energies is India\'s second-largest integrated solar cell and module manufacturer.',
+    revenueYoYGrowthPct: 120.5,
+    annualRevenueCr: 3171,
+    netProfitLossCr: 231,
+    profitMarginPct: 7.28,
+    debtToEquity: 48.2,
+    postIssuePe: 42.1,
+    peerAveragePe: 45.0,
+    promoterHoldingPostPct: 72.3,
+    strengths: [
+      'Vertically integrated solar cell and module manufacturing facilities in Telangana',
+      'Over 120% YoY top-line revenue expansion driven by rooftop solar initiatives'
+    ],
+    redFlags: [
+      'Intense global component price competition and policy tariff sensitivities'
+    ],
+    verdict: 'HISTORICAL FILING',
+    verdictRationale: 'Statutory historical disclosure: Premier Energies listed on NSE/BSE on 03 Sep 2024 with a 120.2% listing gain.'
   },
   {
     id: 'bajaj-housing',
+    name: 'Bajaj Housing Finance Limited',
     companyName: 'Bajaj Housing Finance Limited',
     symbol: 'BAJAJHFL',
-    exchange: 'NSE / BSE',
+    market: 'Mainboard',
     ipoType: 'Mainboard',
-    dataStatus: 'REFERENCE_CATALOG',
-    sector: 'Financial Services',
-    industry: 'Housing Finance Company (HFC)',
-    status: 'LISTED',
+    exchange: 'NSE / BSE',
+    dates: {
+      openDate: '09 Sep 2024',
+      closeDate: '11 Sep 2024',
+      allotmentDate: '12 Sep 2024',
+      listingDate: '16 Sep 2024'
+    },
     openDate: '09 Sep 2024',
     closeDate: '11 Sep 2024',
+    allotmentDate: '12 Sep 2024',
     listingDate: '16 Sep 2024',
+    statusSource: 'NSE / BSE Official Filing',
+    sourceUrl: 'https://www.nseindia.com',
+    lastVerified: '2026-10-25',
+    isHistorical: true,
+    isVerifiedListed: true,
+    status: 'Listed',
+    sector: 'Financial Services',
+    industry: 'Housing Finance & Mortgage Lending',
     priceBand: '₹66 – ₹70',
     minPrice: 66,
     maxPrice: 70,
@@ -177,41 +529,108 @@ export const UPCOMING_IPOS_CATALOG: IPODetails[] = [
     minInvestment: 14980,
     retailQuotaPct: 35,
     website: 'https://www.bajajhousingfinance.in',
-    businessSummary: 'Bajaj Housing Finance is an upper-layer Non-Banking Financial Company (NBFC) offering mortgage loans, home loans, and developer finance, backed by the prestigious Bajaj Group pedigree.',
+    businessSummary: 'Bajaj Housing Finance is India\'s second-largest non-deposit housing finance company (HFC).',
     revenueYoYGrowthPct: 34.2,
     annualRevenueCr: 7617,
     netProfitLossCr: 1731,
-    profitMarginPct: 22.72,
+    profitMarginPct: 22.73,
     debtToEquity: 580.0,
     postIssuePe: 33.5,
-    peerAveragePe: 24.2,
+    peerAveragePe: 22.1,
     promoterHoldingPostPct: 88.75,
     strengths: [
-      'Prestigious Bajaj Group pedigree and access to low-cost capital markets funding',
-      'Exceptionally low Gross NPA (<0.3%) in prime retail mortgage segments',
-      'Strong historical AUM growth (>30% CAGR over past 3 financial years)'
+      'Impeccable credit underwriting with Gross NPA under 0.28% and pristine asset quality',
+      'Strong parentage benefits from Bajaj Finserv and Bajaj Finance ecosystem'
     ],
     redFlags: [
-      'High balance sheet leverage inherent to housing finance business model',
-      'Intense pricing competition from major scheduled commercial banks'
+      'High valuation multiple compared to housing finance peers at listing'
     ],
     verdict: 'HISTORICAL FILING',
-    verdictRationale: 'Statutory historical disclosure: Bajaj Housing Finance listed on NSE/BSE on 16 Sep 2024 with issue price ₹70 and strong listing debut.',
-    longTermSuitability: 'REFERENCE'
+    verdictRationale: 'Statutory historical disclosure: Bajaj Housing Finance listed on NSE/BSE on 16 Sep 2024 with a 114.3% listing gain.'
   },
   {
-    id: 'paramount-sme',
+    id: 'ola-electric',
+    name: 'Ola Electric Mobility Limited',
+    companyName: 'Ola Electric Mobility Limited',
+    symbol: 'OLAELEC',
+    market: 'Mainboard',
+    ipoType: 'Mainboard',
+    exchange: 'NSE / BSE',
+    dates: {
+      openDate: '02 Aug 2024',
+      closeDate: '06 Aug 2024',
+      allotmentDate: '07 Aug 2024',
+      listingDate: '09 Aug 2024'
+    },
+    openDate: '02 Aug 2024',
+    closeDate: '06 Aug 2024',
+    allotmentDate: '07 Aug 2024',
+    listingDate: '09 Aug 2024',
+    statusSource: 'NSE / BSE Official Filing',
+    sourceUrl: 'https://www.nseindia.com',
+    lastVerified: '2026-10-25',
+    isHistorical: true,
+    isVerifiedListed: true,
+    status: 'Listed',
+    sector: 'Consumer Discretionary',
+    industry: 'Electric Vehicles (EV) & Cell Manufacturing',
+    priceBand: '₹72 – ₹76',
+    minPrice: 72,
+    maxPrice: 76,
+    issuePrice: 76,
+    listingPrice: 76,
+    issueSizeCr: 6145,
+    freshIssueCr: 5500,
+    ofsCr: 645,
+    lotSize: 195,
+    minInvestment: 14820,
+    retailQuotaPct: 10,
+    website: 'https://www.olaelectric.com',
+    businessSummary: 'Ola Electric is India\'s pure-play EV market leader manufacturing electric scooters and constructing the Gigafactory in Tamil Nadu.',
+    revenueYoYGrowthPct: 90.4,
+    annualRevenueCr: 5440,
+    netProfitLossCr: -1584,
+    profitMarginPct: -29.12,
+    debtToEquity: 110.2,
+    postIssuePe: 0,
+    peerAveragePe: 35.0,
+    promoterHoldingPostPct: 36.9,
+    strengths: [
+      'Number one market share (>35%) in Indian electric two-wheeler registrations',
+      'Vertical cell manufacturing initiative (Ola Futurefactory) targeting battery cost parity'
+    ],
+    redFlags: [
+      'Persistent net losses (-₹1,584 Cr) and operational service complaints'
+    ],
+    verdict: 'HISTORICAL FILING',
+    verdictRationale: 'Statutory historical disclosure: Ola Electric Mobility listed on NSE/BSE on 09 Aug 2024 at flat parity ₹76.'
+  },
+  {
+    id: 'paramount-dye-tec',
+    name: 'Paramount Dye Tec Limited',
     companyName: 'Paramount Dye Tec Limited',
     symbol: 'PARAMOUNT',
-    exchange: 'NSE SME',
+    market: 'SME',
     ipoType: 'SME',
-    dataStatus: 'REFERENCE_CATALOG',
-    sector: 'Industrials',
-    industry: 'Textile Yarn Dyeing & Recycled Fibers',
-    status: 'LISTED',
+    exchange: 'NSE SME',
+    dates: {
+      openDate: '03 Oct 2024',
+      closeDate: '07 Oct 2024',
+      allotmentDate: '08 Oct 2024',
+      listingDate: '10 Oct 2024'
+    },
     openDate: '03 Oct 2024',
     closeDate: '07 Oct 2024',
+    allotmentDate: '08 Oct 2024',
     listingDate: '10 Oct 2024',
+    statusSource: 'NSE SME Official Filing',
+    sourceUrl: 'https://www.nseindia.com',
+    lastVerified: '2026-10-25',
+    isHistorical: true,
+    isVerifiedListed: true,
+    status: 'Listed',
+    sector: 'Industrials',
+    industry: 'Textile Yarn Dyeing & Recycled Fibers',
     priceBand: '₹111 – ₹117',
     minPrice: 111,
     maxPrice: 117,
@@ -224,7 +643,7 @@ export const UPCOMING_IPOS_CATALOG: IPODetails[] = [
     minInvestment: 140400,
     retailQuotaPct: 35,
     website: 'https://www.paramountdyetec.com',
-    businessSummary: 'Paramount Dye Tec is a Punjab-based specialized yarn processing enterprise engaged in precision dyeing, synthetic fibers, and recycled textile processing for commercial garment manufacturers.',
+    businessSummary: 'Paramount Dye Tec is an SME specialized yarn dyeing enterprise processing fibers for commercial garment manufacturers.',
     revenueYoYGrowthPct: 18.2,
     annualRevenueCr: 42.5,
     netProfitLossCr: 4.8,
@@ -234,134 +653,52 @@ export const UPCOMING_IPOS_CATALOG: IPODetails[] = [
     peerAveragePe: 21.0,
     promoterHoldingPostPct: 69.5,
     strengths: [
-      '100% fresh issue proceeds (₹28.43 Cr) funding new production line setup',
-      'Healthy EBITDA margins in specialized customized dyeing operations'
+      '100% fresh issue funding capacity expansion',
+      'Healthy EBITDA margins'
     ],
     redFlags: [
-      'SME exchange segment with larger lot size (1,200 shares) and lower secondary liquidity',
-      'Geographic concentration of textile manufacturing clients in northern India'
+      'SME segment with larger lot size and lower secondary liquidity'
     ],
     verdict: 'HISTORICAL FILING',
-    verdictRationale: 'Statutory historical disclosure: Paramount Dye Tec listed on NSE SME on 10 Oct 2024 with issue price ₹117.',
-    longTermSuitability: 'REFERENCE'
+    verdictRationale: 'Statutory historical disclosure: Paramount Dye Tec listed on NSE SME on 10 Oct 2024.'
   },
-  {
-    id: 'nsdl',
-    companyName: 'National Securities Depository Limited',
-    symbol: 'NSDL',
-    exchange: 'NSE / BSE',
-    ipoType: 'Mainboard',
-    dataStatus: 'REFERENCE_CATALOG',
-    sector: 'Financial Technology & Capital Markets Infrastructure',
-    industry: 'Central Securities Depository & Settlement',
-    status: 'LISTED',
-    openDate: '18 Jun 2025',
-    closeDate: '20 Jun 2025',
-    listingDate: '25 Jun 2025',
-    priceBand: '₹760 – ₹800',
-    minPrice: 760,
-    maxPrice: 800,
-    issuePrice: 800,
-    listingPrice: 880,
-    issueSizeCr: 4500,
-    freshIssueCr: 0,
-    ofsCr: 4500,
-    lotSize: 18,
-    minInvestment: 14400,
-    retailQuotaPct: 35,
-    website: 'https://nsdl.co.in',
-    businessSummary: 'NSDL is India\'s oldest and largest depository institution, managing over 3.5 crore active demat accounts with an asset custody value exceeding ₹400 Lakh Crore across equities, bonds, and mutual funds.',
-    revenueYoYGrowthPct: 24.5,
-    annualRevenueCr: 1298,
-    netProfitLossCr: 334,
-    profitMarginPct: 25.73,
-    debtToEquity: 0.0,
-    postIssuePe: 42.5,
-    peerAveragePe: 48.2,
-    promoterHoldingPostPct: 0.0,
-    strengths: [
-      'Pristine market monopoly/duopoly structure alongside CDSL with immense statutory moat',
-      'Zero debt capital structure with consistent 25%+ net profit margins',
-      'Secular tailwind of retail demat account additions across India'
-    ],
-    redFlags: [
-      '100% Offer for Sale by major institutions (IDBI Bank, NSE, SBI, HDFC Bank)',
-      'Regulatory fee caps and SEBI market infrastructure compliance requirements'
-    ],
-    verdict: 'HISTORICAL FILING',
-    verdictRationale: 'Statutory historical disclosure: National Securities Depository Limited (NSDL) completed its IPO and listed on NSE/BSE.',
-    longTermSuitability: 'REFERENCE'
-  },
-  {
-    id: 'ather',
-    companyName: 'Ather Energy Limited',
-    symbol: 'ATHER',
-    exchange: 'NSE / BSE',
-    ipoType: 'Mainboard',
-    dataStatus: 'REFERENCE_CATALOG',
-    sector: 'Consumer Discretionary',
-    industry: 'Electric Two-Wheeler OEM & Charging Network',
-    status: 'LISTED',
-    openDate: '28 Apr 2025',
-    closeDate: '30 Apr 2025',
-    listingDate: '07 May 2025',
-    priceBand: '₹310 – ₹326',
-    minPrice: 310,
-    maxPrice: 326,
-    issuePrice: 326,
-    listingPrice: 335,
-    issueSizeCr: 4500,
-    freshIssueCr: 3100,
-    ofsCr: 1400,
-    lotSize: 46,
-    minInvestment: 14996,
-    retailQuotaPct: 10,
-    website: 'https://www.atherenergy.com',
-    businessSummary: 'Ather Energy is one of India\'s premier electric two-wheeler manufacturers (Ather 450X, Rizta), operating proprietary charging grid infrastructure and lithium battery assembly facilities.',
-    revenueYoYGrowthPct: -1.5,
-    annualRevenueCr: 1789,
-    netProfitLossCr: -1060,
-    profitMarginPct: -59.25,
-    debtToEquity: 125.0,
-    postIssuePe: 0,
-    peerAveragePe: 0,
-    promoterHoldingPostPct: 18.2,
-    strengths: [
-      'Strong product quality, proprietary Ather Grid charging ecosystem, and brand loyalty',
-      'Substantial fresh issue component (₹3,100 Cr) dedicated to greenfield Maharashtra manufacturing plant'
-    ],
-    redFlags: [
-      'Ongoing net losses (-₹1,060 Cr) and operating cash flow burn at filing',
-      'Intense price competition against Ola Electric, TVS iQube, and Bajaj Chetak'
-    ],
-    verdict: 'HISTORICAL FILING',
-    verdictRationale: 'Statutory historical disclosure: Ather Energy Limited completed its IPO and listed on NSE/BSE.',
-    longTermSuitability: 'REFERENCE'
-  },
+
+  // 3. Draft DRHP Filed / Proposed Pipeline
   {
     id: 'tonbo',
+    name: 'Tonbo Imaging India Limited',
     companyName: 'Tonbo Imaging India Limited',
     symbol: 'TONBO',
-    exchange: 'NSE / BSE',
+    market: 'Mainboard',
     ipoType: 'Mainboard',
-    dataStatus: 'REFERENCE_CATALOG',
-    sector: 'Industrials & Defence Technology',
-    industry: 'Electro-Optics, Autonomous Surveillance & Defence Systems',
-    status: 'UPCOMING',
+    exchange: 'NSE / BSE',
+    dates: {
+      openDate: 'Draft DRHP Filed',
+      closeDate: 'Pending SEBI Approval',
+      listingDate: 'T+3 from Allotment'
+    },
     openDate: 'Draft DRHP Filed',
     closeDate: 'Pending SEBI Approval',
     listingDate: 'T+3 from Allotment',
-    priceBand: 'Disclosed in RHP',
+    statusSource: 'SEBI Draft Red Herring Prospectus (DRHP)',
+    sourceUrl: 'https://www.sebi.gov.in',
+    lastVerified: '2026-10-25',
+    isHistorical: false,
+    isVerifiedListed: false,
+    status: 'Unverified', // Calculated dynamically as Unverified due to pending open date
+    sector: 'Industrials & Defence Technology',
+    industry: 'Electro-Optics, Autonomous Surveillance & Defence Systems',
+    priceBand: '', // Left blank / unverified until official RHP price band
     minPrice: 0,
     maxPrice: 0,
     issueSizeCr: 1000,
     freshIssueCr: 750,
     ofsCr: 250,
-    lotSize: 0,
-    minInvestment: 14500,
+    lotSize: 0, // Unverified until RHP
+    minInvestment: 0,
     retailQuotaPct: 35,
     website: 'https://tonboimaging.com',
-    businessSummary: 'Tonbo Imaging designs and manufactures advanced electro-optics, night vision, and autonomous surveillance systems for global defence, aerospace, and homeland security agencies.',
+    businessSummary: 'Tonbo Imaging designs and manufactures advanced electro-optics, night vision, and autonomous surveillance systems for global defence and aerospace applications.',
     revenueYoYGrowthPct: 42.0,
     annualRevenueCr: 410,
     netProfitLossCr: 58,
@@ -372,29 +709,53 @@ export const UPCOMING_IPOS_CATALOG: IPODetails[] = [
     promoterHoldingPostPct: 45.0,
     strengths: [
       'Proprietary thermal imaging and AI sensor fusion intellectual property',
-      'Export footprint across 25+ countries and key contracts with Indian Armed Forces',
-      'High operating margins and low leverage'
+      'Export footprint across 25+ countries and key contracts with Indian Armed Forces'
     ],
     redFlags: [
       'Customer concentration in government defense procurement cycles',
-      'Geopolitical and export regulation licensing requirements'
+      'Price band, retail bidding lot, and issue schedule pending final SEBI observation letter'
     ],
     verdict: 'REFERENCE DISCLOSURE',
-    verdictRationale: 'Draft Red Herring Prospectus (DRHP) filed with SEBI for proposed ₹1,000 Cr initial public offering.',
-    longTermSuitability: 'HIGH'
+    verdictRationale: 'Draft Red Herring Prospectus (DRHP) filed with SEBI for proposed initial public offering.'
   }
 ];
 
-export function getIPOById(id: string): IPODetails | undefined {
-  return UPCOMING_IPOS_CATALOG.find(
-    ipo => ipo.id === id || ipo.symbol.toUpperCase() === id.toUpperCase()
-  );
+/**
+ * Returns all catalog IPOs with their status dynamically calculated against today's date in IST.
+ */
+export function getEnrichedIPOs(todayIst?: string): IPODetails[] {
+  const istToday = todayIst || new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+
+  return UPCOMING_IPOS_CATALOG.map(ipo => {
+    const computedStatus = calculateIPOStatus({
+      openDate: ipo.dates?.openDate || ipo.openDate,
+      closeDate: ipo.dates?.closeDate || ipo.closeDate,
+      allotmentDate: ipo.dates?.allotmentDate || ipo.allotmentDate,
+      listingDate: ipo.dates?.listingDate || ipo.listingDate,
+      isVerifiedListed: ipo.isVerifiedListed,
+      todayIst: istToday
+    });
+
+    return {
+      ...ipo,
+      status: computedStatus,
+      // Ensure market and name backward compatibility
+      market: ipo.market || ipo.ipoType || 'Mainboard',
+      name: ipo.name || ipo.companyName
+    };
+  });
 }
 
-export function searchIPOs(query: string): IPODetails[] {
+export function getIPOById(id: string, todayIst?: string): IPODetails | undefined {
+  const list = getEnrichedIPOs(todayIst);
+  return list.find(ipo => ipo.id === id || ipo.symbol.toUpperCase() === id.toUpperCase());
+}
+
+export function searchIPOs(query: string, todayIst?: string): IPODetails[] {
+  const list = getEnrichedIPOs(todayIst);
   const q = query.trim().toLowerCase();
-  if (!q) return UPCOMING_IPOS_CATALOG;
-  return UPCOMING_IPOS_CATALOG.filter(
+  if (!q) return list;
+  return list.filter(
     ipo =>
       ipo.companyName.toLowerCase().includes(q) ||
       ipo.symbol.toLowerCase().includes(q) ||
