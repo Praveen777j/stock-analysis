@@ -169,36 +169,40 @@ export const UPCOMING_IPOS_CATALOG: IPODetails[] = [
     lotSize: 0, // Left blank as mandated: unverified from news
     minInvestment: 0,
     issueSizeCr: 30213, // Stated in Livemint article: ₹30,213-crore issue
+    issueSizeSource: 'Livemint',
     freshIssueCr: 0,
     ofsCr: 0,
     retailQuotaPct: 35,
     subscription: {
-      qib: 70.55,
-      nii: 0,
+      qib: 70.55, // Stated in Livemint: QIB subscribed 70.55 times
+      nii: 14.0, // Stated in Livemint: NII received bids 14 times
       retail: 0,
-      total: 22.19 // Stated in news: overall subscribed 22.19 times
+      total: 22.19, // Stated in Livemint: overall subscribed 22.19 times
+      source: 'Livemint',
+      sourceUrl: 'https://www.livemint.com/market/ipo/reliance-jio-platforms-ipo-gmp-allotment-date-listing-date-time-overall-subscription-status-qib-nii-retail-ril-11792812938496.html'
     },
     gmpAmount: undefined, // GMP is unofficial / unverified: shown as N/A
     gmpPct: undefined,
     gmpUpdated: undefined,
     website: 'https://www.jio.com',
-    businessSummary: 'Jio Platforms is India\'s premier digital and telecommunications conglomerate, operating nationwide 5G mobile networks, JioFiber broadband, and enterprise cloud solutions.',
-    revenueYoYGrowthPct: 12.8,
-    annualRevenueCr: 109540,
-    netProfitLossCr: 20450,
-    profitMarginPct: 18.67,
-    debtToEquity: 0.25,
+    businessSummary: 'Jio Platforms is the telecommunications and digital services business of Reliance Industries, operating 5G mobile networks and broadband services across India.',
+    revenueYoYGrowthPct: 0,
+    annualRevenueCr: 0, // Unverified: Not in linked news source
+    netProfitLossCr: 0, // Unverified: Not in linked news source
+    profitMarginPct: 0, // Unverified: Not in linked news source
+    debtToEquity: 0, // Unverified: Not in linked news source
+    financialsSource: 'Unverified (Not in linked news articles)',
     postIssuePe: 0,
-    peerAveragePe: 34.0,
-    promoterHoldingPostPct: 67.0,
+    peerAveragePe: 0,
+    promoterHoldingPostPct: 0,
     strengths: [
-      'Market-leading subscriber base with over 470 million connected telecom and broadband users',
-      'Proprietary 5G standalone (SA) technology stack and scalable enterprise cloud offerings',
-      'Strong institutional demand with 70.55x QIB subscription reported during bidding window'
+      'Issue subscribed 22.19 times overall, led by 70.55x QIB demand and 14x NII bids [Source: Livemint]',
+      'Total issue size of ₹30,213 crore scheduled for allotment on October 26, 2026 [Source: Livemint]',
+      'Nationwide 5G mobile and digital connectivity infrastructure [Source: Livemint]'
     ],
     redFlags: [
-      'Price band, retail bidding lot size, and official basis of allotment are derived from press reports, awaiting final regulatory exchange circular',
-      'High recurring capital expenditure required for continuous 5G network densification'
+      'Annual sales, net profit, margin, debt/equity, and user count are unverified (not disclosed in linked press reports)',
+      'Price band, retail bidding lot size, and official basis of allotment await final exchange circular'
     ],
     verdict: 'REFERENCE DISCLOSURE',
     verdictRationale: 'Unverified (from news): Bidding window closed on October 24, 2026 with allotment scheduled for October 26, 2026 on NSE/BSE.'

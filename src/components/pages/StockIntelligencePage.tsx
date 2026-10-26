@@ -116,22 +116,39 @@ export const StockIntelligencePage: React.FC<StockIntelligencePageProps> = ({
 
   const cStyle = getClassificationStyle();
 
-  // Derive concise plain-English explanations according to Section 4C format
+  // Generate the WHY explanation strictly from real indicator values and bullish/bearish factor lists
   const whyExplanation = useMemo(() => {
-    if (classification === 'INSUFFICIENT DATA') {
+    if (classification === 'INSUFFICIENT DATA' || bars.length < 50) {
       return `Insufficient verified historical trading observations (${bars.length} available, minimum 50 required) or unavailable live exchange feed. Technical indicators and directional momentum cannot be statistically calibrated.`;
     }
+
+    const bullList = assessment.bullishFactors && assessment.bullishFactors.length > 0
+      ? assessment.bullishFactors
+      : [];
+    const bearList = assessment.bearishFactors && assessment.bearishFactors.length > 0
+      ? assessment.bearishFactors
+      : [];
+
+    const bullFactorsStr = bullList.length > 0 ? bullList.join(', ') : '';
+    const bearFactorsStr = bearList.length > 0 ? bearList.join(', ') : '';
+
     if (classification === 'BULLISH SETUP') {
-      return `Price (${currSym}${quote.price.toFixed(1)}) maintains structural accumulation above rising 20-day EMA (${currSym}${technicals.ema20?.toFixed(1) ?? 'N/A'}) and 50-day EMA (${currSym}${technicals.ema50?.toFixed(1) ?? 'N/A'}). Momentum is constructive with RSI(14) at ${technicals.rsi?.toFixed(1) ?? '50'} and supportive financial news sentiment.`;
+      if (bearList.length > 0) {
+        return `Price (${currSym}${quote.price.toFixed(1)}) maintains structural accumulation driven by ${bullFactorsStr}, though tempered by ${bearFactorsStr}.`;
+      }
+      return `Price (${currSym}${quote.price.toFixed(1)}) maintains structural accumulation driven by ${bullFactorsStr || 'positive technical alignment'}.`;
     }
+
     if (classification === 'BEARISH SETUP') {
-      return `Price (${currSym}${quote.price.toFixed(1)}) trades below primary short-term trend moving averages with negative MACD momentum expansion or overhanging corporate risks, indicating elevated downside continuation risk.`;
+      if (bullList.length > 0) {
+        return `Price (${currSym}${quote.price.toFixed(1)}) trades under defensive pressure driven by ${bearFactorsStr}, despite counter-trend support from ${bullFactorsStr}.`;
+      }
+      return `Price (${currSym}${quote.price.toFixed(1)}) trades below primary short-term trend moving averages with downside risk driven by ${bearFactorsStr || 'bearish technical alignment'}.`;
     }
+
     // WAIT / MIXED EVIDENCE
-    const isAboveEma20 = technicals.ema20 ? quote.price > technicals.ema20 : false;
-    const isAboveEma50 = technicals.ema50 ? quote.price > technicals.ema50 : false;
-    return `Technical signals and market evidence are divergent. Price is ${isAboveEma20 ? 'above EMA 20' : 'below EMA 20'} while ${isAboveEma50 ? 'above EMA 50' : 'below EMA 50'}. Momentum is mixed, and current evidence does not present a high-confluence directional asymmetric edge.`;
-  }, [classification, bars.length, quote.price, technicals, currSym]);
+    return `Technical signals and market evidence are divergent. Bullish factors include ${bullFactorsStr || 'None'}, while bearish factors include ${bearFactorsStr || 'None'}. Current evidence does not present a high-confluence directional asymmetric edge.`;
+  }, [classification, bars.length, quote.price, currSym, assessment.bullishFactors, assessment.bearishFactors]);
 
   const mainRisk = useMemo(() => {
     if (assessment.importantRisks && assessment.importantRisks.length > 0) {
@@ -199,7 +216,7 @@ export const StockIntelligencePage: React.FC<StockIntelligencePageProps> = ({
               </span>
             </div>
             <div className="text-[11px] text-slate-500 font-mono mt-1">
-              Verified daily settlement · Zero artificial smoothing
+              Verified daily settlement
             </div>
           </div>
         </div>

@@ -1,17 +1,15 @@
 /**
- * DistilBERT Financial Sentiment Inference Service
+ * DistilBERT Financial Sentiment Inference Service (Compatibility Layer)
  * 
- * Uses AnkitAI/distilbert-base-uncased-financial-news-sentiment-analysis
- * (base: distilbert/distilbert-base-uncased, fine-tuned on Financial PhraseBank, Apache-2.0 license)
- * to perform genuine transformer sentiment inference on financial news headlines.
+ * Note: Active financial news sentiment analysis in Nexus has transitioned to the
+ * lightweight, deterministic VADER + Financial Context Engine (<150MB RSS footprint).
+ * The schemas and functions in this module are maintained strictly for backward
+ * compatibility with external API callers, legacy test suites, and UI type contracts.
  * 
  * Safety & Reliability Guarantees:
- * - Reads token securely from process.env.HF_TOKEN
- * - NEVER logs or exposes the HF_TOKEN (strict secret redaction)
- * - Honest status: if token is missing, endpoint is unavailable, or inference fails,
- *   marks DistilBERT as UNAVAILABLE and never fakes or fabricates sentiment scores.
- * - Enforces timeouts and circuit breakers (15-min cooldown on HTTP 402 credit exhaustion).
- * - Bounded in-memory LRU cache (capacity: 500) to avoid redundant requests.
+ * - Reads token securely from process.env.HF_TOKEN if configured.
+ * - NEVER logs or exposes the HF_TOKEN.
+ * - Marks DistilBERT status honestly as UNAVAILABLE in local/Render Free environments.
  */
 
 export interface DistilbertLabelScore {

@@ -534,7 +534,7 @@ export default function App() {
         {/* Professional Minimal Footer */}
         <footer className="mt-14 pt-6 border-t border-slate-800/80 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 font-mono gap-2">
           <span>Nexus · Professional AI Stock Analysis & Decision Support Platform</span>
-          <span>Disciplined Quantitative Risk Management · Zero-Paid-API Architecture</span>
+          <span>Disciplined Quantitative Risk Management · Exchange & Regulatory Intelligence</span>
         </footer>
       </div>
     </div>

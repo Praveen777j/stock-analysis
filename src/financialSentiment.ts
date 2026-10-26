@@ -728,13 +728,27 @@ export function aggregateArticleSentiment(
     }
   }
 
+  const isHeadlineOnly = results.length === 0 || results.every(r => r.isHeadlineOnly ?? true);
   let evidenceStrength: 'VERY_STRONG' | 'STRONG' | 'MODERATE' | 'WEAK' | 'NEUTRAL' | 'INSUFFICIENT' = 'WEAK';
-  if (n >= 5 && termSet.size >= 4) {
-    evidenceStrength = 'STRONG';
-  } else if (n >= 2 && termSet.size >= 2) {
-    evidenceStrength = 'MODERATE';
-  } else if (n >= 1) {
-    evidenceStrength = 'WEAK';
+  if (n === 0) {
+    evidenceStrength = 'INSUFFICIENT';
+  } else if (isHeadlineOnly) {
+    // Under headline-only evidence: must be "Weak" when score is within +/-0.15. Never "STRONG".
+    if (Math.abs(overallScore) <= 0.15) {
+      evidenceStrength = 'WEAK';
+    } else if (n >= 3 && termSet.size >= 2) {
+      evidenceStrength = 'MODERATE';
+    } else {
+      evidenceStrength = 'WEAK';
+    }
+  } else {
+    if (n >= 5 && termSet.size >= 4 && Math.abs(overallScore) > 0.15) {
+      evidenceStrength = 'STRONG';
+    } else if (n >= 2 && termSet.size >= 2) {
+      evidenceStrength = 'MODERATE';
+    } else {
+      evidenceStrength = 'WEAK';
+    }
   }
 
   const confidence = Math.min(0.92, Math.round((0.50 + (n * 0.05) + (Math.abs(overallScore) * 0.30)) * 100) / 100);

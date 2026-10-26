@@ -498,6 +498,7 @@ export interface IPODetails {
   lastUpdated?: string;
   gmpUpdated?: string;
   issueSizeCr: number;
+  issueSizeSource?: string;
   freshIssueCr: number;
   ofsCr: number;
   lotSize: number;
@@ -511,6 +512,8 @@ export interface IPODetails {
     nii: number;
     retail: number;
     total: number;
+    source?: string;
+    sourceUrl?: string;
   };
   website: string;
   businessSummary: string;
@@ -518,6 +521,7 @@ export interface IPODetails {
   annualRevenueCr: number;
   netProfitLossCr: number;
   profitMarginPct: number;
+  financialsSource?: string;
   debtToEquity: number;
   postIssuePe: number;
   peerAveragePe: number;
@@ -713,6 +717,8 @@ export interface FinalAssessment {
   outcome: FinalDecisionOutcome;
   headline: string;
   rationale: string;
+  bullishFactors?: string[];
+  bearishFactors?: string[];
   strongestEvidence: string[];
   conflictingEvidence: string[];
   importantRisks: string[];

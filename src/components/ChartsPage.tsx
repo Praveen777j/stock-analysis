@@ -326,9 +326,9 @@ export const ChartsPage: React.FC<ChartsPageProps> = ({
             <span>·</span>
             <span>Vol: <strong className="text-slate-200">{activeBar ? activeBar.volume?.toLocaleString() : 'N/A'}</strong></span>
           </div>
-          <div className="text-[10px] text-slate-500 flex items-center gap-1">
+          <div className="text-[10px] text-slate-400 flex items-center gap-1">
             <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-            <span>mplfinance / dark_background aesthetic</span>
+            <span>Technical Price Action & Indicators</span>
           </div>
         </div>
 
@@ -370,7 +370,7 @@ export const ChartsPage: React.FC<ChartsPageProps> = ({
           {/* Subplot 1: Price Action */}
           <g>
             <text x={paddingLeft} y={15} fill="#64748b" fontSize="9" fontWeight="bold">
-              ax[0]: Price & Moving Averages ({quote?.currency || 'INR'})
+              Price
             </text>
             {/* Grid lines */}
             {[0, 0.25, 0.5, 0.75, 1].map((p, idx) => {
@@ -398,7 +398,7 @@ export const ChartsPage: React.FC<ChartsPageProps> = ({
           {/* Subplot 2: Volume */}
           <g>
             <text x={paddingLeft} y={yVolTop - 4} fill="#64748b" fontSize="9" fontWeight="bold">
-              ax[1]: Volume Traded
+              Volume
             </text>
             <line
               x1={paddingLeft}
@@ -416,7 +416,7 @@ export const ChartsPage: React.FC<ChartsPageProps> = ({
           {/* Subplot 3: RSI (14) */}
           <g>
             <text x={paddingLeft} y={yRsiTop - 4} fill="#64748b" fontSize="9" fontWeight="bold">
-              ax[2]: RSI (14) [Overbought: 70 / Oversold: 30]
+              RSI
             </text>
             {/* 70 Threshold */}
             <line
@@ -459,7 +459,7 @@ export const ChartsPage: React.FC<ChartsPageProps> = ({
           {/* Subplot 4: MACD */}
           <g>
             <text x={paddingLeft} y={yMacdTop - 4} fill="#64748b" fontSize="9" fontWeight="bold">
-              ax[3]: MACD (12, 26, 9) Histogram & Signal
+              MACD
             </text>
             <line
               x1={paddingLeft}

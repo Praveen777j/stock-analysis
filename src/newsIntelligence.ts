@@ -1114,13 +1114,15 @@ export async function aggregateMultiSourceNews(
   const cleanComp = companyName || cleanTicker;
   const cacheKey = `news:${cleanTicker.toUpperCase()}`;
 
-  if (!options?.forceRefresh) {
+  if (options?.forceRefresh) {
+    inMemoryNewsCache.delete(cacheKey);
+  } else {
     const cached = getCachedNews<MultiSourceNewsResult>(cacheKey);
     if (cached) {
       return {
         ...cached.data,
         isStale: cached.isStale,
-        cachedAt: new Date(cached.cachedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+        cachedAt: new Date(cached.cachedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
       };
     }
   }
@@ -1237,7 +1239,7 @@ export async function aggregateMultiSourceNews(
     sourcesSummary,
     isPartialFailure,
     isStale: false,
-    cachedAt: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+    cachedAt: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }),
     cacheTimestamp: Date.now(),
     eventClusters: groupedData.eventClusters,
     distinctEventsCount: groupedData.distinctEventsCount,

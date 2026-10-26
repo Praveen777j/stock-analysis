@@ -1,15 +1,15 @@
 /**
- * FinBERT Financial Sentiment Inference Service
+ * FinBERT Financial Sentiment Inference Service (Compatibility Layer)
  * 
- * Interacts with Hugging Face Inference API using the ProsusAI/finbert model
- * to perform genuine sentiment inference on financial news headlines.
+ * Note: Active financial news sentiment analysis in Nexus has transitioned to the
+ * lightweight, deterministic VADER + Financial Context Engine (<150MB RSS footprint).
+ * The schemas and functions in this module are maintained strictly for backward
+ * compatibility with external API callers, legacy test suites, and UI type contracts.
  * 
  * Safety & Reliability Guarantees:
- * - Reads token securely from process.env.HF_TOKEN
- * - NEVER logs or exposes the HF_TOKEN
- * - Honest status: if token is missing, endpoint is unavailable, or inference fails,
- *   marks FinBERT as UNAVAILABLE and never fakes or fabricates sentiment scores.
- * - Enforces timeouts and limited retries to protect server responsiveness.
+ * - Reads token securely from process.env.HF_TOKEN if configured.
+ * - NEVER logs or exposes the HF_TOKEN.
+ * - Marks FinBERT status honestly as UNAVAILABLE in local/Render Free environments.
  */
 
 export interface FinbertLabelScore {

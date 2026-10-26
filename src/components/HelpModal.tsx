@@ -23,7 +23,7 @@ export const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
                 System Architecture & Methodology Documentation
               </h2>
               <p className="text-xs text-slate-400">
-                Unified Hybrid AI Model (FinBERT + VADER + Quantitative Technicals + ML Ensemble)
+                Unified Quantitative Decision Engine (Technicals + VADER & Financial Context + Fundamentals + Probabilistic Rule Engine)
               </p>
             </div>
           </div>
@@ -44,7 +44,7 @@ export const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
               <span>Quantitative Decision Synthesis Overview</span>
             </div>
             <p className="text-slate-300 text-xs leading-relaxed">
-              Nexus integrates real-time corporate news sentiment, social media intelligence, technical price indicators, and systematic machine learning models into a unified decision framework. Each dimension is weighted and calibrated to produce clear, actionable market outlooks with zero look-ahead bias.
+              Nexus integrates real-time corporate news sentiment, financial statement filings, technical price indicators, and probabilistic trade rules into a unified decision framework. Each dimension is weighted and calibrated to produce clear, actionable market outlooks with zero look-ahead bias.
             </p>
           </div>
 
@@ -60,36 +60,35 @@ export const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
 
             <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl font-mono text-center text-xs space-y-2">
               <div className="text-emerald-400 font-bold text-xs sm:text-sm">
-                Unified Score = 0.30(Tech) + 0.25(FinBERT) + 0.15(P&L) + 0.15(VADER) + 0.15(ML)
+                Unified Score = 0.40(Tech) + 0.25(Financial Context & VADER) + 0.15(P&L / Debt) + 0.20(Rule Engine)
               </div>
               <div className="text-[11px] text-slate-400">
-                Fallback without financial statements: 0.35(Tech) + 0.30(FinBERT) + 0.15(VADER) + 0.20(ML)
+                Fallback without financial statements: 0.45(Tech) + 0.30(Financial Context & VADER) + 0.25(Rule Engine)
+              </div>
+              <div className="text-[11px] text-slate-400">
+                Fallback without news coverage: 0.50(Tech) + 0.20(P&L / Debt) + 0.30(Rule Engine)
               </div>
               <div className="text-[10px] text-slate-500">
                 Range: [-1.00 (Extreme Bearish) to +1.00 (Extreme Bullish)] · Missing components handled explicitly without silent distortion
               </div>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 pt-1 text-[11px] font-mono">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-[11px] font-mono">
               <div className="bg-slate-950/60 border border-slate-800 p-2.5 rounded-lg text-center">
-                <span className="text-amber-400 font-bold block mb-1">Technicals (30%)</span>
+                <span className="text-amber-400 font-bold block mb-1">Technicals (40%)</span>
                 14-period RSI, 20/50-day EMA spread, and MACD Histogram.
               </div>
               <div className="bg-slate-950/60 border border-slate-800 p-2.5 rounded-lg text-center">
-                <span className="text-emerald-400 font-bold block mb-1">FinBERT (25%)</span>
-                Transformer deep learning semantic analysis on corporate news.
+                <span className="text-emerald-400 font-bold block mb-1">News & Context (25%)</span>
+                VADER financial lexicon and corporate event classification.
               </div>
               <div className="bg-slate-950/60 border border-slate-800 p-2.5 rounded-lg text-center">
-                <span className="text-teal-400 font-bold block mb-1">P&L / Debt (15%)</span>
+                <span className="text-teal-400 font-bold block mb-1">P&L / Solvency (15%)</span>
                 Operating margins, debt-to-equity leverage, and revenue growth.
               </div>
               <div className="bg-slate-950/60 border border-slate-800 p-2.5 rounded-lg text-center">
-                <span className="text-indigo-400 font-bold block mb-1">VADER (15%)</span>
-                Rule-based lexicon evaluating contrastive terms and intensifiers.
-              </div>
-              <div className="bg-slate-950/60 border border-slate-800 p-2.5 rounded-lg text-center">
-                <span className="text-sky-400 font-bold block mb-1">Rule-based score (15%)</span>
-                Probabilistic multi-factor classifier margin P(Buy) - P(Sell).
+                <span className="text-sky-400 font-bold block mb-1">Rule Engine (20%)</span>
+                Calibrated multi-factor setup margin P(Buy) - P(Sell).
               </div>
             </div>
           </section>
@@ -174,22 +173,22 @@ export const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
               </div>
 
               <div className="bg-slate-950/40 border border-slate-800/80 p-3 rounded-lg space-y-1">
-                <span className="font-semibold text-slate-200 block">FinBERT Financial NLP</span>
+                <span className="font-semibold text-slate-200 block">Financial Context & Corporate Catalyst Engine</span>
                 <p className="text-slate-400">
-                  Specialized transformer architecture for financial disclosures. When offline or uninitialized, reported honestly as 0.0 (no fake scores).
+                  Financial phrase classifier analyzing corporate expansion events, margin changes, credit ratings, and regulatory notices.
                 </p>
                 <div className="font-mono text-[10px] text-emerald-400 bg-slate-900 p-1.5 rounded border border-slate-800">
-                  Score = P(Positive) - P(Negative) ∈ [-1.0, +1.0]
+                  Context Score = Catalysts (+0.25) vs Risk Overhangs (-0.35)
                 </div>
               </div>
 
               <div className="bg-slate-950/40 border border-slate-800/80 p-3 rounded-lg space-y-1">
-                <span className="font-semibold text-slate-200 block">Quantitative Multi-Factor Rule-Based Score</span>
+                <span className="font-semibold text-slate-200 block">Quantitative Multi-Factor Rule Engine</span>
                 <p className="text-slate-400">
                   Calculates calibrated probability distribution over Buy, Hold, and Sell states based on multi-indicator momentum and price action vetoes.
                 </p>
                 <div className="font-mono text-[10px] text-sky-400 bg-slate-900 p-1.5 rounded border border-slate-800">
-                  Rule-based score = P(Buy) - P(Sell) ∈ [-1.0, +1.0]
+                  Rule Engine Margin = P(Buy) - P(Sell) ∈ [-1.0, +1.0]
                 </div>
               </div>
             </div>
@@ -203,7 +202,7 @@ export const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
             </div>
             <ul className="list-disc list-inside space-y-1.5 text-slate-400 text-[11px] pl-1">
               <li>
-                <strong className="text-slate-200">Additive Factor Decomposition:</strong> Decomposes the exact mathematical contribution of each pillar summing up to the unified score, allowing transparent auditing of what drove the recommendation.
+                <strong className="text-slate-200">Additive Factor Decomposition:</strong> Decomposes the exact mathematical contribution of each active pillar summing up to the unified score, allowing transparent auditing of what drove the recommendation with zero ungrounded black-box distortion.
               </li>
               <li>
                 <strong className="text-slate-200">Walk-Forward Backtesting:</strong> Strictly sequential historical execution using bar $i-1$ signals for execution at bar $i$ open, applying 15 basis points (0.15%) friction (10 bps commission + 5 bps slippage) with zero look-ahead leakage.

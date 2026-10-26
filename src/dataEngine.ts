@@ -3349,6 +3349,8 @@ export function computeFinalAssessment(
       outcome: 'INSUFFICIENT DATA',
       headline: `Insufficient Data for ${ticker} — Evidence Quality Gate Not Satisfied`,
       rationale: `Cannot produce a defensible market decision for ${ticker}. The system requires at least 50 continuous daily OHLCV trading sessions and an active price quote. Currently available: ${bars.length} bars.`,
+      bullishFactors: [],
+      bearishFactors: [],
       strongestEvidence: [
         `Observations available: ${bars.length} historical bars.`,
         `Price quote status: ${isPriceValid ? `${currSym}${price}` : 'Unavailable'}.`
@@ -3651,6 +3653,8 @@ export function computeFinalAssessment(
     outcome,
     headline,
     rationale,
+    bullishFactors,
+    bearishFactors,
     strongestEvidence,
     conflictingEvidence,
     importantRisks,

@@ -1,6 +1,6 @@
 # NEXUS — Professional AI Stock Analysis & Decision Support Platform
 
-> **A disciplined, production-grade financial analysis web application combining keyless real-time market data, dual-engine financial sentiment (FinBERT + VADER), audited corporate fundamentals, SEBI DRHP IPO intelligence, walk-forward supervised ML models, SHAP explainability, and quantitative risk management.**
+> **A disciplined, production-grade financial analysis web application combining keyless real-time market data, deterministic financial sentiment (VADER + Financial Context Engine), audited corporate fundamentals, SEBI DRHP IPO intelligence, walk-forward backtesting, additive factor decomposition, and quantitative risk management.**
 
 ---
 
@@ -23,17 +23,17 @@ Nexus is engineered as a unified, high-integrity financial intelligence applicat
                    ┌────────────────────┴───┐      ┌───┴────────────────────┐
                    ▼                        ▼      ▼                        ▼
         ┌───────────────────────┐  ┌──────────────┐ ┌───────────────┐ ┌──────────────┐
-        │ Yahoo Finance v8 API  │  │ Google News  │ │ Hugging Face  │ │  SEBI DRHP   │
-        │ Quotes, OHLCV Candles │  │  RSS Wire &  │ │ FinBERT Router│ │ Statutory IPO│
-        │ Statements (Keyless)  │  │   Clusters   │ │ (VADER Fallbk)│ │   Catalog    │
+        │ Yahoo Finance v8 API  │  │ Google News  │ │ VADER Context │ │  SEBI DRHP   │
+        │ Quotes, OHLCV Candles │  │  RSS Wire &  │ │ Engine (Local │ │ Statutory IPO│
+        │ Statements (Keyless)  │  │   Clusters   │ │  Deterministic│ │   Catalog    │
         └───────────────────────┘  └──────────────┘ └───────────────┘ └──────────────┘
 ```
 
 ### Core Design Principles
-1. **Zero Mandatory Paid APIs**: Out-of-the-box operation using keyless institutional feeds, Yahoo Finance v8 chart data, Google News RSS, and local VADER/Transformers.js pipelines.
+1. **Zero Mandatory Paid APIs**: Out-of-the-box operation using keyless institutional feeds, Yahoo Finance v8 chart data, Google News RSS, and deterministic VADER + Financial Context Engine.
 2. **Strict Data Integrity**: Missing financial ratios or settlement data are never silently converted to zero. Stale or unavailable fields explicitly display `N/A` or `Unavailable`.
 3. **No Fabricated Accuracy**: Machine learning benchmarks use chronological `TimeSeriesSplit` cross-validation with an explicit 5-day directional return target ($\pm 1.5\%$) rather than lookahead-biased metrics.
-4. **Transparent Sentiment Engine**: If FinBERT is unconfigured or credits are exhausted, the system automatically falls back to VADER with dynamic weight redistribution, explicitly disclosing the fallback in both UI and diagnostics.
+4. **Transparent Sentiment Engine**: Sentiment analysis is driven by local, deterministic VADER lexical scoring and a Financial Context lexicon (<150MB RSS). Legacy `finbertScore` and `distilbertScore` fields are retained as schema-compatibility stubs only if downstream API consumers or UI mocks expect them.
 5. **No Secret Leaks**: Strict redaction in logs; no credentials, session tokens, or API keys are ever bundled into client JavaScript.
 
 ---
@@ -54,7 +54,7 @@ The user experience is structured around 6 purpose-built financial views:
    - **Central Candlestick & Volume Chart**: Interactive SVG charts across 1M, 3M, 6M, 1Y, 3Y, 5Y, and Max timeframes with EMA 20, EMA 50, EMA 200, and VWAP overlays.
    - **Next-Day Tactical Trade Plan**: Algorithmic entry triggers, hard stop-loss levels, and dual targets enforcing a strict $1:2.5$ asymmetric risk-to-reward ratio.
    - **Technical Indicators**: RSI(14), MACD(12,26,9), Stochastic Oscillator (%K, %D), Bollinger Bands, ATR(14) historical volatility range, Floor Trader & Fibonacci Pivots (R1–R3, S1–S3).
-   - **Financial News & Sentiment**: Attributed articles, corporate event clustering, and dual-engine FinBERT + VADER sentiment.
+   - **Financial News & Sentiment**: Attributed articles, corporate event clustering, and VADER + Financial Context Engine sentiment.
    - **Reddit Community**: Retail investor discussions, upvotes, buzz scores, and sentiment ratios.
    - **Decision Reconciliation**: Integrated multi-timeframe reconciliation addressing short-term tactical setups vs multi-year fundamental moats.
 
@@ -72,7 +72,7 @@ The user experience is structured around 6 purpose-built financial views:
 5. **Model Lab (`model-lab`)**:
    - **Documented Prediction Target**: 5-day forward directional classification ($+1$ if return $> 1.5\%$, $-1$ if return $< -1.5\%$, $0$ neutral).
    - **Empirical Out-of-Fold Benchmarking**: Supervised comparison (Logistic Regression, Random Forest, Gradient Boosting) against Buy-and-Hold and Majority-Class baselines.
-   - **SHAP Factor Attribution**: Genuine game-theoretic Shapley values quantifying feature contributions.
+   - **Additive Factor Attribution**: Mathematical decomposition quantifying active indicator and engine contributions.
    - **Strategy Backtesting**: Walk-forward simulation with realistic transaction slippage (10 bps) and execution fees, equity curve vs Buy-and-Hold, metrics, and trade logs.
 
 6. **Watchlist & Risk (`watchlist-risk`)**:

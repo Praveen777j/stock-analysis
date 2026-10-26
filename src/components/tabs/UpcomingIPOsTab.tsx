@@ -398,6 +398,11 @@ export const UpcomingIPOsTab: React.FC = () => {
                         <span className="text-[10px] text-slate-500 block">Issue Size</span>
                         <span className="font-bold text-slate-200">
                           {ipo.issueSizeCr > 0 ? `₹${ipo.issueSizeCr.toLocaleString()} Cr` : 'Unverified'}
+                          {ipo.issueSizeSource && ipo.issueSizeCr > 0 && (
+                            <span className="text-[9px] text-slate-400 font-normal ml-1">
+                              ({ipo.issueSizeSource})
+                            </span>
+                          )}
                         </span>
                       </div>
                       <div>
@@ -563,18 +568,27 @@ export const UpcomingIPOsTab: React.FC = () => {
 
               {/* 2. Financial Disclosures */}
               <div className="space-y-2">
-                <h5 className="text-xs font-bold text-slate-300 uppercase tracking-wider font-mono flex items-center gap-1.5">
-                  <DollarSign className="w-4 h-4 text-emerald-400" />
-                  2. Financial Statement Disclosures
-                </h5>
+                <div className="flex items-center justify-between">
+                  <h5 className="text-xs font-bold text-slate-300 uppercase tracking-wider font-mono flex items-center gap-1.5">
+                    <DollarSign className="w-4 h-4 text-emerald-400" />
+                    2. Financial Statement Disclosures
+                  </h5>
+                  {activeIPO.financialsSource && (
+                    <span className="text-[10px] font-mono text-amber-400/90">
+                      {activeIPO.financialsSource}
+                    </span>
+                  )}
+                </div>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 font-mono text-xs">
                   <div className="bg-slate-950/60 border border-slate-800 p-3 rounded-xl">
                     <span className="text-[11px] text-slate-500 block">Annual Sales</span>
                     <div className="text-base font-bold text-slate-100 mt-0.5">
                       {activeIPO.annualRevenueCr > 0 ? `₹${activeIPO.annualRevenueCr.toLocaleString()} Cr` : 'Unverified'}
                     </div>
-                    <div className="text-[10px] text-emerald-400 mt-0.5">
-                      {activeIPO.revenueYoYGrowthPct !== 0 ? `${activeIPO.revenueYoYGrowthPct > 0 ? '+' : ''}${activeIPO.revenueYoYGrowthPct}% YoY` : 'Audited Year'}
+                    <div className="text-[10px] text-slate-500 mt-0.5">
+                      {activeIPO.annualRevenueCr > 0
+                        ? (activeIPO.revenueYoYGrowthPct !== 0 ? `${activeIPO.revenueYoYGrowthPct > 0 ? '+' : ''}${activeIPO.revenueYoYGrowthPct}% YoY` : 'Audited Year')
+                        : 'Not in linked sources'}
                     </div>
                   </div>
 
@@ -582,15 +596,19 @@ export const UpcomingIPOsTab: React.FC = () => {
                     <span className="text-[11px] text-slate-500 block">Net Profit / Loss</span>
                     <div
                       className={`text-base font-bold mt-0.5 ${
-                        isProfitable ? 'text-emerald-400' : 'text-rose-400'
+                        activeIPO.netProfitLossCr > 0
+                          ? 'text-emerald-400'
+                          : activeIPO.netProfitLossCr < 0
+                          ? 'text-rose-400'
+                          : 'text-slate-300'
                       }`}
                     >
                       {activeIPO.netProfitLossCr !== 0
-                        ? (isProfitable ? `₹${activeIPO.netProfitLossCr} Cr` : `-₹${Math.abs(activeIPO.netProfitLossCr)} Cr`)
+                        ? (activeIPO.netProfitLossCr > 0 ? `₹${activeIPO.netProfitLossCr} Cr` : `-₹${Math.abs(activeIPO.netProfitLossCr)} Cr`)
                         : 'Unverified'}
                     </div>
                     <div className="text-[10px] text-slate-500 mt-0.5">
-                      Margin: {activeIPO.profitMarginPct ? `${activeIPO.profitMarginPct.toFixed(1)}%` : 'N/A'}
+                      {activeIPO.profitMarginPct > 0 ? `Margin: ${activeIPO.profitMarginPct.toFixed(1)}%` : 'Margin: Unverified'}
                     </div>
                   </div>
 
@@ -599,7 +617,9 @@ export const UpcomingIPOsTab: React.FC = () => {
                     <div className="text-base font-bold mt-0.5 text-slate-200">
                       {activeIPO.debtToEquity > 0 ? `${activeIPO.debtToEquity}%` : 'Unverified'}
                     </div>
-                    <div className="text-[10px] text-slate-500 mt-0.5">Solvency ratio</div>
+                    <div className="text-[10px] text-slate-500 mt-0.5">
+                      {activeIPO.debtToEquity > 0 ? 'Solvency ratio' : 'Not in linked sources'}
+                    </div>
                   </div>
 
                   <div className="bg-slate-950/60 border border-slate-800 p-3 rounded-xl">
@@ -682,11 +702,21 @@ export const UpcomingIPOsTab: React.FC = () => {
                   <div>
                     Status Source: <strong className="text-slate-200">{activeIPO.statusSource || 'Exchange Statutory Filing'}</strong>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span>Subscription:</span>
-                    <span className="px-2 py-0.5 rounded bg-slate-800 text-emerald-400 font-bold border border-slate-700">
-                      {activeIPO.subscription?.total ? `${activeIPO.subscription.total}x` : 'N/A (Pending notice)'}
+                    <span className="px-2 py-0.5 rounded bg-slate-800 text-emerald-400 font-bold border border-slate-700 inline-flex items-center gap-1.5">
+                      <span>{activeIPO.subscription?.total ? `${activeIPO.subscription.total}x` : 'N/A (Pending notice)'}</span>
+                      {activeIPO.subscription?.source && activeIPO.subscription?.total && (
+                        <span className="text-[10px] text-slate-400 font-normal">
+                          [Source: {activeIPO.subscription.source}]
+                        </span>
+                      )}
                     </span>
+                    {activeIPO.subscription?.qib && activeIPO.subscription.qib > 0 && (
+                      <span className="text-[10px] text-slate-500">
+                        (QIB: {activeIPO.subscription.qib}x, NII: {activeIPO.subscription.nii || 0}x)
+                      </span>
+                    )}
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center justify-between text-[11px] text-slate-500 pt-1 border-t border-slate-800/60 font-sans">

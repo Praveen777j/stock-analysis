@@ -23,7 +23,9 @@ import {
   RefreshCw,
   Globe,
   Radio,
-  AlertCircle
+  AlertCircle,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 
 interface NewsIntelligencePageProps {
@@ -44,6 +46,18 @@ export const NewsIntelligencePage: React.FC<NewsIntelligencePageProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState<string | null>(null);
+
+  // Pagination / Show More State (Top 10 items per section, top 8 for event clusters)
+  const [companyLimit, setCompanyLimit] = useState<number>(10);
+  const [globalLimit, setGlobalLimit] = useState<number>(10);
+  const [clusterLimit, setClusterLimit] = useState<number>(8);
+
+  // Reset limits when ticker, filter or search changes
+  useEffect(() => {
+    setCompanyLimit(10);
+    setGlobalLimit(10);
+    setClusterLimit(8);
+  }, [quote.ticker, filterType, searchTerm]);
 
   // Sync when initialSentiment changes from parent
   useEffect(() => {
@@ -70,7 +84,22 @@ export const NewsIntelligencePage: React.FC<NewsIntelligencePageProps> = ({
   const sentiment = activeSentiment;
   const articles = sentiment.articles || [];
   const globalMarketNews = sentiment.globalMarketNews || [];
-  const eventClusters: EventCluster[] = sentiment.eventClusters || [];
+  const allEventClusters: EventCluster[] = sentiment.eventClusters || [];
+
+  // Req 8: Show only clusters with 2 or more articles, or tagged catalyst or risk.
+  // Hide single-article "Routine Financial Media Disclosure" clusters and show a count.
+  const qualifyingClusters = allEventClusters.filter(c => {
+    const isMultiArticle = c.articleCount >= 2;
+    const isCatalyst = c.isVerifiedCatalyst || c.category === 'CATALYST' || (c as any).type === 'EXPANSION';
+    const isRisk = c.isVerifiedRisk || c.category === 'RISK' || (c as any).type === 'RISK';
+    return isMultiArticle || isCatalyst || isRisk;
+  });
+  const hiddenRoutineCount = allEventClusters.length - qualifyingClusters.length;
+
+  // Req 12: Dominating story note if 30%+ of headlines focus on one cluster
+  const dominatingCluster = allEventClusters.find(c =>
+    articles.length > 0 && (c.articleCount / articles.length) >= 0.30
+  );
 
   const distinctExpansionCount = sentiment.expansionCatalystsCount ?? 0;
   const distinctRiskCount = sentiment.cautionaryOverhangsCount ?? 0;
@@ -87,37 +116,77 @@ export const NewsIntelligencePage: React.FC<NewsIntelligencePageProps> = ({
   const isStale = Boolean(sentiment.isStale);
   const sourcesSummary = sentiment.sourcesSummary || `${sourcesUsed.length} active news sources responded`;
 
-  // Single Concise News Conclusion
+  // Req 10: Evidence strength calculation
+  const isHeadlineOnly = articles.length === 0 || articles.every(a => a.isHeadlineOnly ?? true);
+  const absScore = Math.abs(sentiment.overallScore);
+  let displayEvidenceStrength: 'Weak' | 'Moderate' | 'Strong' | 'Neutral' = 'Neutral';
+
+  if (articles.length === 0) {
+    displayEvidenceStrength = 'Neutral';
+  } else if (isHeadlineOnly) {
+    // Under headline-only evidence: must be "Weak" when score is within +/-0.15. Never "STRONG".
+    if (absScore <= 0.15) {
+      displayEvidenceStrength = 'Weak';
+    } else {
+      displayEvidenceStrength = 'Moderate';
+    }
+  } else {
+    if (absScore <= 0.15) {
+      displayEvidenceStrength = 'Weak';
+    } else if (articles.length >= 5 && absScore > 0.25) {
+      displayEvidenceStrength = 'Strong';
+    } else {
+      displayEvidenceStrength = 'Moderate';
+    }
+  }
+
+  // Req 11: Tone label thresholds and count-only summary sentence
   const getConciseNewsTone = (): {
-    tone: 'Positive news tone' | 'Mixed news tone' | 'Negative news tone' | 'Insufficient relevant coverage';
+    tone: 'Positive news tone' | 'Mildly positive news tone' | 'Mixed news tone' | 'Mildly negative news tone' | 'Negative news tone' | 'Insufficient relevant coverage';
+    shortLabel: 'Positive' | 'Mildly positive' | 'Mixed' | 'Mildly negative' | 'Negative' | 'No Coverage';
     explanation: string;
     modelAgreement: string;
   } => {
     if (articles.length === 0) {
       return {
         tone: 'Insufficient relevant coverage',
+        shortLabel: 'No Coverage',
         explanation: `Zero verified institutional news stories or regulatory disclosures are currently indexed specifically for ${quote.ticker}. See Global Market News below for macro developments.`,
         modelAgreement: 'Company-specific sentiment inactive due to lack of direct headline inputs.'
       };
     }
 
-    let tone: 'Positive news tone' | 'Mixed news tone' | 'Negative news tone' | 'Insufficient relevant coverage' = 'Mixed news tone';
+    const score = sentiment.overallScore;
+    const total = articles.length;
+    let tone: 'Positive news tone' | 'Mildly positive news tone' | 'Mixed news tone' | 'Mildly negative news tone' | 'Negative news tone' = 'Mixed news tone';
+    let shortLabel: 'Positive' | 'Mildly positive' | 'Mixed' | 'Mildly negative' | 'Negative' = 'Mixed';
     let explanation = '';
 
-    if (posCount > negCount * 1.5 && sentiment.overallScore >= 0.08) {
+    if (score > 0.25) {
       tone = 'Positive news tone';
-      explanation = `Corporate disclosures and news headlines emphasize business expansion, positive financial performance, or institutional contracts (${posCount} of ${articles.length} headlines positive).`;
-    } else if (negCount > posCount * 1.5 && sentiment.overallScore <= -0.08) {
+      shortLabel = 'Positive';
+      explanation = `${posCount} of ${total} headlines positive, ${negCount} negative. Corporate disclosures and headlines reflect business expansion and strong financial performance.`;
+    } else if (score >= 0.10 && score <= 0.25) {
+      tone = 'Mildly positive news tone';
+      shortLabel = 'Mildly positive';
+      explanation = `${posCount} of ${total} headlines positive, ${negCount} negative. Corporate news headlines lean mildly constructive with modest expansion indicators.`;
+    } else if (score < -0.25) {
       tone = 'Negative news tone';
-      explanation = `Headlines reflect heightened corporate headwinds, regulatory scrutiny, earnings misses, or sectoral margin pressures (${negCount} of ${articles.length} headlines negative).`;
+      shortLabel = 'Negative';
+      explanation = `${negCount} of ${total} headlines negative, ${posCount} positive. Headlines reflect heightened corporate headwinds, regulatory scrutiny, or margin pressures.`;
+    } else if (score <= -0.10 && score >= -0.25) {
+      tone = 'Mildly negative news tone';
+      shortLabel = 'Mildly negative';
+      explanation = `${negCount} of ${total} headlines negative, ${posCount} positive. Coverage leans mildly cautious with isolated concerns or margin headwinds.`;
     } else {
       tone = 'Mixed news tone';
-      explanation = `Media coverage is balanced between expansion catalysts and cautionary factors, with no single directional narrative dominating news headlines.`;
+      shortLabel = 'Mixed';
+      explanation = `${posCount} of ${total} headlines positive, ${negCount} negative. Media coverage is balanced between expansion catalysts and cautionary factors, with no single directional narrative dominating news headlines.`;
     }
 
     const agreement = `Deterministic Consensus: VADER financial lexicon and the Financial Context Engine analyze corporate disclosures in unison without external API dependencies.`;
 
-    return { tone, explanation, modelAgreement: agreement };
+    return { tone, shortLabel, explanation, modelAgreement: agreement };
   };
 
   const newsConclusion = getConciseNewsTone();
@@ -243,9 +312,9 @@ export const NewsIntelligencePage: React.FC<NewsIntelligencePageProps> = ({
 
       {/* 1. Overall News Tone Banner */}
       <div className={`p-5 sm:p-6 rounded-2xl border shadow-sm space-y-3 font-mono ${
-        newsConclusion.tone === 'Positive news tone'
+        newsConclusion.tone === 'Positive news tone' || newsConclusion.tone === 'Mildly positive news tone'
           ? 'bg-emerald-950/30 border-emerald-800/80'
-          : newsConclusion.tone === 'Negative news tone'
+          : newsConclusion.tone === 'Negative news tone' || newsConclusion.tone === 'Mildly negative news tone'
           ? 'bg-rose-950/30 border-rose-800/80'
           : newsConclusion.tone === 'Mixed news tone'
           ? 'bg-amber-950/30 border-amber-800/80'
@@ -266,23 +335,36 @@ export const NewsIntelligencePage: React.FC<NewsIntelligencePageProps> = ({
 
           <div className="flex items-center gap-2">
             <span className={`px-3 py-1.5 rounded-xl font-bold uppercase text-xs border ${
-              newsConclusion.tone === 'Positive news tone'
+              newsConclusion.tone === 'Positive news tone' || newsConclusion.tone === 'Mildly positive news tone'
                 ? 'bg-emerald-950 text-emerald-300 border-emerald-700'
-                : newsConclusion.tone === 'Negative news tone'
+                : newsConclusion.tone === 'Negative news tone' || newsConclusion.tone === 'Mildly negative news tone'
                 ? 'bg-rose-950 text-rose-300 border-rose-700'
                 : newsConclusion.tone === 'Mixed news tone'
                 ? 'bg-amber-950 text-amber-300 border-amber-700'
                 : 'bg-slate-800 text-slate-300 border-slate-700'
             }`}>
-              {newsConclusion.tone}
+              {newsConclusion.shortLabel}
             </span>
           </div>
         </div>
 
-        {/* Plain English explanation */}
+        {/* Plain English explanation using strictly real counts */}
         <p className="text-xs sm:text-sm text-slate-300 font-sans leading-relaxed">
           {newsConclusion.explanation}
         </p>
+
+        {/* Req 12: Dominating Story Note if one cluster has >= 30% of headlines */}
+        {dominatingCluster && (
+          <div className="bg-sky-950/40 border border-sky-800/80 rounded-xl p-3 flex items-start gap-2.5 text-sky-200 text-xs font-sans">
+            <Info className="w-4 h-4 text-sky-400 shrink-0 mt-0.5" />
+            <div>
+              <span className="font-semibold text-sky-100">Dominating Story Note: </span>
+              <span>
+                {dominatingCluster.articleCount} of {articles.length} headlines are about {dominatingCluster.title.toLowerCase().startsWith('the ') ? dominatingCluster.title : `the ${dominatingCluster.title}`}, which may affect the overall tone.
+              </span>
+            </div>
+          </div>
+        )}
 
         {/* Model agreement disclosure */}
         <div className="text-[11px] text-slate-400 font-mono pt-2 border-t border-slate-800/60 flex items-center gap-2">
@@ -319,13 +401,17 @@ export const NewsIntelligencePage: React.FC<NewsIntelligencePageProps> = ({
               <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
                 articles.length === 0
                   ? 'bg-slate-900 text-slate-400 border-slate-800'
-                  : sentiment.overallScore >= 0.05
+                  : sentiment.overallScore > 0.25
                   ? 'bg-emerald-950 text-emerald-300 border-emerald-800'
-                  : sentiment.overallScore <= -0.05
+                  : sentiment.overallScore >= 0.10
+                  ? 'bg-emerald-950/70 text-emerald-300 border-emerald-800'
+                  : sentiment.overallScore < -0.25
                   ? 'bg-rose-950 text-rose-300 border-rose-800'
-                  : 'bg-slate-800 text-slate-300 border-slate-700'
+                  : sentiment.overallScore <= -0.10
+                  ? 'bg-rose-950/70 text-rose-300 border-rose-800'
+                  : 'bg-amber-950/70 text-amber-300 border-amber-800'
               }`}>
-                {articles.length === 0 ? 'NO COVERAGE' : sentiment.overallScore >= 0.05 ? 'POSITIVE' : sentiment.overallScore <= -0.05 ? 'NEGATIVE' : 'NEUTRAL'}
+                {articles.length === 0 ? 'NO COVERAGE' : newsConclusion.shortLabel.toUpperCase()}
               </span>
             </div>
             <p className="text-[11px] text-slate-400 font-sans leading-relaxed">
@@ -392,45 +478,50 @@ export const NewsIntelligencePage: React.FC<NewsIntelligencePageProps> = ({
             </div>
           </div>
 
-          {/* Card 4: Evidence & Memory */}
+          {/* Card 4: Evidence & Sources (Req 10 & Req 13) */}
           <div className="bg-slate-950/80 border border-slate-800/80 rounded-xl p-4 space-y-2">
             <div className="flex items-center justify-between">
-              <span className="font-bold text-slate-200 text-xs font-sans">Evidence & Memory</span>
+              <span className="font-bold text-slate-200 text-xs font-sans">Evidence & Sources</span>
               <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-950 text-indigo-300 border border-indigo-800">
-                100% MEMORY-SAFE
+                {hasArticles ? `Headline-only, ${articles.length} items` : 'No items'}
               </span>
             </div>
             <p className="text-[11px] text-slate-400 font-sans leading-relaxed">
-              Deterministic, sub-millisecond execution with zero paid API keys or large model bloat.
+              Verified institutional headlines and corporate filings.
             </p>
             <div className="flex items-center justify-between pt-2 border-t border-slate-800">
               <span className="text-slate-400">Strength:</span>
               <span className="text-xs font-bold text-indigo-300 font-mono">
-                {sentiment.evidenceStrength || (articles.length >= 5 ? 'STRONG' : articles.length > 0 ? 'MODERATE' : 'NEUTRAL')}
+                {displayEvidenceStrength}
               </span>
             </div>
             <div className="text-[10px] text-slate-400 font-sans">
-              Render Free tier safe (&lt; 150MB RAM)
+              {hasArticles ? `${articles.length} RSS headlines & summaries analyzed` : 'No RSS coverage'}
             </div>
           </div>
         </div>
       </div>
 
-      {/* 3. Event Clusters & Categorization */}
-      {eventClusters.length > 0 && (
+      {/* 3. Event Clusters & Categorization (Req 8) */}
+      {qualifyingClusters.length > 0 && (
         <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-5 space-y-3 font-mono text-xs">
-          <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-            <div className="flex items-center gap-2">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-2 flex-wrap gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <Layers className="w-4 h-4 text-emerald-400" />
               <span className="font-bold text-slate-200 uppercase tracking-wider text-[11px]">
-                Distinct Corporate Event Clusters ({eventClusters.length})
+                Distinct Corporate Event Clusters ({qualifyingClusters.length})
               </span>
+              {hiddenRoutineCount > 0 && (
+                <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-800 text-slate-400 border border-slate-700">
+                  {hiddenRoutineCount} routine item{hiddenRoutineCount > 1 ? 's' : ''} hidden
+                </span>
+              )}
             </div>
             <span className="text-slate-500 text-[10px]">Deduplicated Catalysts & Overhangs</span>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
-            {eventClusters.map((cluster) => (
+            {qualifyingClusters.slice(0, clusterLimit).map((cluster) => (
               <div
                 key={cluster.id}
                 className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-3.5 space-y-1.5"
@@ -458,6 +549,28 @@ export const NewsIntelligencePage: React.FC<NewsIntelligencePageProps> = ({
               </div>
             ))}
           </div>
+
+          {qualifyingClusters.length > 8 && (
+            <div className="pt-2 flex items-center justify-center gap-2">
+              {clusterLimit < qualifyingClusters.length ? (
+                <button
+                  onClick={() => setClusterLimit(prev => Math.min(prev + 8, qualifyingClusters.length))}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 text-xs text-slate-300 font-mono transition-colors"
+                >
+                  <ChevronDown className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Show More Clusters ({qualifyingClusters.length - clusterLimit} remaining)</span>
+                </button>
+              ) : (
+                <button
+                  onClick={() => setClusterLimit(8)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 text-xs text-slate-400 font-mono transition-colors"
+                >
+                  <ChevronUp className="w-3.5 h-3.5" />
+                  <span>Show Less</span>
+                </button>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -516,7 +629,7 @@ export const NewsIntelligencePage: React.FC<NewsIntelligencePageProps> = ({
           </div>
         ) : filteredCompanyArticles.length > 0 ? (
           <div className="space-y-3">
-            {filteredCompanyArticles.map((article, idx) => {
+            {filteredCompanyArticles.slice(0, companyLimit).map((article, idx) => {
               const isPositive = article.sentimentLabel === 'POSITIVE' || article.vaderScore >= 0.05;
               const isNegative = article.sentimentLabel === 'NEGATIVE' || article.vaderScore <= -0.05;
 
@@ -643,6 +756,28 @@ export const NewsIntelligencePage: React.FC<NewsIntelligencePageProps> = ({
                 </div>
               );
             })}
+
+            {filteredCompanyArticles.length > 10 && (
+              <div className="pt-3 flex items-center justify-center gap-2">
+                {companyLimit < filteredCompanyArticles.length ? (
+                  <button
+                    onClick={() => setCompanyLimit(prev => Math.min(prev + 10, filteredCompanyArticles.length))}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-800 text-xs font-mono font-semibold text-slate-200 transition-colors shadow-sm"
+                  >
+                    <ChevronDown className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Show More Company News ({filteredCompanyArticles.length - companyLimit} remaining)</span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => setCompanyLimit(10)}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-800 text-xs font-mono font-semibold text-slate-400 transition-colors"
+                  >
+                    <ChevronUp className="w-3.5 h-3.5" />
+                    <span>Show Less</span>
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         ) : (
           <div className="p-8 text-center text-slate-500 font-mono text-xs space-y-2">
@@ -692,64 +827,88 @@ export const NewsIntelligencePage: React.FC<NewsIntelligencePageProps> = ({
         </div>
 
         {filteredGlobalArticles.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {filteredGlobalArticles.map((article, idx) => {
-              const isPositive = article.sentimentLabel === 'POSITIVE' || article.vaderScore >= 0.05;
-              const isNegative = article.sentimentLabel === 'NEGATIVE' || article.vaderScore <= -0.05;
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {filteredGlobalArticles.slice(0, globalLimit).map((article, idx) => {
+                const isPositive = article.sentimentLabel === 'POSITIVE' || article.vaderScore >= 0.05;
+                const isNegative = article.sentimentLabel === 'NEGATIVE' || article.vaderScore <= -0.05;
 
-              return (
-                <div
-                  key={idx}
-                  className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-3.5 hover:border-slate-700 transition-all space-y-2 flex flex-col justify-between group"
-                >
-                  <div className="space-y-1.5">
-                    {/* Header: Publisher & Date */}
-                    <div className="flex items-center justify-between text-[10px] font-mono text-slate-400">
-                      <span className="font-semibold text-slate-300">{article.publisher || 'Financial Wire'}</span>
-                      <span className="flex items-center gap-1 text-slate-500">
-                        <Clock className="w-2.5 h-2.5" />
-                        {article.date}
-                      </span>
+                return (
+                  <div
+                    key={idx}
+                    className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-3.5 hover:border-slate-700 transition-all space-y-2 flex flex-col justify-between group"
+                  >
+                    <div className="space-y-1.5">
+                      {/* Header: Publisher & Date */}
+                      <div className="flex items-center justify-between text-[10px] font-mono text-slate-400">
+                        <span className="font-semibold text-slate-300">{article.publisher || 'Financial Wire'}</span>
+                        <span className="flex items-center gap-1 text-slate-500">
+                          <Clock className="w-2.5 h-2.5" />
+                          {article.date}
+                        </span>
+                      </div>
+
+                      {/* Headline */}
+                      <a
+                        href={article.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs font-semibold text-slate-200 hover:text-cyan-400 transition-colors inline-flex items-start gap-1 line-clamp-2"
+                      >
+                        <span>{cleanHtmlText(article.title)}</span>
+                        <ExternalLink className="w-3 h-3 shrink-0 opacity-0 group-hover:opacity-100 text-cyan-400 transition-opacity mt-0.5" />
+                      </a>
+
+                      {article.summary && (
+                        <p className="text-[11px] text-slate-400 line-clamp-2 font-sans">
+                          {cleanHtmlText(article.summary)}
+                        </p>
+                      )}
                     </div>
 
-                    {/* Headline */}
-                    <a
-                      href={article.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs font-semibold text-slate-200 hover:text-cyan-400 transition-colors inline-flex items-start gap-1 line-clamp-2"
-                    >
-                      <span>{cleanHtmlText(article.title)}</span>
-                      <ExternalLink className="w-3 h-3 shrink-0 opacity-0 group-hover:opacity-100 text-cyan-400 transition-opacity mt-0.5" />
-                    </a>
+                    {/* Footer: Related Topic & Sentiment */}
+                    <div className="flex items-center justify-between text-[10px] font-mono pt-2 border-t border-slate-800/60">
+                      <span className="text-slate-500">
+                        {article.relatedCompany || 'Macro & Markets'}
+                      </span>
 
-                    {article.summary && (
-                      <p className="text-[11px] text-slate-400 line-clamp-2 font-sans">
-                        {cleanHtmlText(article.summary)}
-                      </p>
-                    )}
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${
+                        isPositive
+                          ? 'bg-emerald-950/80 text-emerald-400 border-emerald-800'
+                          : isNegative
+                          ? 'bg-rose-950/80 text-rose-400 border-rose-800'
+                          : 'bg-slate-900 text-slate-400 border-slate-800'
+                      }`}>
+                        {article.sentimentLabel || 'NEUTRAL'} ({article.vaderScore >= 0 ? '+' : ''}{article.vaderScore.toFixed(2)})
+                      </span>
+                    </div>
                   </div>
+                );
+              })}
+            </div>
 
-                  {/* Footer: Related Topic & Sentiment */}
-                  <div className="flex items-center justify-between text-[10px] font-mono pt-2 border-t border-slate-800/60">
-                    <span className="text-slate-500">
-                      {article.relatedCompany || 'Macro & Markets'}
-                    </span>
-
-                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${
-                      isPositive
-                        ? 'bg-emerald-950/80 text-emerald-400 border-emerald-800'
-                        : isNegative
-                        ? 'bg-rose-950/80 text-rose-400 border-rose-800'
-                        : 'bg-slate-900 text-slate-400 border-slate-800'
-                    }`}>
-                      {article.sentimentLabel || 'NEUTRAL'} ({article.vaderScore >= 0 ? '+' : ''}{article.vaderScore.toFixed(2)})
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+            {filteredGlobalArticles.length > 10 && (
+              <div className="pt-3 flex items-center justify-center gap-2">
+                {globalLimit < filteredGlobalArticles.length ? (
+                  <button
+                    onClick={() => setGlobalLimit(prev => Math.min(prev + 10, filteredGlobalArticles.length))}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-800 text-xs font-mono font-semibold text-slate-200 transition-colors shadow-sm"
+                  >
+                    <ChevronDown className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>Show More Global News ({filteredGlobalArticles.length - globalLimit} remaining)</span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => setGlobalLimit(10)}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-800 text-xs font-mono font-semibold text-slate-400 transition-colors"
+                  >
+                    <ChevronUp className="w-3.5 h-3.5" />
+                    <span>Show Less</span>
+                  </button>
+                )}
+              </div>
+            )}
+          </>
         ) : (
           <div className="p-6 text-center text-slate-500 font-mono text-xs">
             No global market news matches your filter criteria.
