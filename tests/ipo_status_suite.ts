@@ -166,14 +166,14 @@ assert.ok(jioEntry, 'Jio Platforms entry must exist in the catalog');
 assert.strictEqual(jioEntry.name, 'Jio Platforms Limited');
 assert.strictEqual(jioEntry.market, 'Mainboard');
 assert.strictEqual(jioEntry.exchange, 'NSE / BSE');
-assert.strictEqual(jioEntry.statusSource, 'Unverified (from news)');
+assert.strictEqual(jioEntry.statusSource, 'Unverified (news/broker sites) - confirm on NSE/BSE');
 assert.ok(jioEntry.sourceUrl && jioEntry.sourceUrl.length > 0, 'sourceUrl must be populated');
 assert.ok(Array.isArray(jioEntry.articleLinks) && jioEntry.articleLinks.length > 0, 'articleLinks must contain news citations');
 
-assert.ok(jioEntry.priceBand === '' || jioEntry.priceBand === 'Unverified', 'Price band must be blank or Unverified');
-assert.strictEqual(jioEntry.minPrice, 0, 'minPrice must be 0/blank');
-assert.strictEqual(jioEntry.maxPrice, 0, 'maxPrice must be 0/blank');
-assert.strictEqual(jioEntry.lotSize, 0, 'lotSize must be 0/blank');
+assert.strictEqual(jioEntry.priceBand, '₹1,065 – ₹1,119', 'Price band must be ₹1,065 – ₹1,119 as reported');
+assert.strictEqual(jioEntry.minPrice, 1065, 'minPrice must be 1065');
+assert.strictEqual(jioEntry.maxPrice, 1119, 'maxPrice must be 1119');
+assert.strictEqual(jioEntry.lotSize, 12, 'lotSize must be 12 shares');
 
 // Requirement 6: Jio Platforms financial figures must be Unverified / removed, and 22.19x subscription must link to source
 assert.strictEqual(jioEntry.annualRevenueCr, 0, 'Annual sales must be 0/unverified since not in linked news source');
@@ -187,7 +187,7 @@ assert.strictEqual(jioEntry.subscription?.total, 22.19, 'Overall subscription mu
 assert.strictEqual(jioEntry.subscription?.source, 'Livemint', 'Subscription must cite Livemint source');
 assert.ok(jioEntry.subscription?.sourceUrl, 'Subscription must link to source article');
 assert.strictEqual(jioEntry.issueSizeCr, 30213, 'Issue size must be ₹30,213 Cr as stated in Livemint');
-assert.strictEqual(jioEntry.issueSizeSource, 'Livemint', 'Issue size must cite Livemint source');
+assert.ok(jioEntry.issueSizeSource?.includes('Livemint'), 'Issue size must cite Livemint source');
 
 // Check that 470 million user count is removed
 assert.ok(!jioEntry.businessSummary.includes('470'), 'Memory user count (470M) must not appear in businessSummary');

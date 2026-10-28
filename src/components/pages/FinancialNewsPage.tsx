@@ -122,26 +122,14 @@ export const FinancialNewsPage: React.FC<FinancialNewsPageProps> = ({ sentiment,
           </div>
 
           <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-3.5 space-y-1">
-            <span className="text-slate-400 text-[11px] block uppercase">VADER News Score</span>
+            <span className="text-slate-400 text-[11px] block uppercase">News Sentiment Score</span>
             <div className={`text-2xl font-bold ${
               sentiment.newsCount === 0 ? 'text-slate-500' : sentiment.vaderCompound >= 0 ? 'text-emerald-400' : 'text-rose-400'
             }`}>
               {sentiment.newsCount === 0 ? 'N/A' : `${sentiment.vaderCompound >= 0 ? '+' : ''}${sentiment.vaderCompound.toFixed(2)}`}
             </div>
-            <div
-              className="text-[10px] text-slate-500"
-              title={
-                sentiment.finbertDiagnostic ||
-                (sentiment.finbertReason === 'CREDITS_EXHAUSTED'
-                  ? 'Hugging Face Inference Provider credits exhausted (HTTP 402). Active VADER sentiment fallback engaged.'
-                  : undefined)
-              }
-            >
-              {sentiment.finbertStatus === 'LIVE' && sentiment.finbertScore !== null
-                ? `FinBERT: ${sentiment.finbertScore >= 0 ? '+' : ''}${sentiment.finbertScore.toFixed(2)}`
-                : sentiment.finbertReason === 'CREDITS_EXHAUSTED'
-                ? 'FinBERT: Offline (Credits Exhausted — VADER Fallback Active)'
-                : `FinBERT: Offline (${sentiment.finbertReason ? sentiment.finbertReason.replace(/_/g, ' ') : 'No HF_TOKEN'})`}
+            <div className="text-[10px] text-slate-500">
+              Finance-tuned VADER + Context Engine
             </div>
           </div>
         </div>

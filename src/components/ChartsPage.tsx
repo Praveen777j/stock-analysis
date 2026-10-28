@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useRef } from 'react';
 import { HistoricalBar, StockQuote } from '../types';
+import { calculateHistoricalReturn } from '../returnsCalculator';
 import { TrendingUp, TrendingDown, Layers, BarChart2 } from 'lucide-react';
 
 interface ChartsPageProps {
@@ -31,20 +32,36 @@ export const ChartsPage: React.FC<ChartsPageProps> = ({
   const [showEma200, setShowEma200] = useState(false);
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
 
-  // Filter bars by period
-  const filteredBars = useMemo(() => {
-    const periodDays: Record<Period, number> = {
-      '1M': 22,
-      '3M': 65,
-      '6M': 130,
-      '1Y': 252,
-      '3Y': 756,
-      '5Y': 1250,
-      'Max': bars.length
-    };
-    const count = periodDays[period] || 252;
-    return bars.slice(-count);
+  const periodDaysMap: Record<Period, number> = {
+    '1M': 30,
+    '3M': 90,
+    '6M': 180,
+    '1Y': 365,
+    '3Y': 365 * 3,
+    '5Y': 365 * 5,
+    'Max': 365 * 10
+  };
+
+  // Shared return calculation
+  const calculatedReturn = useMemo(() => {
+    const days = periodDaysMap[period] || 365;
+    return calculateHistoricalReturn(bars, days, period);
   }, [bars, period]);
+
+  // Filter bars by period matching the shared base date
+  const filteredBars = useMemo(() => {
+    if (!bars || bars.length === 0) return [];
+    if (period === 'Max') return bars;
+    const ret = calculatedReturn;
+    if (ret.isAvailable && ret.startDate) {
+      const idx = bars.findIndex(b => b.date === ret.startDate);
+      if (idx >= 0) return bars.slice(idx);
+    }
+    const fallbackCount: Record<Period, number> = {
+      '1M': 22, '3M': 65, '6M': 130, '1Y': 252, '3Y': 756, '5Y': 1250, 'Max': bars.length
+    };
+    return bars.slice(-(fallbackCount[period] || 252));
+  }, [bars, period, calculatedReturn]);
 
   const currSym = quote?.currency === 'USD' ? '$' : '₹';
 
@@ -53,19 +70,21 @@ export const ChartsPage: React.FC<ChartsPageProps> = ({
   const endBar = filteredBars.length > 0 ? filteredBars[filteredBars.length - 1] : null;
 
   const periodGainPct = useMemo(() => {
+    if (calculatedReturn.isAvailable) return calculatedReturn.gainPct;
     if (filteredBars.length < 2) return quote?.changePct || 0;
     const startPrice = filteredBars[0].close;
     const endPrice = filteredBars[filteredBars.length - 1].close;
     if (startPrice <= 0) return 0;
     return Math.round(((endPrice - startPrice) / startPrice) * 1000) / 10;
-  }, [filteredBars, quote?.changePct]);
+  }, [calculatedReturn, filteredBars, quote?.changePct]);
 
   const periodGainAmount = useMemo(() => {
+    if (calculatedReturn.isAvailable) return calculatedReturn.gainAmount;
     if (filteredBars.length < 2) return quote?.change || 0;
     const startPrice = filteredBars[0].close;
     const endPrice = filteredBars[filteredBars.length - 1].close;
     return Math.round((endPrice - startPrice) * 100) / 100;
-  }, [filteredBars, quote?.change]);
+  }, [calculatedReturn, filteredBars, quote?.change]);
 
   const hasEma200Data = useMemo(() => {
     return filteredBars.some(b => typeof b.ema200 === 'number' && Number.isFinite(b.ema200));
@@ -234,17 +253,21 @@ export const ChartsPage: React.FC<ChartsPageProps> = ({
         <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 font-mono bg-slate-950 px-3 py-1.5 rounded-lg border border-slate-800">
           <div className="flex items-center gap-2">
             <span className="text-slate-400">{period} Gain:</span>
-            <span className={`font-bold flex items-center gap-1 ${periodGainPct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-              {periodGainPct >= 0 ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
-              {periodGainPct >= 0 ? '+' : ''}{periodGainPct}%
-              <span className="text-[11px] font-normal text-slate-400">
-                ({periodGainAmount >= 0 ? '+' : '-'}{currSym}{Math.abs(periodGainAmount).toFixed(2)})
+            {calculatedReturn.isAvailable ? (
+              <span className={`font-bold flex items-center gap-1 ${periodGainPct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                {periodGainPct >= 0 ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
+                {calculatedReturn.formatted}
+                <span className="text-[11px] font-normal text-slate-400">
+                  ({periodGainAmount >= 0 ? '+' : '-'}{currSym}{Math.abs(periodGainAmount).toFixed(2)})
+                </span>
               </span>
-            </span>
+            ) : (
+              <span className="text-slate-400 font-bold">N/A</span>
+            )}
           </div>
-          {startBar && endBar && (
+          {calculatedReturn.isAvailable && calculatedReturn.startDate && (
             <span className="text-[10px] text-slate-500 font-sans">
-              ({startBar.date}: {currSym}{startBar.close.toFixed(1)} → {endBar.date}: {currSym}{endBar.close.toFixed(1)})
+              (Base {calculatedReturn.startDate}: {currSym}{calculatedReturn.startPrice.toFixed(1)} → {calculatedReturn.endDate}: {currSym}{calculatedReturn.endPrice.toFixed(1)})
             </span>
           )}
         </div>

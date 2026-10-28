@@ -2,5 +2,5 @@
   "name": "Nexus Stock Sentiment Dashboard",
   "description": "A real-time stock market intelligence web application combining financial sentiment, corporate financials, technical indicators, and quantitative decision support.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": []
 }

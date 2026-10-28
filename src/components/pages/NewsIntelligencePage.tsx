@@ -86,6 +86,59 @@ export const NewsIntelligencePage: React.FC<NewsIntelligencePageProps> = ({
   const globalMarketNews = sentiment.globalMarketNews || [];
   const allEventClusters: EventCluster[] = sentiment.eventClusters || [];
 
+  // Group near-duplicate wire headlines
+  interface GroupedNewsArticle extends NewsArticle {
+    alsoReportedBy?: { publisher: string; url?: string; date: string }[];
+  }
+
+  function groupArticles(items: NewsArticle[]): GroupedNewsArticle[] {
+    const result: GroupedNewsArticle[] = [];
+    const stopWords = new Set(['the', 'and', 'for', 'with', 'from', 'this', 'that', 'shares', 'stock', 'share', 'q1', 'q2', 'q3', 'q4', 'fy24', 'fy25', 'fy26', 'crore', 'cr', 'ltd', 'limited', 'rises', 'falls', 'jumps', 'drops', 'gain', 'loss']);
+
+    function getTokens(t: string): Set<string> {
+      return new Set(
+        cleanHtmlText(t)
+          .toLowerCase()
+          .replace(/[^a-z0-9\s]/g, ' ')
+          .split(/\s+/)
+          .filter(w => w.length > 2 && !stopWords.has(w))
+      );
+    }
+
+    for (const item of items) {
+      const itemTokens = getTokens(item.title);
+      let matchedGroup: GroupedNewsArticle | null = null;
+
+      if (itemTokens.size >= 2) {
+        for (const g of result) {
+          const gTokens = getTokens(g.title);
+          let intersection = 0;
+          for (const tok of itemTokens) {
+            if (gTokens.has(tok)) intersection++;
+          }
+          const minSize = Math.min(itemTokens.size, gTokens.size);
+          if (minSize > 0 && intersection / minSize >= 0.70) {
+            matchedGroup = g;
+            break;
+          }
+        }
+      }
+
+      if (matchedGroup) {
+        if (!matchedGroup.alsoReportedBy) matchedGroup.alsoReportedBy = [];
+        matchedGroup.alsoReportedBy.push({
+          publisher: item.publisher || 'Financial Wire',
+          url: item.url,
+          date: item.date
+        });
+      } else {
+        result.push({ ...item, alsoReportedBy: [] });
+      }
+    }
+
+    return result;
+  }
+
   // Req 8: Show only clusters with 2 or more articles, or tagged catalyst or risk.
   // Hide single-article "Routine Financial Media Disclosure" clusters and show a count.
   const qualifyingClusters = allEventClusters.filter(c => {
@@ -96,9 +149,9 @@ export const NewsIntelligencePage: React.FC<NewsIntelligencePageProps> = ({
   });
   const hiddenRoutineCount = allEventClusters.length - qualifyingClusters.length;
 
-  // Req 12: Dominating story note if 30%+ of headlines focus on one cluster
+  // Req 12 & D5: Dominating story note if 25%+ of headlines focus on one cluster
   const dominatingCluster = allEventClusters.find(c =>
-    articles.length > 0 && (c.articleCount / articles.length) >= 0.30
+    articles.length > 0 && (c.articleCount / articles.length) >= 0.25
   );
 
   const distinctExpansionCount = sentiment.expansionCatalystsCount ?? 0;
@@ -149,8 +202,8 @@ export const NewsIntelligencePage: React.FC<NewsIntelligencePageProps> = ({
   } => {
     if (articles.length === 0) {
       return {
-        tone: 'Insufficient relevant coverage',
-        shortLabel: 'No Coverage',
+        tone: 'No clear signal' as any,
+        shortLabel: 'No clear signal' as any,
         explanation: `Zero verified institutional news stories or regulatory disclosures are currently indexed specifically for ${quote.ticker}. See Global Market News below for macro developments.`,
         modelAgreement: 'Company-specific sentiment inactive due to lack of direct headline inputs.'
       };
@@ -218,6 +271,11 @@ export const NewsIntelligencePage: React.FC<NewsIntelligencePageProps> = ({
     }
     return true;
   });
+
+  // Group near-duplicate company headlines (D4)
+  const groupedCompanyArticles = React.useMemo(() => {
+    return groupArticles(filteredCompanyArticles);
+  }, [filteredCompanyArticles]);
 
   // Global market news filtered by search
   const filteredGlobalArticles = globalMarketNews.filter(a => {
@@ -411,7 +469,7 @@ export const NewsIntelligencePage: React.FC<NewsIntelligencePageProps> = ({
                   ? 'bg-rose-950/70 text-rose-300 border-rose-800'
                   : 'bg-amber-950/70 text-amber-300 border-amber-800'
               }`}>
-                {articles.length === 0 ? 'NO COVERAGE' : newsConclusion.shortLabel.toUpperCase()}
+                {articles.length === 0 ? 'No clear signal' : newsConclusion.shortLabel.toUpperCase()}
               </span>
             </div>
             <p className="text-[11px] text-slate-400 font-sans leading-relaxed">
@@ -627,11 +685,12 @@ export const NewsIntelligencePage: React.FC<NewsIntelligencePageProps> = ({
             <p className="font-semibold text-slate-200">Aggregating live news from verified RSS publishers...</p>
             <p className="text-[11px] text-slate-500">Querying Economic Times, Moneycontrol, Livemint, Business Standard, CNBC & Google News</p>
           </div>
-        ) : filteredCompanyArticles.length > 0 ? (
+        ) : groupedCompanyArticles.length > 0 ? (
           <div className="space-y-3">
-            {filteredCompanyArticles.slice(0, companyLimit).map((article, idx) => {
+            {groupedCompanyArticles.slice(0, companyLimit).map((article, idx) => {
               const isPositive = article.sentimentLabel === 'POSITIVE' || article.vaderScore >= 0.05;
               const isNegative = article.sentimentLabel === 'NEGATIVE' || article.vaderScore <= -0.05;
+              const isZeroScores = Math.abs(article.vaderScore) < 0.001 && (!article.financialScore || Math.abs(article.financialScore) < 0.001);
 
               return (
                 <div
@@ -695,6 +754,30 @@ export const NewsIntelligencePage: React.FC<NewsIntelligencePageProps> = ({
                           {cleanHtmlText(article.summary)}
                         </p>
                       )}
+
+                      {/* D4: Group near-duplicate wire headlines */}
+                      {article.alsoReportedBy && article.alsoReportedBy.length > 0 && (
+                        <div className="pt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-400 font-mono">
+                          <span className="text-slate-500">Also reported by {article.alsoReportedBy.length} {article.alsoReportedBy.length === 1 ? 'source' : 'sources'}:</span>
+                          {article.alsoReportedBy.map((src, sIdx) => (
+                            <span key={sIdx} className="inline-flex items-center gap-1">
+                              {src.url ? (
+                                <a
+                                  href={src.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-emerald-400 hover:underline"
+                                >
+                                  {src.publisher}
+                                </a>
+                              ) : (
+                                <span className="text-slate-300">{src.publisher}</span>
+                              )}
+                              {sIdx < article.alsoReportedBy!.length - 1 && <span className="text-slate-600">·</span>}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </div>
 
                     {/* Sentiment Label Badge */}
@@ -714,13 +797,17 @@ export const NewsIntelligencePage: React.FC<NewsIntelligencePageProps> = ({
                   {/* Metadata Footer: Scores & Catalysts */}
                   <div className="flex flex-wrap items-center justify-between text-[11px] text-slate-500 font-mono pt-2 border-t border-slate-800/60 gap-2">
                     <div className="flex flex-wrap items-center gap-3">
-                      <span>VADER: <strong className={isPositive ? 'text-emerald-400' : isNegative ? 'text-rose-400' : 'text-slate-300'}>
-                        {article.vaderScore >= 0 ? '+' : ''}{article.vaderScore.toFixed(2)}
-                      </strong></span>
-                      {article.financialScore !== undefined && (
-                        <span>Financial: <strong className={article.financialScore >= 0.05 ? 'text-cyan-400' : article.financialScore <= -0.05 ? 'text-rose-400' : 'text-slate-300'}>
-                          {article.financialScore >= 0 ? '+' : ''}{article.financialScore.toFixed(2)}
-                        </strong></span>
+                      {!isZeroScores && (
+                        <>
+                          <span>VADER: <strong className={isPositive ? 'text-emerald-400' : isNegative ? 'text-rose-400' : 'text-slate-300'}>
+                            {article.vaderScore >= 0 ? '+' : ''}{article.vaderScore.toFixed(2)}
+                          </strong></span>
+                          {article.financialScore !== undefined && (
+                            <span>Financial: <strong className={article.financialScore >= 0.05 ? 'text-cyan-400' : article.financialScore <= -0.05 ? 'text-rose-400' : 'text-slate-300'}>
+                              {article.financialScore >= 0 ? '+' : ''}{article.financialScore.toFixed(2)}
+                            </strong></span>
+                          )}
+                        </>
                       )}
                       {article.evidenceStrength && article.evidenceStrength !== 'NEUTRAL' && (
                         <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 text-[10px]">
@@ -757,15 +844,15 @@ export const NewsIntelligencePage: React.FC<NewsIntelligencePageProps> = ({
               );
             })}
 
-            {filteredCompanyArticles.length > 10 && (
+            {groupedCompanyArticles.length > 10 && (
               <div className="pt-3 flex items-center justify-center gap-2">
-                {companyLimit < filteredCompanyArticles.length ? (
+                {companyLimit < groupedCompanyArticles.length ? (
                   <button
-                    onClick={() => setCompanyLimit(prev => Math.min(prev + 10, filteredCompanyArticles.length))}
+                    onClick={() => setCompanyLimit(prev => Math.min(prev + 10, groupedCompanyArticles.length))}
                     className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-800 text-xs font-mono font-semibold text-slate-200 transition-colors shadow-sm"
                   >
                     <ChevronDown className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Show More Company News ({filteredCompanyArticles.length - companyLimit} remaining)</span>
+                    <span>Show More Company News ({groupedCompanyArticles.length - companyLimit} remaining)</span>
                   </button>
                 ) : (
                   <button
@@ -813,11 +900,11 @@ export const NewsIntelligencePage: React.FC<NewsIntelligencePageProps> = ({
             <div className="flex items-center gap-2">
               <Globe className="w-4 h-4 text-cyan-400" />
               <h3 className="text-sm font-bold text-slate-200 font-mono uppercase tracking-wider">
-                Global Market News & Macro Wire ({globalMarketNews.length})
+                Global Market News & Macro Wire — Market-wide, not about this company ({globalMarketNews.length})
               </h3>
             </div>
             <p className="text-[11px] text-slate-400 font-sans mt-0.5">
-              Live macro financial wire from Economic Times, Moneycontrol, Livemint, Business Standard, CNBC & BBC
+              Live macro financial wire from Economic Times, Moneycontrol, Livemint, Business Standard, CNBC & BBC. Excluded from company sentiment score.
             </p>
           </div>
 

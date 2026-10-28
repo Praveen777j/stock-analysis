@@ -13,15 +13,10 @@ export const PredictionTab: React.FC<PredictionTabProps> = ({ signal, quote }) =
   const isSell = action.includes('SELL');
   const score = signal.unifiedScore !== undefined ? signal.unifiedScore : 0;
   const confPct = Math.round(signal.confidenceScore * 100);
-  const upProb = signal.upwardProbabilityPct || 72;
+  const upProbDisplay = signal.upwardProbabilityPct !== undefined ? `${signal.upwardProbabilityPct}%` : 'Unavailable';
+  const upProb = signal.upwardProbabilityPct ?? 50;
 
-  const breakdown = signal.breakdown || {
-    finbert: { score: 0.45, weight: 0.25, contribution: 0.11 },
-    vader: { score: 0.35, weight: 0.15, contribution: 0.05 },
-    technicals: { score: 0.50, weight: 0.30, contribution: 0.15 },
-    fundamentals: { score: 0.40, weight: 0.15, contribution: 0.06 },
-    mlEnsemble: { score: 0.40, weight: 0.15, contribution: 0.06 }
-  };
+  const breakdown = signal.breakdown;
 
   const catalysts = signal.catalysts || [];
 
@@ -35,7 +30,7 @@ export const PredictionTab: React.FC<PredictionTabProps> = ({ signal, quote }) =
             Quantitative Factor Analysis & Consensus Breakdown — {quote.ticker}
           </h3>
           <p className="text-xs text-slate-400 mt-0.5">
-            Multi-factor quantitative model synthesizing financial news NLP, retail community discussions, price action, and machine learning.
+            Multi-factor quantitative model synthesizing financial news context, retail community discussions, price action, and rule-based regime filters.
           </p>
         </div>
         <div className="flex items-center gap-2 font-mono text-xs">
@@ -75,98 +70,76 @@ export const PredictionTab: React.FC<PredictionTabProps> = ({ signal, quote }) =
               {score >= 0 ? '+' : ''}{score.toFixed(2)} / 1.00
             </div>
             <div className={`text-[10px] font-semibold mt-0.5 ${isSell ? 'text-rose-400' : 'text-emerald-400'}`}>
-              {isSell ? `▼ ${100 - upProb}% Downside Risk Bias` : `▲ ${upProb}% Probability of Upward Movement`}
+              {signal.upwardProbabilityPct !== undefined
+                ? (isSell ? `▼ ${100 - signal.upwardProbabilityPct}% Downside Risk Bias` : `▲ ${signal.upwardProbabilityPct}% Probability of Upward Movement`)
+                : 'Upward Probability: Unavailable'}
             </div>
           </div>
         </div>
 
-        {/* 5-Pillar Fusion Formula Bar */}
+        {/* 4-Pillar Fusion Formula Bar */}
         <div className="space-y-2">
-          <div className="flex items-center justify-between text-xs">
-            <span className="font-semibold text-slate-200">Component Factor Breakdown (100% Total)</span>
-            <span className="text-[11px] text-slate-400 font-mono">
-              Score = 30% Tech + 25% News + 15% P&L + 15% Social + 15% ML
-            </span>
+          <div className="flex items-center justify-between text-xs font-mono text-slate-400">
+            <span className="font-semibold text-slate-200 uppercase tracking-wider">Component Factor Breakdown (100% Total)</span>
+            <span>Additive weights dynamically normalized</span>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 text-xs font-mono">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs font-mono">
             {/* 1. Technical Trend */}
             <div className="bg-slate-950/60 border border-slate-800/80 p-3 rounded-xl space-y-1">
               <div className="flex items-center justify-between">
                 <span className="text-slate-400 text-[11px]">1. Technicals</span>
-                <span className="text-[10px] text-amber-400 font-bold">{Math.round(breakdown.technicals.weight * 100)}%</span>
+                <span className="text-[10px] text-amber-400 font-bold">{breakdown ? `${Math.round(breakdown.technicals.weight * 100)}%` : 'Unavailable'}</span>
               </div>
-              <div className={`text-lg font-bold ${breakdown.technicals.score >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                {breakdown.technicals.score >= 0 ? '+' : ''}{breakdown.technicals.score.toFixed(2)}
+              <div className={`text-lg font-bold ${breakdown && breakdown.technicals.score >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                {breakdown ? `${breakdown.technicals.score >= 0 ? '+' : ''}${breakdown.technicals.score.toFixed(2)}` : 'Unavailable'}
               </div>
               <div className="text-[10px] text-slate-400">
-                Contrib: {breakdown.technicals.contribution >= 0 ? '+' : ''}{breakdown.technicals.contribution.toFixed(3)}
+                {breakdown ? `Contrib: ${breakdown.technicals.contribution >= 0 ? '+' : ''}${breakdown.technicals.contribution.toFixed(3)}` : 'Unavailable'}
               </div>
             </div>
 
             {/* 2. News Sentiment */}
             <div className="bg-slate-950/60 border border-slate-800/80 p-3 rounded-xl space-y-1">
               <div className="flex items-center justify-between">
-                <span className="text-slate-400 text-[11px]">2. FinBERT News</span>
-                <span className={`text-[10px] font-bold ${breakdown.finbert.weight > 0 ? 'text-emerald-400' : 'text-slate-500'}`}>{Math.round(breakdown.finbert.weight * 100)}%</span>
+                <span className="text-slate-400 text-[11px]">2. News Context</span>
+                <span className="text-[10px] text-indigo-400 font-bold">{breakdown ? `${Math.round(breakdown.vader.weight * 100)}%` : 'Unavailable'}</span>
               </div>
-              <div className={`text-lg font-bold ${
-                breakdown.finbert.status === 'UNAVAILABLE' || breakdown.finbert.weight === 0
-                  ? 'text-slate-500'
-                  : breakdown.finbert.score >= 0 ? 'text-emerald-400' : 'text-rose-400'
-              }`}>
-                {breakdown.finbert.status === 'UNAVAILABLE' || breakdown.finbert.weight === 0
-                  ? 'Offline'
-                  : `${breakdown.finbert.score >= 0 ? '+' : ''}${breakdown.finbert.score.toFixed(2)}`}
+              <div className={`text-lg font-bold ${breakdown && breakdown.vader.score >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                {breakdown ? `${breakdown.vader.score >= 0 ? '+' : ''}${breakdown.vader.score.toFixed(2)}` : 'Unavailable'}
               </div>
               <div className="text-[10px] text-slate-400">
-                {breakdown.finbert.status === 'UNAVAILABLE' || breakdown.finbert.weight === 0
-                  ? 'Offline (VADER fallback active)'
-                  : `Contrib: ${breakdown.finbert.contribution >= 0 ? '+' : ''}${breakdown.finbert.contribution.toFixed(3)}`}
+                {breakdown ? `Contrib: ${breakdown.vader.contribution >= 0 ? '+' : ''}${breakdown.vader.contribution.toFixed(3)}` : 'Unavailable'}
               </div>
             </div>
 
             {/* 3. Corporate Fundamentals (P&L) */}
             <div className="bg-slate-950/60 border border-slate-800/80 p-3 rounded-xl space-y-1">
               <div className="flex items-center justify-between">
-                <span className="text-slate-400 text-[11px]">3. P&L & Debt</span>
-                <span className="text-[10px] text-teal-400 font-bold">{breakdown.fundamentals && breakdown.fundamentals.weight > 0 ? `${Math.round(breakdown.fundamentals.weight * 100)}%` : 'N/A'}</span>
+                <span className="text-slate-400 text-[11px]">3. P&L & Solvency</span>
+                <span className="text-[10px] text-teal-400 font-bold">{breakdown && breakdown.fundamentals && breakdown.fundamentals.weight > 0 ? `${Math.round(breakdown.fundamentals.weight * 100)}%` : 'N/A'}</span>
               </div>
-              <div className={`text-lg font-bold ${breakdown.fundamentals?.score !== null && breakdown.fundamentals?.score !== undefined ? (breakdown.fundamentals.score >= 0 ? 'text-emerald-400' : 'text-rose-400') : 'text-slate-500'}`}>
-                {breakdown.fundamentals?.score !== null && breakdown.fundamentals?.score !== undefined ? `${breakdown.fundamentals.score >= 0 ? '+' : ''}${breakdown.fundamentals.score.toFixed(2)}` : 'N/A'}
+              <div className={`text-lg font-bold ${breakdown && breakdown.fundamentals?.score !== null && breakdown.fundamentals?.score !== undefined ? (breakdown.fundamentals.score >= 0 ? 'text-emerald-400' : 'text-rose-400') : 'text-slate-500'}`}>
+                {breakdown && breakdown.fundamentals?.score !== null && breakdown.fundamentals?.score !== undefined ? `${breakdown.fundamentals.score >= 0 ? '+' : ''}${breakdown.fundamentals.score.toFixed(2)}` : 'N/A'}
               </div>
               <div className="text-[10px] text-slate-400">
-                {breakdown.fundamentals?.contribution !== null && breakdown.fundamentals?.contribution !== undefined && breakdown.fundamentals.weight > 0
+                {breakdown && breakdown.fundamentals?.contribution !== null && breakdown.fundamentals?.contribution !== undefined && breakdown.fundamentals.weight > 0
                   ? `Contrib: ${breakdown.fundamentals.contribution >= 0 ? '+' : ''}${breakdown.fundamentals.contribution.toFixed(3)}`
                   : 'Contrib: N/A'}
               </div>
             </div>
 
-            {/* 4. Social Media */}
+            {/* 4. Rule-based score */}
             <div className="bg-slate-950/60 border border-slate-800/80 p-3 rounded-xl space-y-1">
               <div className="flex items-center justify-between">
-                <span className="text-slate-400 text-[11px]">4. VADER Social</span>
-                <span className="text-[10px] text-indigo-400 font-bold">{Math.round(breakdown.vader.weight * 100)}%</span>
+                <span className="text-slate-400 text-[11px]">4. Rule Engine</span>
+                <span className="text-[10px] text-sky-400 font-bold">{breakdown ? `${Math.round(breakdown.mlEnsemble.weight * 100)}%` : 'Unavailable'}</span>
               </div>
-              <div className={`text-lg font-bold ${breakdown.vader.score >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                {breakdown.vader.score >= 0 ? '+' : ''}{breakdown.vader.score.toFixed(2)}
-              </div>
-              <div className="text-[10px] text-slate-400">
-                Contrib: {breakdown.vader.contribution >= 0 ? '+' : ''}{breakdown.vader.contribution.toFixed(3)}
-              </div>
-            </div>
-
-            {/* 5. Rule-based score */}
-            <div className="bg-slate-950/60 border border-slate-800/80 p-3 rounded-xl space-y-1">
-              <div className="flex items-center justify-between">
-                <span className="text-slate-400 text-[11px]">5. Rule-based score</span>
-                <span className="text-[10px] text-sky-400 font-bold">{Math.round(breakdown.mlEnsemble.weight * 100)}%</span>
-              </div>
-              <div className={`text-lg font-bold ${breakdown.mlEnsemble.score >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                {breakdown.mlEnsemble.score >= 0 ? '+' : ''}{breakdown.mlEnsemble.score.toFixed(2)}
+              <div className={`text-lg font-bold ${breakdown && breakdown.mlEnsemble.score >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                {breakdown ? `${breakdown.mlEnsemble.score >= 0 ? '+' : ''}${breakdown.mlEnsemble.score.toFixed(2)}` : 'Unavailable'}
               </div>
               <div className="text-[10px] text-slate-400">
-                Contrib: {breakdown.mlEnsemble.contribution >= 0 ? '+' : ''}{breakdown.mlEnsemble.contribution.toFixed(3)}
+                {breakdown ? `Contrib: ${breakdown.mlEnsemble.contribution >= 0 ? '+' : ''}${breakdown.mlEnsemble.contribution.toFixed(3)}` : 'Unavailable'}
               </div>
             </div>
           </div>

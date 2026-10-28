@@ -34,6 +34,12 @@ import {
 import { UNIVERSE_CATALOG, searchCatalog } from './universeCatalog';
 
 // Compute technical indicators on historical bars from verified OHLCV observations
+export function computeIndicators(bars: HistoricalBar[]): HistoricalBar[] {
+  const copy = bars.map(b => ({ ...b }));
+  computeIndicatorsOnBars(copy);
+  return copy;
+}
+
 export function computeIndicatorsOnBars(bars: HistoricalBar[]): void {
   const n = bars.length;
   if (n === 0) return;
@@ -1852,7 +1858,8 @@ export function computeModelSignal(
   technicals: TechnicalIndicators,
   sentiment: SentimentData,
   quote: StockQuote,
-  modelName: string = 'Random Forest'
+  modelName: string = 'Random Forest',
+  bars?: HistoricalBar[]
 ): ModelSignal {
   const rsi = technicals.rsi;
   const hist = technicals.macdHist;
@@ -1956,8 +1963,49 @@ export function computeModelSignal(
   const macdFactor = hist !== undefined ? Math.max(-1, Math.min(1, hist / (technicals.atr || 1))) : 0;
   const techScore = Math.round((rsiFactor * 0.35 + trendFactor * 0.40 + macdFactor * 0.25) * 100) / 100;
 
-  // ML ensemble margin (-1.0 to +1.0)
-  const mlScore = Math.round((pBuy - pSell) * 100) / 100;
+  // Independent Market Regime & Structure Rule Engine (20%)
+  // Uses Volume Expansion, Volatility Regime, 52W Range Structural Location, and Benchmark Relative Strength
+  // (strictly independent from RSI, EMA, and MACD to eliminate double-counting).
+  let ruleScore = 0;
+  // 1. Volume confirmation (latest volume vs 20d average)
+  let volSum = 0;
+  const barList = bars || [];
+  if (barList.length > 0) {
+    for (let k = Math.max(0, barList.length - 21); k < barList.length - 1; k++) {
+      volSum += barList[k]?.volume || 0;
+    }
+  }
+  const avgVol20 = barList.length > 1 ? (volSum / Math.min(20, Math.max(1, barList.length - 1))) : (quote.volume || 1);
+  const curVol = (barList.length > 0 ? barList[barList.length - 1]?.volume : undefined) || quote.volume || avgVol20;
+  const volRatio = avgVol20 > 0 ? curVol / avgVol20 : 1;
+  if (volRatio >= 1.5) ruleScore += 0.35; // Volume expansion
+  else if (volRatio >= 1.0) ruleScore += 0.15;
+  else if (volRatio < 0.6) ruleScore -= 0.20; // Volume dry-up
+
+  // 2. Volatility regime (ATR % of price)
+  const price = quote.price || 0;
+  const atrVal = technicals.atr || (price * 0.015);
+  const atrRatio = price > 0 ? (atrVal / price) * 100 : 1.5;
+  if (atrRatio <= 1.8) ruleScore += 0.25; // Controlled, low-volatility accumulation
+  else if (atrRatio > 4.0) ruleScore -= 0.35; // High tail risk
+
+  // 3. 52-Week structural range location
+  const high52 = quote.high52w || 0;
+  const low52 = quote.low52w || 0;
+  if (high52 > low52 && low52 > 0) {
+    const rangePos = (price - low52) / (high52 - low52);
+    if (rangePos >= 0.75) ruleScore += 0.30; // Upper quartile strength
+    else if (rangePos <= 0.25) ruleScore -= 0.30; // Lower quartile weakness
+  }
+
+  // 4. Long-term structural trend persistence (dist from 200 EMA)
+  if (technicals.ema200 !== undefined && technicals.ema200 > 0) {
+    const dist200 = (price - technicals.ema200) / technicals.ema200;
+    if (dist200 > 0.05) ruleScore += 0.20; // Above 200-day macro baseline
+    else if (dist200 < -0.05) ruleScore -= 0.20; // Below 200-day macro baseline
+  }
+
+  const mlScore = Math.max(-1, Math.min(1, Math.round(ruleScore * 100) / 100));
 
   // Fundamental P&L / Solvency component (-1.0 to +1.0)
   const funds = quote.fundamentals || extractFundamentals(quote.ticker, quote);
@@ -3381,39 +3429,98 @@ export function computeFinalAssessment(
     };
   }
 
-  // 3. Technical Setup and Trend Conditions
-  const isAboveEma20 = technicals.ema20 !== undefined ? price > technicals.ema20 : false;
-  const isAboveEma50 = technicals.ema50 !== undefined ? price > technicals.ema50 : false;
-  const isEmaBullish = technicals.ema20 !== undefined && technicals.ema50 !== undefined ? technicals.ema20 >= technicals.ema50 : isAboveEma20;
+  // 3. Technical Setup and Trend Conditions with +/- 0.5% tolerance
+  const diffEma20 = technicals.ema20 !== undefined && technicals.ema20 > 0 ? (price - technicals.ema20) / technicals.ema20 : 0;
+  const isAtEma20 = technicals.ema20 !== undefined && Math.abs(diffEma20) <= 0.005;
+  const isAboveEma20 = technicals.ema20 !== undefined && diffEma20 > 0.005;
+  const isBelowEma20 = technicals.ema20 !== undefined && diffEma20 < -0.005;
+
+  const diffEma50 = technicals.ema50 !== undefined && technicals.ema50 > 0 ? (price - technicals.ema50) / technicals.ema50 : 0;
+  const isAtEma50 = technicals.ema50 !== undefined && Math.abs(diffEma50) <= 0.005;
+  const isAboveEma50 = technicals.ema50 !== undefined && diffEma50 > 0.005;
+  const isBelowEma50 = technicals.ema50 !== undefined && diffEma50 < -0.005;
+
   const isHealthyRsi = rsi !== undefined && rsi >= 40 && rsi <= 68;
   const isOverboughtRsi = rsi !== undefined && rsi > 70;
   const isOversoldRsi = rsi !== undefined && rsi < 35;
   const isMacdPositive = technicals.macdHist !== undefined ? technicals.macdHist >= 0 : true;
 
-  const isBullishSetup = isAboveEma20 && isAboveEma50 && isHealthyRsi && isMacdPositive && cautionaryCount === 0 && signal.unifiedScore >= 0.10;
-  const isBearishSetup = (!isAboveEma20 && !isAboveEma50) || isOverboughtRsi || signal.unifiedScore <= -0.15 || cautionaryCount >= 2;
+  // Build explicit lists of real bullish and bearish factors for faithful narrative generation
+  const bullishFactors: string[] = [];
+  const bearishFactors: string[] = [];
+
+  if (technicals.ema20 !== undefined) {
+    if (isAboveEma20) {
+      bullishFactors.push(`Price above 20 EMA (${currSym}${technicals.ema20.toFixed(1)})`);
+    } else if (isAtEma20) {
+      bullishFactors.push(`Price consolidating at 20 EMA (${currSym}${technicals.ema20.toFixed(1)})`);
+    } else if (isBelowEma20) {
+      bearishFactors.push(`Price below 20 EMA (${currSym}${technicals.ema20.toFixed(1)})`);
+    }
+  }
+
+  if (technicals.ema50 !== undefined) {
+    if (isAboveEma50) {
+      bullishFactors.push(`Price above 50 EMA (${currSym}${technicals.ema50.toFixed(1)})`);
+    } else if (isAtEma50) {
+      bullishFactors.push(`Price consolidating at 50 EMA (${currSym}${technicals.ema50.toFixed(1)})`);
+    } else if (isBelowEma50) {
+      bearishFactors.push(`Price below 50 EMA (${currSym}${technicals.ema50.toFixed(1)})`);
+    }
+  }
+
+  if (technicals.macdHist !== undefined) {
+    if (technicals.macdHist > 0) {
+      bullishFactors.push(`Positive MACD histogram (+${technicals.macdHist.toFixed(2)})`);
+    } else if (technicals.macdHist < 0) {
+      bearishFactors.push(`Negative MACD histogram (${technicals.macdHist.toFixed(2)})`);
+    }
+  }
+
+  if (rsi !== undefined) {
+    if (rsi > 70) {
+      bearishFactors.push(`RSI overbought (${rsi.toFixed(1)} > 70)`);
+    } else if (rsi >= 55) {
+      bullishFactors.push(`RSI constructive momentum (${rsi.toFixed(1)})`);
+    } else if (rsi < 45) {
+      bearishFactors.push(`RSI selling pressure (${rsi.toFixed(1)} < 45)`);
+    }
+  }
+
+  if (expansionCount > 0) {
+    bullishFactors.push(`${expansionCount} corporate expansion catalyst(s)`);
+  }
+  if (cautionaryCount > 0) {
+    bearishFactors.push(`${cautionaryCount} cautionary risk overhang(s)`);
+  }
+
+  const hasConflictingSignals = bullishFactors.length > 0 && bearishFactors.length > 0;
 
   // Exact ATR-based Risk-to-Reward Setup (Minimum 1:2.5 Blended R:R)
   const slDistance = Math.max(price * 0.015, atr * 1.3);
   const triggerPrice = Math.round(price * 100) / 100;
-  const stopLoss = isBullishSetup
+  const isBullishDirection = signal.unifiedScore >= 0.10 && !hasConflictingSignals;
+
+  const stopLoss = isBullishDirection
     ? Math.round((price - slDistance) * 100) / 100
     : Math.round((price + slDistance) * 100) / 100;
   const stopLossPct = Math.round(Math.abs((stopLoss - price) / price) * 1000) / 10;
 
   const t1Distance = slDistance * 1.8;
-  const target1 = isBullishSetup
+  const target1 = isBullishDirection
     ? Math.round((price + t1Distance) * 100) / 100
     : Math.round((price - t1Distance) * 100) / 100;
   const target1Pct = Math.round(Math.abs((target1 - price) / price) * 1000) / 10;
 
   const t2Distance = slDistance * 3.2;
-  const target2 = isBullishSetup
+  const target2 = isBullishDirection
     ? Math.round((price + t2Distance) * 100) / 100
     : Math.round((price - t2Distance) * 100) / 100;
   const target2Pct = Math.round(Math.abs((target2 - price) / price) * 1000) / 10;
 
-  const entryZone = isBullishSetup
+  const entryZone = hasConflictingSignals
+    ? `Neutral observation zone near ${currSym}${price.toFixed(1)}`
+    : isBullishDirection
     ? `${currSym}${(price * 0.995).toFixed(1)} – ${currSym}${(price * 1.003).toFixed(1)} (Buy on Dip)`
     : `${currSym}${(price * 0.997).toFixed(1)} – ${currSym}${(price * 1.005).toFixed(1)} (Exit on Rally)`;
 
@@ -3426,10 +3533,12 @@ export function computeFinalAssessment(
     target1Pct,
     target2,
     target2Pct,
-    riskRewardRatio: '1 : 2.5'
+    riskRewardRatio: hasConflictingSignals
+      ? 'No clear edge; wait for a close above EMA50 or below support'
+      : '1 : 2.5'
   };
 
-  // 4. Determine Outcome: BUY | SELL | WAIT
+  // 4. Determine Outcome: Bullish / Mildly Bullish / Mixed / Mildly Bearish / Bearish
   let outcome: import('./types').FinalDecisionOutcome = 'WAIT';
   let headline = '';
   let rationale = '';
@@ -3440,119 +3549,54 @@ export function computeFinalAssessment(
   const strengthenConditions: string[] = [];
   const invalidationTriggers: string[] = [];
 
-  // Build explicit lists of real bullish and bearish factors for faithful narrative generation
-  const bullishFactors: string[] = [];
-  const bearishFactors: string[] = [];
-
-  if (technicals.ema20 !== undefined) {
-    if (price >= technicals.ema20) {
-      bullishFactors.push(`Price above 20 EMA (${currSym}${technicals.ema20.toFixed(1)})`);
-    } else {
-      bearishFactors.push(`Price below 20 EMA (${currSym}${technicals.ema20.toFixed(1)})`);
-    }
-  }
-  if (technicals.ema50 !== undefined) {
-    if (price >= technicals.ema50) {
-      bullishFactors.push(`Price above 50 EMA (${currSym}${technicals.ema50.toFixed(1)})`);
-    } else {
-      bearishFactors.push(`Price below 50 EMA (${currSym}${technicals.ema50.toFixed(1)})`);
-    }
-  }
-  if (technicals.macdHist !== undefined) {
-    if (technicals.macdHist > 0) {
-      bullishFactors.push(`Positive MACD histogram (+${technicals.macdHist.toFixed(2)})`);
-    } else if (technicals.macdHist < 0) {
-      bearishFactors.push(`Negative MACD histogram (${technicals.macdHist.toFixed(2)})`);
-    }
-  }
-  if (rsi !== undefined) {
-    if (rsi > 70) {
-      bearishFactors.push(`RSI overbought (${rsi.toFixed(1)} > 70)`);
-    } else if (rsi >= 55) {
-      bullishFactors.push(`RSI constructive momentum (${rsi.toFixed(1)})`);
-    } else if (rsi < 45) {
-      bearishFactors.push(`RSI selling pressure (${rsi.toFixed(1)} < 45)`);
-    }
-  }
-  if (expansionCount > 0) {
-    bullishFactors.push(`${expansionCount} corporate expansion catalyst(s)`);
-  }
-  if (cautionaryCount > 0) {
-    bearishFactors.push(`${cautionaryCount} cautionary risk overhang(s)`);
-  }
-
-  const hasConflictingSignals = bullishFactors.length > 0 && bearishFactors.length > 0;
-
-  if (isBullishSetup) {
-    outcome = 'BUY';
-    headline = hasConflictingSignals
-      ? `BUY — Bullish Setup with Mixed Signals on ${ticker}`
-      : `BUY — High-Confluence Bullish Trend Structure on ${ticker}`;
-
-    rationale = hasConflictingSignals
-      ? `Mixed signals: Bullish signals include ${bullishFactors.join(', ')}. Bearish signals include ${bearishFactors.join(', ')}. Price (${currSym}${price.toFixed(1)}) maintains constructive positioning above moving averages with net positive momentum (+${signal.unifiedScore.toFixed(2)}).`
-      : `Price (${currSym}${price.toFixed(1)}) is trading firmly above rising EMA 20 (${currSym}${technicals.ema20?.toFixed(1) ?? 'N/A'}) and EMA 50 (${currSym}${technicals.ema50?.toFixed(1) ?? 'N/A'}). Momentum is healthy (RSI ${rsi?.toFixed(1) ?? 'N/A'}) without overbought climax. Composite evidence score is positive (+${signal.unifiedScore.toFixed(2)}) with zero cautionary corporate overhangs.`;
+  // A4 Rule: If both bullish and bearish factors are present OR unified score is neutral (-0.10 to +0.10), label is Mixed signals
+  if (hasConflictingSignals || (signal.unifiedScore > -0.10 && signal.unifiedScore < 0.10)) {
+    outcome = 'WAIT';
+    headline = `WAIT / MIXED — Mixed Signals on ${ticker}`;
+    rationale = `Mixed signals: Bullish signals include ${bullishFactors.join(', ')}. Bearish signals include ${bearishFactors.join(', ')}. Price (${currSym}${price.toFixed(1)}) is consolidating without high-confluence directional alignment. No clear edge; wait for a close above EMA50 or below support.`;
 
     strongestEvidence.push(
-      `Trend: Price is above both EMA 20 and EMA 50, confirming directional alignment.`,
+      bullishFactors.length > 0 ? `Bullish factor: ${bullishFactors[0]}` : 'Consolidation near moving averages',
+      bearishFactors.length > 0 ? `Bearish factor: ${bearishFactors[0]}` : 'Momentum divergence'
+    );
+    conflictingEvidence.push(`Bullish indicators (${bullishFactors.length}) balance bearish indicators (${bearishFactors.length}).`);
+    importantRisks.push(`Whipsaw risk in directionless consolidation; false breakouts likely until volume expands.`);
+    strengthenConditions.push(`A decisive daily close above 50-day EMA (${currSym}${technicals.ema50?.toFixed(1) ?? 'N/A'}) with volume expansion.`);
+    invalidationTriggers.push(`Breakdown below key local support on expanding sell volume.`);
+
+  } else if (signal.unifiedScore >= 0.10 && bearishFactors.length === 0) {
+    outcome = 'BUY';
+    const isStrong = signal.unifiedScore >= 0.25;
+    headline = isStrong
+      ? `BUY — Bullish Setup on ${ticker}`
+      : `BUY — Mildly Bullish Setup on ${ticker}`;
+
+    rationale = `Price (${currSym}${price.toFixed(1)}) maintains constructive structural accumulation driven by ${bullishFactors.join(', ')}. Momentum is supportive with net positive composite score (+${signal.unifiedScore.toFixed(2)}).`;
+
+    strongestEvidence.push(
+      `Trend: Directional alignment confirmed across ${bullishFactors.slice(0, 2).join(' and ')}.`,
       `Momentum: RSI(14) at ${rsi?.toFixed(1) ?? '50'} represents an optimal non-overbought momentum window.`,
       `Catalysts: ${expansionCount} distinct business expansion events identified in institutional press wire.`
     );
+    importantRisks.push(`Macro interest rate shocks or sudden sector rotation.`);
+    strengthenConditions.push(`Sustained daily close above ${currSym}${target1.toFixed(1)} with volume > 1.5x 20-day average.`);
+    invalidationTriggers.push(`A decisive daily close below invalidation stop level ${currSym}${stopLoss.toFixed(1)} (-${stopLossPct}%).`);
 
-    if (technicals.macdHist !== undefined && technicals.macdHist > 0) {
-      strongestEvidence.push(`MACD Histogram: Positive histogram (+${technicals.macdHist.toFixed(2)}) confirms buyer acceleration.`);
-    }
-
-    if (signal.breakdown.finbert?.status === 'LIVE' && signal.breakdown.finbert.score > 0) {
-      strongestEvidence.push(`Sentiment: FinBERT verified positive sentiment score (+${signal.breakdown.finbert.score.toFixed(2)}).`);
-    } else {
-      strongestEvidence.push(`Sentiment: VADER positive compound score (+${sentiment?.vaderCompound.toFixed(2) ?? '0.00'}) with neutral baseline.`);
-    }
-
-    if (technicals.macdHist !== undefined && technicals.macdHist < 0) {
-      conflictingEvidence.push(`Negative MACD histogram (${technicals.macdHist.toFixed(2)}) indicates decelerating momentum despite higher price.`);
-    }
-    if (technicals.volatility20d > 25) {
-      conflictingEvidence.push(`Elevated 20-day historical volatility (${technicals.volatility20d.toFixed(1)}%) requires wider stop padding.`);
-    }
-    if (fundamentals?.peRatio && fundamentals.peRatio > 35) {
-      conflictingEvidence.push(`Valuation multiple (P/E ${fundamentals.peRatio.toFixed(1)}x) trades above broader sector median.`);
-    }
-    if (conflictingEvidence.length === 0) {
-      conflictingEvidence.push('Minor resistance near 52-week high requires volume follow-through.');
-    }
-
-    importantRisks.push(
-      `Macroeconomic interest rate and liquidity shocks impacting equity market multiples.`,
-      `False breakout risk if volume fails to sustain above the entry trigger ${currSym}${triggerPrice.toFixed(1)}.`
-    );
-
-    strengthenConditions.push(
-      `Sustained daily close above ${currSym}${target1.toFixed(1)} with trading volume > 1.5x 20-day average.`,
-      `Subsequent quarterly earnings report confirming top-line revenue expansion.`
-    );
-
-    invalidationTriggers.push(
-      `A decisive daily closing breakdown below the invalidation stop level ${currSym}${stopLoss.toFixed(1)} (-${stopLossPct}%).`,
-      `Negative regulatory enforcement or sudden corporate governance warning.`
-    );
-
-  } else if (isBearishSetup) {
+  } else if (signal.unifiedScore <= -0.10 && bullishFactors.length === 0) {
     outcome = 'SELL';
-    headline = hasConflictingSignals
-      ? `SELL / CAPITAL PROTECTION — Mixed Signals with Defensive Trend on ${ticker}`
-      : `SELL / CAPITAL PROTECTION — Deteriorating Structure on ${ticker}`;
+    const isStrong = signal.unifiedScore <= -0.25;
+    headline = isStrong
+      ? `SELL / CAPITAL PROTECTION — Bearish Setup on ${ticker}`
+      : `SELL / CAPITAL PROTECTION — Mildly Bearish Setup on ${ticker}`;
 
-    rationale = hasConflictingSignals
-      ? `Mixed signals: Bullish signals include ${bullishFactors.join(', ')}. Bearish signals include ${bearishFactors.join(', ')}. While positive momentum appears in ${bullishFactors.slice(0, 2).join(' and ')}, primary moving average breakdown below EMA 20 (${currSym}${technicals.ema20?.toFixed(1) ?? 'N/A'}) mandates defensive capital preservation.`
-      : isOverboughtRsi
-      ? `Price (${currSym}${price.toFixed(1)}) has extended into overbought exhaustion (RSI ${rsi?.toFixed(1)} > 70). Risk-reward for fresh long positions is unfavorable. Recommend taking tactical profits or tightening stops.`
-      : `Price (${currSym}${price.toFixed(1)}) has broken below critical dynamic moving averages (EMA 20 at ${currSym}${technicals.ema20?.toFixed(1) ?? 'N/A'}). Composite score is defensive (${signal.unifiedScore.toFixed(2)}). Capital preservation rules mandate exiting or trimming long exposure.`;
+    rationale = isOverboughtRsi
+      ? `Price (${currSym}${price.toFixed(1)}) has extended into overbought exhaustion (RSI ${rsi?.toFixed(1)} > 70). Risk-reward for fresh long positions is unfavorable.`
+      : `Price (${currSym}${price.toFixed(1)}) trades under defensive pressure driven by ${bearishFactors.join(', ')}. Composite score is defensive (${signal.unifiedScore.toFixed(2)}). Capital preservation rules mandate exiting or trimming long exposure.`;
 
     strongestEvidence.push(
       isOverboughtRsi
         ? `Momentum Climax: RSI at ${rsi?.toFixed(1)} signals extreme statistical extension vulnerable to sharp mean reversion.`
-        : `Structural Breakdown: Price trades below key short-term exponential moving averages (20 EMA).`,
+        : `Structural Defense: Downside pressure reflected by ${bearishFactors.slice(0, 2).join(' and ')}.`,
       cautionaryCount > 0
         ? `Corporate Overhang: ${cautionaryCount} distinct cautionary risks or downgrades detected in news intelligence.`
         : (technicals.macdHist !== undefined && technicals.macdHist < 0)
@@ -3591,11 +3635,11 @@ export function computeFinalAssessment(
   } else {
     outcome = 'WAIT';
     headline = hasConflictingSignals
-      ? `WAIT — Mixed Signals & Range Consolidation on ${ticker}`
+      ? `WAIT / MIXED — Mixed Signals on ${ticker}`
       : `WAIT — Range Consolidation on ${ticker}`;
 
     rationale = hasConflictingSignals
-      ? `Mixed signals: Bullish signals include ${bullishFactors.join(', ')}. Bearish signals include ${bearishFactors.join(', ')}. The stock is fluctuating between dynamic support and resistance without clear directional asymmetry. Professional strategy dictates waiting for a confirmed breakout before committing capital.`
+      ? `Mixed signals: Bullish signals include ${bullishFactors.join(', ')}. Bearish signals include ${bearishFactors.join(', ')}. Price (${currSym}${price.toFixed(1)}) lacks decisive one-sided confluence. No clear edge; wait for a close above EMA50 or below support.`
       : `Evidence is currently mixed or consolidating without clear directional asymmetry. Price (${currSym}${price.toFixed(1)}) is fluctuating between dynamic support and resistance. RSI (${rsi?.toFixed(1) ?? '50'}) indicates neutral momentum. Preserve cash and await a decisive breakout before committing capital.`;
 
     strongestEvidence.push(

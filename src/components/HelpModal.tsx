@@ -55,7 +55,7 @@ export const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
               <h3>1. Unified Master Decision Formula</h3>
             </div>
             <p className="text-slate-400">
-              Quantitative signals are synthesized into a normalized continuous score $\in [-1.00, +1.00]$ using an adaptive multi-pillar structure:
+              Quantitative signals are synthesized into a normalized continuous score [-1.00 to +1.00] using an adaptive multi-pillar structure:
             </p>
 
             <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl font-mono text-center text-xs space-y-2">
@@ -88,7 +88,7 @@ export const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
               </div>
               <div className="bg-slate-950/60 border border-slate-800 p-2.5 rounded-lg text-center">
                 <span className="text-sky-400 font-bold block mb-1">Rule Engine (20%)</span>
-                Calibrated multi-factor setup margin P(Buy) - P(Sell).
+                Non-trained deterministic rule setup margin P(Buy) - P(Sell).
               </div>
             </div>
           </section>
@@ -105,7 +105,7 @@ export const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
                   <tr>
                     <th className="py-2.5 px-3.5">Unified Score Range</th>
                     <th className="py-2.5 px-3">Exact Action</th>
-                    <th className="py-2.5 px-3">Calibrated Confidence</th>
+                    <th className="py-2.5 px-3">Confidence band (heuristic)</th>
                     <th className="py-2.5 px-3">Market Interpretation</th>
                   </tr>
                 </thead>
@@ -168,7 +168,7 @@ export const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
                   Rule-based grammatical sentiment engine analyzing breaking headlines with negation handling, degree intensifiers, and punctuation boosting.
                 </p>
                 <div className="font-mono text-[10px] text-indigo-400 bg-slate-900 p-1.5 rounded border border-slate-800">
-                  Compound Score = sumValence / √(sumValence² + 15) ∈ [-1.0, +1.0]
+                  Compound Score = sumValence / √(sumValence² + 15) in range [-1.0 to +1.0]
                 </div>
               </div>
 
@@ -188,7 +188,7 @@ export const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
                   Calculates calibrated probability distribution over Buy, Hold, and Sell states based on multi-indicator momentum and price action vetoes.
                 </p>
                 <div className="font-mono text-[10px] text-sky-400 bg-slate-900 p-1.5 rounded border border-slate-800">
-                  Rule Engine Margin = P(Buy) - P(Sell) ∈ [-1.0, +1.0]
+                  Rule Engine Margin = P(Buy) - P(Sell) in range [-1.0 to +1.0]
                 </div>
               </div>
             </div>
@@ -205,7 +205,7 @@ export const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
                 <strong className="text-slate-200">Additive Factor Decomposition:</strong> Decomposes the exact mathematical contribution of each active pillar summing up to the unified score, allowing transparent auditing of what drove the recommendation with zero ungrounded black-box distortion.
               </li>
               <li>
-                <strong className="text-slate-200">Walk-Forward Backtesting:</strong> Strictly sequential historical execution using bar $i-1$ signals for execution at bar $i$ open, applying 15 basis points (0.15%) friction (10 bps commission + 5 bps slippage) with zero look-ahead leakage.
+                <strong className="text-slate-200">Walk-Forward Backtesting:</strong> Strictly sequential historical execution using bar (i-1) signals for execution at bar i open, applying 15 basis points (0.15%) friction (10 bps commission + 5 bps slippage) with zero look-ahead leakage.
               </li>
               <li>
                 <strong className="text-slate-200">Consistent Currency:</strong> Quotes, indicators, pivots, targets, and simulated equity are uniformly calibrated to Indian Rupees (₹).

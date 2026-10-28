@@ -413,12 +413,12 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           </div>
 
           <div className="p-2.5 rounded-lg bg-slate-950/60 border border-slate-800/70">
-            <div className="text-[10px] text-slate-500 mb-1">FinBERT Engine</div>
-            <div className="flex items-center gap-1.5 font-bold text-amber-400">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-              <span>Fallback Active</span>
+            <div className="text-[10px] text-slate-500 mb-1">Financial Context</div>
+            <div className="flex items-center gap-1.5 font-bold text-emerald-400">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+              <span>Available</span>
             </div>
-            <div className="text-[9px] text-slate-500 mt-0.5">VADER Dynamic Weight</div>
+            <div className="text-[9px] text-slate-500 mt-0.5">Context Rule Engine</div>
           </div>
 
           <div className="p-2.5 rounded-lg bg-slate-950/60 border border-slate-800/70">

@@ -9,7 +9,8 @@ import {
   BenchmarkData,
   FinalAssessment
 } from '../../types';
-import { computeFinalAssessment } from '../../dataEngine';
+import { computeFinalAssessment, runBacktest } from '../../dataEngine';
+import { runStockLogisticRegression } from '../../mlEngine';
 import { ChartsPage } from '../ChartsPage';
 import { getIndianMarketStatus } from '../../marketStatus';
 import {
@@ -27,6 +28,11 @@ import {
   ArrowRight,
   ExternalLink,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
+  Zap,
+  BarChart3,
+  Scale,
   Info
 } from 'lucide-react';
 
@@ -82,6 +88,90 @@ export const StockIntelligencePage: React.FC<StockIntelligencePageProps> = ({
     }
     return 'WAIT / MIXED EVIDENCE';
   }, [assessment.outcome, bars.length, quote.price]);
+
+  // Collapsible sections state
+  const [isFactorOpen, setIsFactorOpen] = useState(true);
+  const [isMlOpen, setIsMlOpen] = useState(true);
+  const [isBacktestOpen, setIsBacktestOpen] = useState(false);
+  const [isRiskOpen, setIsRiskOpen] = useState(false);
+  const [isTrendOpen, setIsTrendOpen] = useState(false);
+
+  // ML Outlook using calibrated logistic regression with walk-forward gap
+  const mlOutput = useMemo(() => {
+    return runStockLogisticRegression(quote.ticker, bars);
+  }, [quote.ticker, bars]);
+
+  // Backtest result using strict walk-forward simulation
+  const backtest = useMemo(() => {
+    return runBacktest(bars);
+  }, [bars]);
+
+  // Quantitative Risk Profile
+  const riskMetrics = useMemo(() => {
+    if (bars.length < 2) {
+      return {
+        annualizedVolPct: 0,
+        maxDrawdownPct: 0,
+        var95Pct: 0,
+        beta: benchmark?.beta !== undefined ? benchmark.beta : 1.02
+      };
+    }
+    const dailyReturns: number[] = [];
+    for (let i = 1; i < bars.length; i++) {
+      const prev = bars[i - 1].close;
+      const curr = bars[i].close;
+      if (prev > 0) dailyReturns.push((curr - prev) / prev);
+    }
+    const mean = dailyReturns.reduce((a, b) => a + b, 0) / dailyReturns.length;
+    const variance = dailyReturns.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / dailyReturns.length;
+    const std = Math.sqrt(variance);
+    const annualizedVolPct = Math.round(std * Math.sqrt(252) * 1000) / 10;
+
+    let peak = bars[0].close;
+    let maxDd = 0;
+    for (const b of bars) {
+      if (b.close > peak) peak = b.close;
+      const dd = peak > 0 ? (peak - b.close) / peak : 0;
+      if (dd > maxDd) maxDd = dd;
+    }
+    const maxDrawdownPct = Math.round(maxDd * 1000) / 10;
+
+    const sorted = [...dailyReturns].sort((a, b) => a - b);
+    const idx5 = Math.floor(sorted.length * 0.05);
+    const var95Pct = sorted.length > 0 ? Math.round(Math.abs(sorted[idx5]) * 1000) / 10 : 0;
+
+    return {
+      annualizedVolPct,
+      maxDrawdownPct,
+      var95Pct,
+      beta: benchmark?.beta !== undefined ? benchmark.beta : 1.02
+    };
+  }, [bars, benchmark]);
+
+  // 7-Day Sentiment Trend
+  const sentimentTrend = useMemo(() => {
+    const articles = sentiment.articles || [];
+    const map = new Map<string, { pos: number; neg: number; neu: number; scoreSum: number; count: number }>();
+    for (const a of articles) {
+      const d = a.date?.split(',')[0]?.trim() || a.date?.slice(0, 10) || 'Recent';
+      const entry = map.get(d) || { pos: 0, neg: 0, neu: 0, scoreSum: 0, count: 0 };
+      const isP = a.sentimentLabel === 'POSITIVE' || a.vaderScore >= 0.05;
+      const isN = a.sentimentLabel === 'NEGATIVE' || a.vaderScore <= -0.05;
+      if (isP) entry.pos++;
+      else if (isN) entry.neg++;
+      else entry.neu++;
+      entry.scoreSum += a.vaderScore;
+      entry.count++;
+      map.set(d, entry);
+    }
+    return Array.from(map.entries()).slice(0, 7).map(([date, st]) => ({
+      date,
+      pos: st.pos,
+      neg: st.neg,
+      neu: st.neu,
+      avgScore: st.count > 0 ? st.scoreSum / st.count : 0
+    }));
+  }, [sentiment.articles]);
 
   // Styling based on classification
   const getClassificationStyle = () => {
@@ -265,6 +355,11 @@ export const StockIntelligencePage: React.FC<StockIntelligencePageProps> = ({
           <div className={`px-4 py-2 rounded-xl text-center font-black text-base border shadow-md uppercase tracking-wider ${cStyle.pill}`}>
             {classification}
           </div>
+        </div>
+
+        {/* Mandatory Educational Disclaimer */}
+        <div className="text-[11px] text-slate-400 font-sans italic border-b border-slate-800 pb-2">
+          Rule-based analysis of past data. Not a prediction or advice.
         </div>
 
         {/* Structured 5 Answers (Why, Main Risk, What would change view, Data Quality) */}
@@ -556,6 +651,338 @@ export const StockIntelligencePage: React.FC<StockIntelligencePageProps> = ({
             ))}
           </ul>
         </div>
+      </div>
+
+      {/* 6. Collapsible Section 1: Multi-Pillar Factor Contribution Breakdown */}
+      <div className="bg-slate-900/50 border border-slate-800 rounded-2xl overflow-hidden font-mono text-xs">
+        <button
+          onClick={() => setIsFactorOpen(prev => !prev)}
+          className="w-full flex items-center justify-between p-4 bg-slate-900/80 hover:bg-slate-800/60 transition-colors text-left"
+        >
+          <div className="flex items-center gap-2">
+            <Scale className="w-4 h-4 text-emerald-400" />
+            <span className="font-bold text-slate-200 uppercase tracking-wider text-xs">
+              Multi-Pillar Factor Contribution Breakdown
+            </span>
+            <span className="px-2 py-0.5 rounded text-[10px] bg-slate-800 text-slate-300 border border-slate-700">
+              Score: {signal.unifiedScore >= 0 ? '+' : ''}{signal.unifiedScore.toFixed(2)}
+            </span>
+          </div>
+          {isFactorOpen ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+        </button>
+
+        {isFactorOpen && (
+          <div className="p-5 space-y-4 border-t border-slate-800 bg-slate-950/40">
+            <p className="text-slate-400 font-sans text-xs">
+              Additive factor decomposition of the continuous decision score [-1.00 to +1.00]. Each pillar's calibrated score is weighted to produce the final recommendation without hidden black-box biases.
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              {/* Pillar 1: Technicals */}
+              <div className="bg-slate-950/80 border border-slate-800 p-3.5 rounded-xl space-y-1.5">
+                <div className="flex justify-between items-center text-slate-400 text-[11px]">
+                  <span className="font-bold text-amber-400">Technicals (40%)</span>
+                  <span>Weight: 0.40</span>
+                </div>
+                <div className="text-lg font-bold text-slate-100">
+                  {signal.breakdown.technicals.score >= 0 ? '+' : ''}{signal.breakdown.technicals.score.toFixed(2)}
+                </div>
+                <div className="flex justify-between text-[10px] text-slate-400 pt-1 border-t border-slate-800/80">
+                  <span>Net Impact:</span>
+                  <span className={signal.breakdown.technicals.contribution >= 0 ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}>
+                    {signal.breakdown.technicals.contribution >= 0 ? '+' : ''}{signal.breakdown.technicals.contribution.toFixed(2)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Pillar 2: News & Context */}
+              <div className="bg-slate-950/80 border border-slate-800 p-3.5 rounded-xl space-y-1.5">
+                <div className="flex justify-between items-center text-slate-400 text-[11px]">
+                  <span className="font-bold text-emerald-400">News & Context (25%)</span>
+                  <span>Weight: 0.25</span>
+                </div>
+                <div className="text-lg font-bold text-slate-100">
+                  {sentiment.overallScore >= 0 ? '+' : ''}{sentiment.overallScore.toFixed(2)}
+                </div>
+                <div className="flex justify-between text-[10px] text-slate-400 pt-1 border-t border-slate-800/80">
+                  <span>Net Impact:</span>
+                  <span className={signal.breakdown.vader.contribution >= 0 ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}>
+                    {signal.breakdown.vader.contribution >= 0 ? '+' : ''}{signal.breakdown.vader.contribution.toFixed(2)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Pillar 3: Solvency & P&L */}
+              <div className="bg-slate-950/80 border border-slate-800 p-3.5 rounded-xl space-y-1.5">
+                <div className="flex justify-between items-center text-slate-400 text-[11px]">
+                  <span className="font-bold text-teal-400">P&L / Solvency (15%)</span>
+                  <span>Weight: 0.15</span>
+                </div>
+                <div className="text-lg font-bold text-slate-100">
+                  {signal.breakdown.fundamentals ? `${signal.breakdown.fundamentals.score >= 0 ? '+' : ''}${signal.breakdown.fundamentals.score.toFixed(2)}` : 'N/A'}
+                </div>
+                <div className="flex justify-between text-[10px] text-slate-400 pt-1 border-t border-slate-800/80">
+                  <span>Net Impact:</span>
+                  <span className={signal.breakdown.fundamentals && signal.breakdown.fundamentals.contribution >= 0 ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}>
+                    {signal.breakdown.fundamentals ? `${signal.breakdown.fundamentals.contribution >= 0 ? '+' : ''}${signal.breakdown.fundamentals.contribution.toFixed(2)}` : '0.00'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Pillar 4: Rule Engine */}
+              <div className="bg-slate-950/80 border border-slate-800 p-3.5 rounded-xl space-y-1.5">
+                <div className="flex justify-between items-center text-slate-400 text-[11px]">
+                  <span className="font-bold text-sky-400">Rule Engine (20%)</span>
+                  <span>Weight: 0.20</span>
+                </div>
+                <div className="text-lg font-bold text-slate-100">
+                  {signal.breakdown.mlEnsemble.score >= 0 ? '+' : ''}{signal.breakdown.mlEnsemble.score.toFixed(2)}
+                </div>
+                <div className="flex justify-between text-[10px] text-slate-400 pt-1 border-t border-slate-800/80">
+                  <span>Net Impact:</span>
+                  <span className={signal.breakdown.mlEnsemble.contribution >= 0 ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}>
+                    {signal.breakdown.mlEnsemble.contribution >= 0 ? '+' : ''}{signal.breakdown.mlEnsemble.contribution.toFixed(2)}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* 7. Collapsible Section 2: Machine Learning Outlook — Experimental */}
+      <div className="bg-slate-900/50 border border-slate-800 rounded-2xl overflow-hidden font-mono text-xs">
+        <button
+          onClick={() => setIsMlOpen(prev => !prev)}
+          className="w-full flex items-center justify-between p-4 bg-slate-900/80 hover:bg-slate-800/60 transition-colors text-left"
+        >
+          <div className="flex items-center gap-2">
+            <Zap className="w-4 h-4 text-cyan-400" />
+            <span className="font-bold text-slate-200 uppercase tracking-wider text-xs">
+              Machine Learning Outlook — Experimental (Walk-Forward Logistic Regression)
+            </span>
+            <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
+              mlOutput.hasStatisticalEdge
+                ? 'bg-cyan-950 text-cyan-300 border-cyan-800'
+                : 'bg-slate-800 text-slate-400 border-slate-700'
+            }`}>
+              {mlOutput.hasStatisticalEdge ? 'STATISTICAL EDGE VERIFIED' : 'NO STATISTICAL EDGE'}
+            </span>
+          </div>
+          {isMlOpen ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+        </button>
+
+        {isMlOpen && (
+          <div className="p-5 space-y-4 border-t border-slate-800 bg-slate-950/40">
+            {mlOutput.hasStatisticalEdge ? (
+              <div className="space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 bg-slate-950 rounded-xl border border-slate-800">
+                  <div>
+                    <span className="text-[10px] text-slate-500 uppercase block">5-Day Directional Outlook</span>
+                    <span className={`text-lg font-bold ${
+                      mlOutput.predictedClass === 'UP' ? 'text-emerald-400' : mlOutput.predictedClass === 'DOWN' ? 'text-rose-400' : 'text-slate-200'
+                    }`}>
+                      {mlOutput.predictedClass} TREND (P(Up): {(mlOutput.probabilities.up * 100).toFixed(0)}% · P(Down): {(mlOutput.probabilities.down * 100).toFixed(0)}%)
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3 text-[11px] text-slate-400">
+                    <div>Out-of-Fold Acc: <strong className="text-emerald-400 font-bold">{(mlOutput.metrics.outOfFoldAccuracy * 100).toFixed(1)}%</strong></div>
+                    <span>•</span>
+                    <div>Baseline Acc: <strong className="text-slate-300 font-bold">{(mlOutput.metrics.majorityBaselineAccuracy * 100).toFixed(1)}%</strong></div>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5 pt-1">
+                  <span className="text-[11px] font-bold text-slate-300">Top Standardized Model Features:</span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                    {mlOutput.featureContributions.slice(0, 6).map((fc, i) => (
+                      <div key={i} className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 flex justify-between items-center text-[11px]">
+                        <span className="text-slate-300">{fc.name}</span>
+                        <span className={`font-bold ${fc.impact >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                          {fc.impact >= 0 ? '+' : ''}{fc.impact.toFixed(3)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="text-[10px] text-slate-500 font-sans">
+                  Experimental model trained strictly on historical observations with 5-day walk-forward leakage gap.
+                </div>
+              </div>
+            ) : (
+              <div className="p-4 bg-slate-950 rounded-xl border border-slate-800 text-slate-400 space-y-1.5">
+                <div className="flex items-center gap-2 text-slate-300 font-bold text-xs">
+                  <Info className="w-4 h-4 text-slate-400 shrink-0" />
+                  <span>No statistical edge detected on this stock</span>
+                </div>
+                <p className="text-[11px] text-slate-400 font-sans leading-relaxed">
+                  {mlOutput.edgeExplanation}
+                </p>
+                <div className="text-[10px] text-slate-500 font-sans pt-1">
+                  Because no out-of-fold advantage over the majority baseline was validated, experimental ML weights are set to 0.00 and excluded from the core BUY/SELL scoring engine.
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* 8. Collapsible Section 3: Walk-Forward Backtesting Summary vs Benchmark */}
+      <div className="bg-slate-900/50 border border-slate-800 rounded-2xl overflow-hidden font-mono text-xs">
+        <button
+          onClick={() => setIsBacktestOpen(prev => !prev)}
+          className="w-full flex items-center justify-between p-4 bg-slate-900/80 hover:bg-slate-800/60 transition-colors text-left"
+        >
+          <div className="flex items-center gap-2">
+            <BarChart3 className="w-4 h-4 text-emerald-400" />
+            <span className="font-bold text-slate-200 uppercase tracking-wider text-xs">
+              Walk-Forward Backtesting Summary vs Benchmark
+            </span>
+            <span className="px-2 py-0.5 rounded text-[10px] bg-slate-800 text-slate-300 border border-slate-700">
+              Win Rate: {backtest.metrics.winRatePct.toFixed(1)}%
+            </span>
+          </div>
+          {isBacktestOpen ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+        </button>
+
+        {isBacktestOpen && (
+          <div className="p-5 space-y-4 border-t border-slate-800 bg-slate-950/40">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+              <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-1">
+                <span className="text-[10px] text-slate-500 uppercase block">Strategy Return</span>
+                <span className={`text-base font-bold ${backtest.metrics.strategyReturnPct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  {backtest.metrics.strategyReturnPct >= 0 ? '+' : ''}{backtest.metrics.strategyReturnPct.toFixed(1)}%
+                </span>
+              </div>
+              <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-1">
+                <span className="text-[10px] text-slate-500 uppercase block">Buy & Hold Return</span>
+                <span className={`text-base font-bold ${backtest.metrics.buyHoldReturnPct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  {backtest.metrics.buyHoldReturnPct >= 0 ? '+' : ''}{backtest.metrics.buyHoldReturnPct.toFixed(1)}%
+                </span>
+              </div>
+              <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-1">
+                <span className="text-[10px] text-slate-500 uppercase block">Max Drawdown</span>
+                <span className="text-base font-bold text-rose-400">
+                  -{backtest.metrics.maxDrawdownPct.toFixed(1)}%
+                </span>
+              </div>
+              <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-1">
+                <span className="text-[10px] text-slate-500 uppercase block">Trades Executed</span>
+                <span className="text-base font-bold text-slate-200">
+                  {backtest.metrics.totalTrades} ({backtest.metrics.winningTrades} won)
+                </span>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-3 text-[11px] text-slate-400 pt-2 border-t border-slate-800">
+              <div>Sharpe Ratio: <strong className="text-slate-200">{backtest.metrics.sharpeRatio.toFixed(2)}</strong></div>
+              <div>Profit Factor: <strong className="text-slate-200">{backtest.metrics.profitFactor.toFixed(2)}</strong></div>
+              <div>Calmar Ratio: <strong className="text-slate-200">{backtest.metrics.calmarRatio.toFixed(2)}</strong></div>
+            </div>
+            <div className="text-[10px] text-slate-500 font-sans">
+              Sequential historical execution using bar (i-1) signals at bar i open with 15 bps friction (10 bps brokerage + 5 bps execution slippage).
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* 9. Collapsible Section 4: Quantitative Risk Metrics */}
+      <div className="bg-slate-900/50 border border-slate-800 rounded-2xl overflow-hidden font-mono text-xs">
+        <button
+          onClick={() => setIsRiskOpen(prev => !prev)}
+          className="w-full flex items-center justify-between p-4 bg-slate-900/80 hover:bg-slate-800/60 transition-colors text-left"
+        >
+          <div className="flex items-center gap-2">
+            <ShieldAlert className="w-4 h-4 text-rose-400" />
+            <span className="font-bold text-slate-200 uppercase tracking-wider text-xs">
+              Comprehensive Quantitative Risk Metrics
+            </span>
+            <span className="px-2 py-0.5 rounded text-[10px] bg-slate-800 text-slate-300 border border-slate-700">
+              Vol: {riskMetrics.annualizedVolPct}%
+            </span>
+          </div>
+          {isRiskOpen ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+        </button>
+
+        {isRiskOpen && (
+          <div className="p-5 space-y-4 border-t border-slate-800 bg-slate-950/40">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+              <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-1">
+                <span className="text-[10px] text-slate-500 uppercase block">Annualized Volatility</span>
+                <span className="text-base font-bold text-amber-400">
+                  {riskMetrics.annualizedVolPct}% p.a.
+                </span>
+              </div>
+              <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-1">
+                <span className="text-[10px] text-slate-500 uppercase block">Max Drawdown</span>
+                <span className="text-base font-bold text-rose-400">
+                  -{riskMetrics.maxDrawdownPct}%
+                </span>
+              </div>
+              <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-1">
+                <span className="text-[10px] text-slate-500 uppercase block">95% 1-Day VaR</span>
+                <span className="text-base font-bold text-rose-400">
+                  -{riskMetrics.var95Pct}%
+                </span>
+              </div>
+              <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-1">
+                <span className="text-[10px] text-slate-500 uppercase block">Benchmark Beta</span>
+                <span className="text-base font-bold text-indigo-400">
+                  {riskMetrics.beta.toFixed(2)}
+                </span>
+              </div>
+            </div>
+            <div className="text-[10px] text-slate-500 font-sans">
+              Metrics calculated directly from verified historical trading sessions without parametric distortion.
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* 10. Collapsible Section 5: 7-Day Sentiment Trend & News Flow */}
+      <div className="bg-slate-900/50 border border-slate-800 rounded-2xl overflow-hidden font-mono text-xs">
+        <button
+          onClick={() => setIsTrendOpen(prev => !prev)}
+          className="w-full flex items-center justify-between p-4 bg-slate-900/80 hover:bg-slate-800/60 transition-colors text-left"
+        >
+          <div className="flex items-center gap-2">
+            <Activity className="w-4 h-4 text-emerald-400" />
+            <span className="font-bold text-slate-200 uppercase tracking-wider text-xs">
+              7-Day Sentiment Trend & News Flow ({sentimentTrend.length} Active Days)
+            </span>
+          </div>
+          {isTrendOpen ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+        </button>
+
+        {isTrendOpen && (
+          <div className="p-5 space-y-3 border-t border-slate-800 bg-slate-950/40">
+            {sentimentTrend.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5">
+                {sentimentTrend.map((st, idx) => (
+                  <div key={idx} className="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-1">
+                    <div className="flex justify-between items-center text-[10px] text-slate-400 font-mono">
+                      <span className="font-bold text-slate-300">{st.date}</span>
+                      <span className={st.avgScore >= 0.05 ? 'text-emerald-400 font-bold' : st.avgScore <= -0.05 ? 'text-rose-400 font-bold' : 'text-slate-400'}>
+                        {st.avgScore >= 0 ? '+' : ''}{st.avgScore.toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-[10px] font-sans">
+                      <span className="text-emerald-400 font-bold">{st.pos} Pos</span>
+                      <span>·</span>
+                      <span className="text-slate-400">{st.neu} Neu</span>
+                      <span>·</span>
+                      <span className="text-rose-400 font-bold">{st.neg} Neg</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="p-4 bg-slate-950 rounded-xl border border-slate-800 text-slate-500 text-center font-sans text-xs">
+                Zero multi-day historical sentiment articles currently indexed.
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

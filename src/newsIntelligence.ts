@@ -167,22 +167,31 @@ export function decodeHtml(html: string): string {
 }
 
 /**
- * Strips all HTML tags and thoroughly cleans text of any literal markup or encoded entities.
+ * Strips all HTML tags and thoroughly cleans text of any literal markup or encoded entities,
+ * including stray CDATA markers like ']]>' and '<![CDATA['.
  */
 export function cleanHtmlText(text: string): string {
   if (!text) return '';
-  // 1. Strip CDATA wrappers
+  // 1. Strip CDATA wrappers and stray CDATA markers
   let s = text.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1');
+  s = s.replace(/<!\[CDATA\[/gi, '').replace(/\]\]>/g, '');
   // 2. Decode entities first so any encoded tags like &lt;a&gt; become <a>
   s = decodeHtml(s);
+  // Also strip escaped CDATA markers if they were entity-encoded
+  s = s.replace(/&lt;!\[CDATA\[/gi, '').replace(/\]\]&gt;/gi, '');
+  s = s.replace(/<!\[CDATA\[/gi, '').replace(/\]\]>/g, '');
   // 3. Strip all HTML tags
   s = s.replace(/<[^>]+>/g, ' ');
   // 4. Decode entities again in case of double escaping (&amp;amp;)
   s = decodeHtml(s);
-  // 5. Strip any leftover tags
+  // 5. Strip any leftover tags and CDATA leftovers
   s = s.replace(/<[^>]+>/g, ' ');
+  s = s.replace(/<!\[CDATA\[/gi, '').replace(/\]\]>/g, '');
   // 6. Clean whitespace
   s = s.replace(/\s+/g, ' ').trim();
+  // Final safeguard for stray CDATA ends
+  if (s.endsWith(']]>')) s = s.slice(0, -3).trim();
+  s = s.replace(/\]\]>/g, '').replace(/<!\[CDATA\[/gi, '').trim();
   return s;
 }
 
@@ -237,17 +246,47 @@ export function extractCleanArticleData(
     }
   }
 
-  if (!publisher) {
-    publisher = 'Financial News';
+  // Final CDATA cleanup for title and publisher
+  title = title.replace(/\]\]>/g, '').replace(/<!\[CDATA\[/gi, '').trim();
+  publisher = publisher.replace(/\]\]>/g, '').replace(/<!\[CDATA\[/gi, '').trim();
+
+  // D1: Real publisher name derivation from feed URL or domain - never label generic "Financial News"
+  if (!publisher || publisher.toLowerCase() === 'financial news') {
+    if (url && isValidArticleUrl(url)) {
+      try {
+        const hostname = new URL(url).hostname.replace(/^www\./i, '');
+        if (hostname.includes('reuters.com')) publisher = 'Reuters';
+        else if (hostname.includes('bloomberg.com')) publisher = 'Bloomberg';
+        else if (hostname.includes('livemint.com')) publisher = 'Livemint';
+        else if (hostname.includes('economictimes')) publisher = 'The Economic Times';
+        else if (hostname.includes('moneycontrol.com')) publisher = 'Moneycontrol';
+        else if (hostname.includes('business-standard.com')) publisher = 'Business Standard';
+        else if (hostname.includes('financialexpress.com')) publisher = 'Financial Express';
+        else if (hostname.includes('cnbc.com')) publisher = 'CNBC';
+        else if (hostname.includes('wsj.com')) publisher = 'Wall Street Journal';
+        else if (hostname.includes('marketwatch.com')) publisher = 'MarketWatch';
+        else if (hostname.includes('ft.com')) publisher = 'Financial Times';
+        else if (hostname.includes('ndtvprofit.com') || hostname.includes('ndtv.com')) publisher = 'NDTV Profit';
+        else if (hostname.includes('thehindubusinessline.com')) publisher = 'The Hindu BusinessLine';
+        else {
+          const domainBase = hostname.split('.')[0];
+          publisher = domainBase.charAt(0).toUpperCase() + domainBase.slice(1);
+        }
+      } catch (_) {
+        publisher = 'Financial Wire';
+      }
+    } else {
+      publisher = 'Financial Wire';
+    }
   }
 
   // 4. Extract Clean Summary (strip publisher font tags and anchors)
   let cleanDesc = (rawDescTag || '').replace(/<font[^>]*>[\s\S]*?<\/font>/gi, ' ');
-  let summary = cleanHtmlText(cleanDesc);
+  let summary = cleanHtmlText(cleanDesc).replace(/\]\]>/g, '').replace(/<!\[CDATA\[/gi, '').trim();
 
   // If summary is empty or identical to title, generate a clean factual disclosure summary
   if (!summary || summary.toLowerCase() === title.toLowerCase()) {
-    summary = `${title}. Verified corporate media coverage by ${publisher}.`;
+    summary = `${title}. Corporate media report by ${publisher}.`;
   } else if (summary.length > 250) {
     summary = summary.slice(0, 247) + '...';
   }
@@ -707,6 +746,7 @@ export function parseAndFormatArticleDate(
     relativeTime = `${d}d ago`;
   } else {
     relativeTime = parsed.toLocaleDateString('en-IN', {
+      timeZone: 'Asia/Kolkata',
       day: 'numeric',
       month: 'short',
       year: 'numeric'
@@ -714,6 +754,7 @@ export function parseAndFormatArticleDate(
   }
 
   const calendarDate = parsed.toLocaleDateString('en-IN', {
+    timeZone: 'Asia/Kolkata',
     day: 'numeric',
     month: 'short',
     year: 'numeric'
@@ -1122,7 +1163,7 @@ export async function aggregateMultiSourceNews(
       return {
         ...cached.data,
         isStale: cached.isStale,
-        cachedAt: new Date(cached.cachedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
+        cachedAt: new Date(cached.cachedAt).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true }) + ' IST'
       };
     }
   }
@@ -1239,7 +1280,7 @@ export async function aggregateMultiSourceNews(
     sourcesSummary,
     isPartialFailure,
     isStale: false,
-    cachedAt: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }),
+    cachedAt: new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true }) + ' IST',
     cacheTimestamp: Date.now(),
     eventClusters: groupedData.eventClusters,
     distinctEventsCount: groupedData.distinctEventsCount,

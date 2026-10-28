@@ -65,7 +65,7 @@ export interface TechnicalIndicators {
   ema50?: number;
   ema100?: number;
   ema200?: number;
-  volatility20d: number;
+  volatility20d?: number;
   atr?: number;
   adx?: number;
   bbUpper?: number;
@@ -475,11 +475,13 @@ export interface IPODetails {
     openDate: string;
     closeDate: string;
     allotmentDate?: string;
+    refundsDate?: string;
     listingDate?: string;
   };
   openDate: string;
   closeDate: string;
   allotmentDate?: string;
+  refundsDate?: string;
   listingDate: string;
   statusSource?: string;
   lastVerified?: string;
@@ -512,6 +514,8 @@ export interface IPODetails {
     nii: number;
     retail: number;
     total: number;
+    asOf?: string;
+    isFinal?: boolean;
     source?: string;
     sourceUrl?: string;
   };
@@ -528,7 +532,7 @@ export interface IPODetails {
   promoterHoldingPostPct: number;
   strengths: string[];
   redFlags: string[];
-  verdict?: 'STRONG APPLY' | 'APPLY FOR LISTING GAINS' | 'NEUTRAL / MAY AVOID' | 'AVOID (HIGH RISK)' | 'REFERENCE DISCLOSURE' | 'HISTORICAL FILING';
+  verdict?: 'STRONG APPLY' | 'APPLY FOR LISTING GAINS' | 'NEUTRAL / MAY AVOID' | 'AVOID (HIGH RISK)' | 'REFERENCE DISCLOSURE' | 'HISTORICAL FILING' | 'Not rated (educational data only)' | string;
   verdictScore?: number;
   verdictRationale?: string;
   longTermSuitability?: 'HIGH' | 'MODERATE' | 'LOW' | 'SPECULATIVE' | 'REFERENCE';

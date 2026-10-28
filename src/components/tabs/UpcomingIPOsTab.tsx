@@ -28,7 +28,7 @@ import {
 export const UpcomingIPOsTab: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<
-    'ALL' | 'UPCOMING' | 'OPEN_NOW' | 'CLOSED_PENDING' | 'LISTED' | 'SME'
+    'ALL' | 'UPCOMING' | 'OPEN_NOW' | 'CLOSED_PENDING' | 'ALLOTMENT_DONE' | 'LISTED' | 'SME'
   >('ALL');
   const [ipos, setIpos] = useState<IPODetails[]>([]);
   const [selectedIPO, setSelectedIPO] = useState<IPODetails | null>(null);
@@ -93,14 +93,9 @@ export const UpcomingIPOsTab: React.FC = () => {
     if (!matchesQuery) return false;
     if (filterStatus === 'UPCOMING') return ipo.status === 'Upcoming' || ipo.status === 'UPCOMING';
     if (filterStatus === 'OPEN_NOW') return ipo.status === 'Open' || ipo.status === 'OPEN NOW';
-    if (filterStatus === 'CLOSED_PENDING') {
-      return (
-        ipo.status === 'Closed (allotment pending)' ||
-        ipo.status === 'Allotment done' ||
-        ipo.status === 'CLOSED'
-      );
-    }
-    if (filterStatus === 'LISTED') return ipo.status === 'Listed' || ipo.status === 'LISTED';
+    if (filterStatus === 'CLOSED_PENDING') return ipo.status === 'Closed (allotment pending)' || ipo.status === 'CLOSED';
+    if (filterStatus === 'ALLOTMENT_DONE') return ipo.status === 'Allotment done';
+    if (filterStatus === 'LISTED') return ipo.status === 'Listed' || ipo.status === 'LISTED' || ipo.isHistorical;
     if (filterStatus === 'SME') return ipo.market === 'SME' || ipo.ipoType === 'SME';
     return true;
   });
@@ -209,35 +204,42 @@ export const UpcomingIPOsTab: React.FC = () => {
           <span>{IPO_CATALOG_DISCLOSURE}</span>
         </div>
 
-        {/* 4 Quick Stat Strip */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-mono pt-1">
-          <div className="bg-slate-950/60 border border-slate-800 p-3 rounded-xl">
-            <span className="text-slate-400 text-[11px] block">Currently Open</span>
-            <div className="text-lg font-bold text-emerald-400 mt-0.5">
+        {/* 5 Quick Stat Strip */}
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 text-xs font-mono pt-1">
+          <div className="bg-slate-950/60 border border-slate-800 p-2.5 rounded-xl">
+            <span className="text-slate-400 text-[10px] block">Currently Open</span>
+            <div className="text-base font-bold text-emerald-400 mt-0.5">
               {ipos.filter(i => i.status === 'Open' || i.status === 'OPEN NOW').length} Active
             </div>
-            <div className="text-[10px] text-slate-500">Active bidding window</div>
+            <div className="text-[9px] text-slate-500">Active bidding window</div>
           </div>
-          <div className="bg-slate-950/60 border border-slate-800 p-3 rounded-xl">
-            <span className="text-slate-400 text-[11px] block">Closed / Allotment Pending</span>
-            <div className="text-lg font-bold text-amber-400 mt-0.5">
-              {ipos.filter(i => i.status === 'Closed (allotment pending)' || i.status === 'Allotment done').length} Issues
+          <div className="bg-slate-950/60 border border-slate-800 p-2.5 rounded-xl">
+            <span className="text-slate-400 text-[10px] block">Allotment Pending</span>
+            <div className="text-base font-bold text-amber-400 mt-0.5">
+              {ipos.filter(i => i.status === 'Closed (allotment pending)').length} Issues
             </div>
-            <div className="text-[10px] text-slate-500">Bidding ended; awaiting basis</div>
+            <div className="text-[9px] text-slate-500">Awaiting allotment</div>
           </div>
-          <div className="bg-slate-950/60 border border-slate-800 p-3 rounded-xl">
-            <span className="text-slate-400 text-[11px] block">Upcoming Issues</span>
-            <div className="text-lg font-bold text-indigo-400 mt-0.5">
+          <div className="bg-slate-950/60 border border-slate-800 p-2.5 rounded-xl">
+            <span className="text-slate-400 text-[10px] block">Allotment Done</span>
+            <div className="text-base font-bold text-cyan-400 mt-0.5">
+              {ipos.filter(i => i.status === 'Allotment done').length} Finalized
+            </div>
+            <div className="text-[9px] text-slate-500">Basis finalized</div>
+          </div>
+          <div className="bg-slate-950/60 border border-slate-800 p-2.5 rounded-xl">
+            <span className="text-slate-400 text-[10px] block">Upcoming</span>
+            <div className="text-base font-bold text-indigo-400 mt-0.5">
               {ipos.filter(i => i.status === 'Upcoming' || i.status === 'UPCOMING').length} Issues
             </div>
-            <div className="text-[10px] text-slate-500">Future scheduled dates</div>
+            <div className="text-[9px] text-slate-500">Future scheduled</div>
           </div>
-          <div className="bg-slate-950/60 border border-slate-800 p-3 rounded-xl">
-            <span className="text-slate-400 text-[11px] block">Historical Listings</span>
-            <div className="text-lg font-bold text-blue-400 mt-0.5">
+          <div className="bg-slate-950/60 border border-slate-800 p-2.5 rounded-xl">
+            <span className="text-slate-400 text-[10px] block">Historical Listings</span>
+            <div className="text-base font-bold text-blue-400 mt-0.5">
               {ipos.filter(i => i.status === 'Listed' || i.status === 'LISTED' || i.isHistorical).length} Verified
             </div>
-            <div className="text-[10px] text-slate-500">Completed public debuts</div>
+            <div className="text-[9px] text-slate-500">Public debuts</div>
           </div>
         </div>
       </div>
@@ -258,7 +260,7 @@ export const UpcomingIPOsTab: React.FC = () => {
         <div className="flex flex-wrap items-center gap-1.5 text-xs font-mono">
           <button
             onClick={() => setFilterStatus('ALL')}
-            className={`px-3 py-1.5 rounded-lg font-semibold transition-colors ${
+            className={`px-2.5 py-1.5 rounded-lg font-semibold transition-colors ${
               filterStatus === 'ALL'
                 ? 'bg-emerald-500 text-slate-950 font-bold'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
@@ -268,7 +270,7 @@ export const UpcomingIPOsTab: React.FC = () => {
           </button>
           <button
             onClick={() => setFilterStatus('OPEN_NOW')}
-            className={`px-3 py-1.5 rounded-lg font-semibold transition-colors ${
+            className={`px-2.5 py-1.5 rounded-lg font-semibold transition-colors ${
               filterStatus === 'OPEN_NOW'
                 ? 'bg-emerald-500 text-slate-950 font-bold'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
@@ -278,17 +280,27 @@ export const UpcomingIPOsTab: React.FC = () => {
           </button>
           <button
             onClick={() => setFilterStatus('CLOSED_PENDING')}
-            className={`px-3 py-1.5 rounded-lg font-semibold transition-colors ${
+            className={`px-2.5 py-1.5 rounded-lg font-semibold transition-colors ${
               filterStatus === 'CLOSED_PENDING'
                 ? 'bg-emerald-500 text-slate-950 font-bold'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
             }`}
           >
-            Closed / Pending ({ipos.filter(i => i.status === 'Closed (allotment pending)' || i.status === 'Allotment done').length})
+            Pending ({ipos.filter(i => i.status === 'Closed (allotment pending)').length})
+          </button>
+          <button
+            onClick={() => setFilterStatus('ALLOTMENT_DONE')}
+            className={`px-2.5 py-1.5 rounded-lg font-semibold transition-colors ${
+              filterStatus === 'ALLOTMENT_DONE'
+                ? 'bg-emerald-500 text-slate-950 font-bold'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+            }`}
+          >
+            Allotment Done ({ipos.filter(i => i.status === 'Allotment done').length})
           </button>
           <button
             onClick={() => setFilterStatus('UPCOMING')}
-            className={`px-3 py-1.5 rounded-lg font-semibold transition-colors ${
+            className={`px-2.5 py-1.5 rounded-lg font-semibold transition-colors ${
               filterStatus === 'UPCOMING'
                 ? 'bg-emerald-500 text-slate-950 font-bold'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
@@ -298,17 +310,17 @@ export const UpcomingIPOsTab: React.FC = () => {
           </button>
           <button
             onClick={() => setFilterStatus('LISTED')}
-            className={`px-3 py-1.5 rounded-lg font-semibold transition-colors ${
+            className={`px-2.5 py-1.5 rounded-lg font-semibold transition-colors ${
               filterStatus === 'LISTED'
                 ? 'bg-emerald-500 text-slate-950 font-bold'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
             }`}
           >
-            Listed ({ipos.filter(i => i.status === 'Listed' || i.status === 'LISTED').length})
+            Listed ({ipos.filter(i => i.status === 'Listed' || i.status === 'LISTED' || i.isHistorical).length})
           </button>
           <button
             onClick={() => setFilterStatus('SME')}
-            className={`px-3 py-1.5 rounded-lg font-semibold transition-colors ${
+            className={`px-2.5 py-1.5 rounded-lg font-semibold transition-colors ${
               filterStatus === 'SME'
                 ? 'bg-emerald-500 text-slate-950 font-bold'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
@@ -413,10 +425,10 @@ export const UpcomingIPOsTab: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Verdict & Exchange */}
+                    {/* Educational Status & Exchange */}
                     <div className="mt-2.5 pt-2 border-t border-slate-800/60 flex items-center justify-between">
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-mono ${vStyle.badge}`}>
-                        {ipo.verdict || (ipo.isHistorical ? 'HISTORICAL FILING' : 'DISCLOSURE')}
+                      <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-slate-800 text-slate-300 font-semibold border border-slate-700/80">
+                        Not rated (educational data only)
                       </span>
                       <span className="text-[11px] font-mono text-slate-400">
                         {ipo.exchange}
@@ -481,16 +493,16 @@ export const UpcomingIPOsTab: React.FC = () => {
               </div>
 
               {/* Status & Timing Verification Banner */}
-              <div className={`p-4 rounded-xl border ${getVerdictStyle(activeIPO.verdict).bg} space-y-2`}>
+              <div className="p-4 rounded-xl border bg-slate-950/80 border-slate-800 space-y-2">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <Award className="w-5 h-5" />
+                  <div className="flex items-center gap-2 text-slate-200">
+                    <Award className="w-5 h-5 text-emerald-400" />
                     <span className="text-xs font-mono font-bold uppercase tracking-wider">
                       Status & Date Verification Audit
                     </span>
                   </div>
-                  <span className={`px-2.5 py-0.5 rounded text-xs ${getVerdictStyle(activeIPO.verdict).badge}`}>
-                    {activeIPO.status}
+                  <span className="px-2.5 py-0.5 rounded text-xs font-mono bg-slate-800 text-slate-300 font-bold border border-slate-700">
+                    Not rated (educational data only)
                   </span>
                 </div>
 
@@ -500,7 +512,7 @@ export const UpcomingIPOsTab: React.FC = () => {
                     : `Current Status: ${activeIPO.status}`}
                 </div>
 
-                <p className="text-xs leading-relaxed opacity-90 font-sans">
+                <p className="text-xs leading-relaxed text-slate-400 font-sans">
                   <strong>Verification Audit: </strong>
                   {activeIPO.verdictRationale || 'Calculated dynamically against today\'s date in IST from filing/press records.'}
                 </p>

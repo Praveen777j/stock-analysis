@@ -1,9 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { StockQuote, HistoricalBar, TechnicalIndicators, BenchmarkData } from '../../types';
 import { ChartsPage } from '../ChartsPage';
 import { UNIVERSE_CATALOG } from '../../universeCatalog';
 import { getIndianMarketStatus, IndianMarketSession } from '../../marketStatus';
 import { searchLiveStocks } from '../../dataEngine';
+import { getStandardHistoricalReturns } from '../../returnsCalculator';
+import { IndexDetailModal } from '../IndexDetailModal';
 import {
   TrendingUp,
   TrendingDown,
@@ -80,6 +82,7 @@ export const StockOverviewPage: React.FC<StockOverviewPageProps> = ({
 }) => {
   const [activeChartType, setActiveChartType] = useState<'candle' | 'line'>('candle');
   const [indices, setIndices] = useState<MarketIndexItem[]>([]);
+  const [selectedIndex, setSelectedIndex] = useState<{ symbol: string; name: string; region: 'India' | 'US' } | null>(null);
   const [marketSession, setMarketSession] = useState<IndianMarketSession>(() => getIndianMarketStatus());
 
   // Search state
@@ -270,6 +273,9 @@ export const StockOverviewPage: React.FC<StockOverviewPageProps> = ({
   const verifiedDayHigh = latestBar && latestBar.high > 0 ? latestBar.high : null;
   const verifiedDayLow = latestBar && latestBar.low > 0 ? latestBar.low : null;
 
+  // Shared historical returns calculated via single invariant
+  const standardReturns = useMemo(() => getStandardHistoricalReturns(bars), [bars]);
+
   // Status styling for Indian market session
   const getSessionBadge = () => {
     switch (marketSession.status) {
@@ -381,12 +387,15 @@ export const StockOverviewPage: React.FC<StockOverviewPageProps> = ({
             indices.map((idx) => {
               const isPos = idx.change >= 0;
               return (
-                <div
+                <button
                   key={idx.symbol}
-                  className="bg-slate-900/60 border border-slate-800/80 rounded-xl p-3 hover:border-slate-700 transition-all font-mono"
+                  type="button"
+                  onClick={() => setSelectedIndex({ symbol: idx.symbol, name: idx.name, region: idx.region })}
+                  aria-label={`Open interactive details and chart for ${idx.name}`}
+                  className="w-full text-left bg-slate-900/60 border border-slate-800/80 hover:border-emerald-500/60 active:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 rounded-xl p-3 transition-all font-mono group cursor-pointer"
                 >
                   <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
-                    <span className="font-bold text-slate-200">{idx.name}</span>
+                    <span className="font-bold text-slate-200 group-hover:text-emerald-300 transition-colors">{idx.name}</span>
                     <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-950 border border-slate-800 text-slate-400">
                       {idx.region}
                     </span>
@@ -398,7 +407,11 @@ export const StockOverviewPage: React.FC<StockOverviewPageProps> = ({
                     {isPos ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
                     <span>{isPos ? '+' : ''}{idx.change.toFixed(2)} ({isPos ? '+' : ''}{idx.changePct.toFixed(2)}%)</span>
                   </div>
-                </div>
+                  <div className="text-[10px] text-emerald-400/80 group-hover:text-emerald-300 flex items-center justify-between mt-2 pt-1.5 border-t border-slate-800/60">
+                    <span>Tap for details</span>
+                    <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
+                  </div>
+                </button>
               );
             })
           ) : (
@@ -711,26 +724,38 @@ export const StockOverviewPage: React.FC<StockOverviewPageProps> = ({
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
             <div className="p-3 rounded-lg bg-slate-950/70 border border-slate-800/80">
               <span className="text-slate-500 block text-[10px]">1 Week</span>
-              <div className={`text-base font-bold mt-1 ${quote?.change1wPct === undefined ? 'text-slate-400' : quote.change1wPct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                {quote?.change1wPct !== undefined ? `${quote.change1wPct >= 0 ? '+' : ''}${quote.change1wPct.toFixed(2)}%` : 'N/A'}
+              <div className={`text-base font-bold mt-1 ${!standardReturns.week1.isAvailable ? 'text-slate-400' : standardReturns.week1.gainPct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                {standardReturns.week1.isAvailable ? standardReturns.week1.formatted : 'N/A'}
+              </div>
+              <div className="text-[10px] text-slate-500 truncate mt-0.5">
+                {standardReturns.week1.isAvailable ? `Base: ${standardReturns.week1.startDate}` : 'History < 7d'}
               </div>
             </div>
             <div className="p-3 rounded-lg bg-slate-950/70 border border-slate-800/80">
               <span className="text-slate-500 block text-[10px]">1 Month</span>
-              <div className={`text-base font-bold mt-1 ${quote?.change1mPct === undefined ? 'text-slate-400' : quote.change1mPct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                {quote?.change1mPct !== undefined ? `${quote.change1mPct >= 0 ? '+' : ''}${quote.change1mPct.toFixed(2)}%` : 'N/A'}
+              <div className={`text-base font-bold mt-1 ${!standardReturns.month1.isAvailable ? 'text-slate-400' : standardReturns.month1.gainPct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                {standardReturns.month1.isAvailable ? standardReturns.month1.formatted : 'N/A'}
+              </div>
+              <div className="text-[10px] text-slate-500 truncate mt-0.5">
+                {standardReturns.month1.isAvailable ? `Base: ${standardReturns.month1.startDate}` : 'History < 30d'}
               </div>
             </div>
             <div className="p-3 rounded-lg bg-slate-950/70 border border-slate-800/80">
               <span className="text-slate-500 block text-[10px]">3 Months</span>
-              <div className={`text-base font-bold mt-1 ${quote?.change3mPct === undefined ? 'text-slate-400' : quote.change3mPct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                {quote?.change3mPct !== undefined ? `${quote.change3mPct >= 0 ? '+' : ''}${quote.change3mPct.toFixed(2)}%` : 'N/A'}
+              <div className={`text-base font-bold mt-1 ${!standardReturns.month3.isAvailable ? 'text-slate-400' : standardReturns.month3.gainPct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                {standardReturns.month3.isAvailable ? standardReturns.month3.formatted : 'N/A'}
+              </div>
+              <div className="text-[10px] text-slate-500 truncate mt-0.5">
+                {standardReturns.month3.isAvailable ? `Base: ${standardReturns.month3.startDate}` : 'History < 90d'}
               </div>
             </div>
             <div className="p-3 rounded-lg bg-slate-950/70 border border-slate-800/80">
               <span className="text-slate-500 block text-[10px]">1 Year</span>
-              <div className={`text-base font-bold mt-1 ${quote?.change1yPct === undefined ? 'text-slate-400' : quote.change1yPct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                {quote?.change1yPct !== undefined ? `${quote.change1yPct >= 0 ? '+' : ''}${quote.change1yPct.toFixed(2)}%` : 'N/A'}
+              <div className={`text-base font-bold mt-1 ${!standardReturns.year1.isAvailable ? 'text-slate-400' : standardReturns.year1.gainPct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                {standardReturns.year1.isAvailable ? standardReturns.year1.formatted : 'N/A'}
+              </div>
+              <div className="text-[10px] text-slate-500 truncate mt-0.5">
+                {standardReturns.year1.isAvailable ? `Base: ${standardReturns.year1.startDate}` : 'History < 365d'}
               </div>
             </div>
           </div>
@@ -802,6 +827,15 @@ export const StockOverviewPage: React.FC<StockOverviewPageProps> = ({
           ))}
         </div>
       </div>
+
+      {/* Benchmark Index Detail Modal */}
+      <IndexDetailModal
+        isOpen={!!selectedIndex}
+        onClose={() => setSelectedIndex(null)}
+        symbol={selectedIndex?.symbol || ''}
+        name={selectedIndex?.name || ''}
+        region={selectedIndex?.region || 'India'}
+      />
     </div>
   );
 };

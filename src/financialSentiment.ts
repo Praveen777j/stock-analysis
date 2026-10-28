@@ -588,8 +588,30 @@ export function analyzeFinancialSentiment(
     unifiedScore = Math.round(((vaderRes.compound * 0.45) + (ctxRes.keywordScore * 0.55)) * 100) / 100;
   }
 
-  // Clamp strictly between -1.00 and +1.00
-  unifiedScore = Math.max(-1.0, Math.min(1.0, unifiedScore));
+  // D2 Rule: Equity raises, share sales, offerings, dilution and debt raises are neutral-to-mildly-negative for the issuer
+  const isDilutionHeadline = /\b(?:equity\s+raise|capital\s+raise|share\s+sale|stock\s+dilution|rights\s+issue|follow-on\s+offering|private\s+placement|debt\s+raise|bond\s+issue|bond\s+sale|notes\s+offering|raise\s+equity|raise\s+debt)\b/i.test(cleanHeadline) ||
+    /\b(?:eyes?|plans?|seeking|to\s+raise)\s+.*?equity\s+raise\b/i.test(cleanHeadline) ||
+    /\brais(?:e|ed|ing|es)\s+(?:\$[\d,.]+\s*(?:billion|million|bn|m|b)?\s+)?equity\b/i.test(cleanHeadline);
+
+  if (isDilutionHeadline) {
+    // Equity/debt dilution is neutral-to-mildly-negative unless other verified operating blowout exists
+    if (unifiedScore > 0) {
+      unifiedScore = -0.05; // Mild dilution drag
+    } else {
+      unifiedScore = Math.max(-0.25, Math.min(-0.05, unifiedScore));
+    }
+  }
+
+  // D2 Rule: Cap a single headline's magnitude at +/-0.8 unless the financial rule engine has a strong confirmed catalyst
+  const hasStrongConfirmedCatalyst = !isHeadlineOnly && ctxRes.matchedTerms.some(t =>
+    (t.category === 'GROWTH_EXPANSION' || t.category === 'EARNINGS_REVENUE') && Math.abs(t.weight) >= 2.5
+  );
+
+  if (!hasStrongConfirmedCatalyst) {
+    unifiedScore = Math.max(-0.80, Math.min(0.80, unifiedScore));
+  } else {
+    unifiedScore = Math.max(-1.0, Math.min(1.0, unifiedScore));
+  }
 
   // Determine directional label
   let label: 'POSITIVE' | 'NEUTRAL' | 'NEGATIVE' = 'NEUTRAL';

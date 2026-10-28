@@ -54,6 +54,23 @@ export function normalizeDateToIso(dateStr?: string): string | null {
 }
 
 /**
+ * Checks if a given date string falls on a Saturday or Sunday.
+ */
+export function isWeekendDate(dateStr?: string): boolean {
+  if (!dateStr) return false;
+  const iso = normalizeDateToIso(dateStr);
+  if (!iso) return false;
+  const d = new Date(iso + 'T00:00:00Z');
+  const day = d.getUTCDay();
+  return day === 0 || day === 6; // Sunday = 0, Saturday = 6
+}
+
+export function formatWithWeekendCheck(dateStr?: string): string {
+  if (!dateStr) return 'Unverified';
+  return isWeekendDate(dateStr) ? `${dateStr} (check date)` : dateStr;
+}
+
+/**
  * Dynamically computes an IPO's status against today's date in IST.
  *
  * Rules:
@@ -143,15 +160,17 @@ export const UPCOMING_IPOS_CATALOG: IPODetails[] = [
     exchange: 'NSE / BSE',
     dates: {
       openDate: '21 Oct 2026',
-      closeDate: '24 Oct 2026',
+      closeDate: '23 Oct 2026',
       allotmentDate: '26 Oct 2026',
+      refundsDate: '27 Oct 2026',
       listingDate: '28 Oct 2026'
     },
     openDate: '21 Oct 2026',
-    closeDate: '24 Oct 2026',
+    closeDate: '23 Oct 2026',
     allotmentDate: '26 Oct 2026',
+    refundsDate: '27 Oct 2026',
     listingDate: '28 Oct 2026',
-    statusSource: 'Unverified (from news)',
+    statusSource: 'Unverified (news/broker sites) - confirm on NSE/BSE',
     sourceUrl: 'https://www.livemint.com/market/ipo/reliance-jio-platforms-ipo-gmp-allotment-date-listing-date-time-overall-subscription-status-qib-nii-retail-ril-11792812938496.html',
     articleLinks: [
       'https://www.livemint.com/market/ipo/reliance-jio-platforms-ipo-gmp-allotment-date-listing-date-time-overall-subscription-status-qib-nii-retail-ril-11792812938496.html',
@@ -160,16 +179,16 @@ export const UPCOMING_IPOS_CATALOG: IPODetails[] = [
     lastVerified: '2026-10-25',
     isHistorical: false,
     isVerifiedListed: false,
-    status: 'Closed (allotment pending)', // Calculated dynamically at runtime
+    status: 'Allotment done', // Calculated dynamically at runtime
     sector: 'Telecommunications & Digital Services',
     industry: 'Telecom 5G Infrastructure & Cloud Services',
-    priceBand: '', // Left blank as mandated: unverified from news
-    minPrice: 0,
-    maxPrice: 0,
-    lotSize: 0, // Left blank as mandated: unverified from news
-    minInvestment: 0,
+    priceBand: '₹1,065 – ₹1,119',
+    minPrice: 1065,
+    maxPrice: 1119,
+    lotSize: 12,
+    minInvestment: 13428,
     issueSizeCr: 30213, // Stated in Livemint article: ₹30,213-crore issue
-    issueSizeSource: 'Livemint',
+    issueSizeSource: 'Livemint (Unverified - confirm on NSE/BSE)',
     freshIssueCr: 0,
     ofsCr: 0,
     retailQuotaPct: 35,
@@ -178,6 +197,8 @@ export const UPCOMING_IPOS_CATALOG: IPODetails[] = [
       nii: 14.0, // Stated in Livemint: NII received bids 14 times
       retail: 0,
       total: 22.19, // Stated in Livemint: overall subscribed 22.19 times
+      asOf: 'Day 3 (Final subscription reported in press)',
+      isFinal: true,
       source: 'Livemint',
       sourceUrl: 'https://www.livemint.com/market/ipo/reliance-jio-platforms-ipo-gmp-allotment-date-listing-date-time-overall-subscription-status-qib-nii-retail-ril-11792812938496.html'
     },
@@ -196,16 +217,16 @@ export const UPCOMING_IPOS_CATALOG: IPODetails[] = [
     peerAveragePe: 0,
     promoterHoldingPostPct: 0,
     strengths: [
-      'Issue subscribed 22.19 times overall, led by 70.55x QIB demand and 14x NII bids [Source: Livemint]',
+      'Issue subscribed 22.19 times overall, led by 70.55x QIB demand and 14x NII bids as of Day 3 [Source: Livemint]',
       'Total issue size of ₹30,213 crore scheduled for allotment on October 26, 2026 [Source: Livemint]',
       'Nationwide 5G mobile and digital connectivity infrastructure [Source: Livemint]'
     ],
     redFlags: [
       'Annual sales, net profit, margin, debt/equity, and user count are unverified (not disclosed in linked press reports)',
-      'Price band, retail bidding lot size, and official basis of allotment await final exchange circular'
+      'Price band (₹1,065–₹1,119) and retail lot size (12 shares / ₹13,428 min) reported by news/broker sites await official exchange circular'
     ],
-    verdict: 'REFERENCE DISCLOSURE',
-    verdictRationale: 'Unverified (from news): Bidding window closed on October 24, 2026 with allotment scheduled for October 26, 2026 on NSE/BSE.'
+    verdict: 'Not rated (educational data only)',
+    verdictRationale: 'Unverified (news/broker sites) - confirm on NSE/BSE: Bidding window closed on October 23, 2026 with allotment on October 26, 2026.'
   },
 
   // 2. Verified Historical Mainboard & SME Listings (2024)
