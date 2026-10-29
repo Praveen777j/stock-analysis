@@ -243,7 +243,7 @@ export default function App() {
       id: 'news',
       label: 'News Intelligence',
       icon: Newspaper,
-      desc: 'Institutional financial headlines, event clustering, catalyst detection, and transparent VADER/FinBERT sentiment'
+      desc: 'Institutional financial headlines, event clustering, catalyst detection, and VADER + financial-context sentiment'
     },
     {
       id: 'intelligence',

@@ -252,7 +252,7 @@ const signalUnavail = computeModelSignal(dummyTech, neutralSentiment, unavailQuo
 assert.strictEqual(signalUnavail.breakdown.fundamentals, undefined, 'Fundamentals breakdown must be undefined when statements are unavailable');
 const totalWeight = signalUnavail.breakdown.technicals.weight +
   signalUnavail.breakdown.vader.weight +
-  signalUnavail.breakdown.mlEnsemble.weight +
+  signalUnavail.breakdown.ruleEnsemble.weight +
   signalUnavail.breakdown.finbert.weight;
 assert.strictEqual(Math.round(totalWeight * 100) / 100, 1.0, 'Active weights must sum to 100%');
 console.log('✓ Model weights successfully re-normalized to 100% when fundamentals are unavailable.');

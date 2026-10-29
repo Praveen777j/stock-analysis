@@ -1966,7 +1966,7 @@ export function computeModelSignal(
   // Independent Market Regime & Structure Rule Engine (20%)
   // Uses Volume Expansion, Volatility Regime, 52W Range Structural Location, and Benchmark Relative Strength
   // (strictly independent from RSI, EMA, and MACD to eliminate double-counting).
-  let ruleScore = 0;
+  let rawRuleScore = 0;
   // 1. Volume confirmation (latest volume vs 20d average)
   let volSum = 0;
   const barList = bars || [];
@@ -1978,34 +1978,34 @@ export function computeModelSignal(
   const avgVol20 = barList.length > 1 ? (volSum / Math.min(20, Math.max(1, barList.length - 1))) : (quote.volume || 1);
   const curVol = (barList.length > 0 ? barList[barList.length - 1]?.volume : undefined) || quote.volume || avgVol20;
   const volRatio = avgVol20 > 0 ? curVol / avgVol20 : 1;
-  if (volRatio >= 1.5) ruleScore += 0.35; // Volume expansion
-  else if (volRatio >= 1.0) ruleScore += 0.15;
-  else if (volRatio < 0.6) ruleScore -= 0.20; // Volume dry-up
+  if (volRatio >= 1.5) rawRuleScore += 0.35; // Volume expansion
+  else if (volRatio >= 1.0) rawRuleScore += 0.15;
+  else if (volRatio < 0.6) rawRuleScore -= 0.20; // Volume dry-up
 
   // 2. Volatility regime (ATR % of price)
   const price = quote.price || 0;
   const atrVal = technicals.atr || (price * 0.015);
   const atrRatio = price > 0 ? (atrVal / price) * 100 : 1.5;
-  if (atrRatio <= 1.8) ruleScore += 0.25; // Controlled, low-volatility accumulation
-  else if (atrRatio > 4.0) ruleScore -= 0.35; // High tail risk
+  if (atrRatio <= 1.8) rawRuleScore += 0.25; // Controlled, low-volatility accumulation
+  else if (atrRatio > 4.0) rawRuleScore -= 0.35; // High tail risk
 
   // 3. 52-Week structural range location
   const high52 = quote.high52w || 0;
   const low52 = quote.low52w || 0;
   if (high52 > low52 && low52 > 0) {
     const rangePos = (price - low52) / (high52 - low52);
-    if (rangePos >= 0.75) ruleScore += 0.30; // Upper quartile strength
-    else if (rangePos <= 0.25) ruleScore -= 0.30; // Lower quartile weakness
+    if (rangePos >= 0.75) rawRuleScore += 0.30; // Upper quartile strength
+    else if (rangePos <= 0.25) rawRuleScore -= 0.30; // Lower quartile weakness
   }
 
   // 4. Long-term structural trend persistence (dist from 200 EMA)
   if (technicals.ema200 !== undefined && technicals.ema200 > 0) {
     const dist200 = (price - technicals.ema200) / technicals.ema200;
-    if (dist200 > 0.05) ruleScore += 0.20; // Above 200-day macro baseline
-    else if (dist200 < -0.05) ruleScore -= 0.20; // Below 200-day macro baseline
+    if (dist200 > 0.05) rawRuleScore += 0.20; // Above 200-day macro baseline
+    else if (dist200 < -0.05) rawRuleScore -= 0.20; // Below 200-day macro baseline
   }
 
-  const mlScore = Math.max(-1, Math.min(1, Math.round(ruleScore * 100) / 100));
+  const ruleScore = Math.max(-1, Math.min(1, Math.round(rawRuleScore * 100) / 100));
 
   // Fundamental P&L / Solvency component (-1.0 to +1.0)
   const funds = quote.fundamentals || extractFundamentals(quote.ticker, quote);
@@ -2050,33 +2050,33 @@ export function computeModelSignal(
   let wFinbert = 0.00;
   let wVader: number;
   let wFund: number;
-  let wMl: number;
+  let wRule: number;
 
   if (hasNewsData) {
     wTech = hasFundData ? 0.40 : 0.45;
     wVader = hasFundData ? 0.25 : 0.30;
     wFund = hasFundData ? 0.15 : 0.00;
-    wMl = hasFundData ? 0.20 : 0.25;
+    wRule = hasFundData ? 0.20 : 0.25;
   } else {
-    // News sentiment unavailable: redistribute 100% of weight to technicals, fundamentals, ML
+    // News sentiment unavailable: redistribute 100% of weight to technicals, fundamentals, Rule engine
     wTech = hasFundData ? 0.50 : 0.60;
     wVader = 0.00;
     wFund = hasFundData ? 0.20 : 0.00;
-    wMl = hasFundData ? 0.30 : 0.40;
+    wRule = hasFundData ? 0.30 : 0.40;
   }
 
   const finbertContribution = 0;
   const vaderContribution = hasNewsData ? Math.round(activeSentimentScore * wVader * 100) / 100 : 0;
   const techContribution = Math.round(techScore * wTech * 100) / 100;
   const fundContribution = hasFundData ? Math.round(fundScore * wFund * 100) / 100 : 0;
-  const mlContribution = Math.round(mlScore * wMl * 100) / 100;
+  const ruleContribution = Math.round(ruleScore * wRule * 100) / 100;
 
-  const unifiedScore = Math.round((vaderContribution + techContribution + fundContribution + mlContribution) * 100) / 100;
+  const unifiedScore = Math.round((vaderContribution + techContribution + fundContribution + ruleContribution) * 100) / 100;
 
   let exactAction: 'STRONG BUY' | 'BUY' | 'HOLD' | 'SELL' | 'STRONG SELL' = 'HOLD';
   let unifiedConf = 0.65;
 
-  // Exact Decision Mapping & Calibrated Confidence Bands
+  // Exact Decision Mapping & Heuristic Confidence Bands
   const confidenceCap = hasNewsData ? 0.88 : 0.72;
 
   if (unifiedScore >= 0.35) {
@@ -2169,11 +2169,11 @@ export function computeModelSignal(
         : 'Fundamental financial statement data unavailable; excluded from algorithmic scoring'
     },
     {
-      feature: 'Quantitative Model Margin',
-      value: mlScore,
-      impact: Math.round(mlContribution * 1000) / 1000,
-      direction: mlContribution >= 0 ? 'POSITIVE' : 'NEGATIVE',
-      description: 'Probabilistic classification margin based on multi-factor feature set'
+      feature: 'Quantitative Rule Engine',
+      value: ruleScore,
+      impact: Math.round(ruleContribution * 1000) / 1000,
+      direction: ruleContribution >= 0 ? 'POSITIVE' : 'NEGATIVE',
+      description: 'Probabilistic classification margin based on multi-factor rule engine'
     }
   ];
 
@@ -2497,7 +2497,8 @@ export function computeModelSignal(
       vader: { score: vaderScore, weight: wVader, contribution: vaderContribution },
       technicals: { score: techScore, weight: wTech, contribution: techContribution },
       fundamentals: hasFundData ? { score: fundScore, weight: wFund, contribution: fundContribution } : undefined,
-      mlEnsemble: { score: mlScore, weight: wMl, contribution: mlContribution }
+      ruleEnsemble: { score: ruleScore, weight: wRule, contribution: ruleContribution },
+      mlEnsemble: { score: ruleScore, weight: wRule, contribution: ruleContribution }
     },
     executiveSummary,
     catalysts,
@@ -3410,7 +3411,7 @@ export function computeFinalAssessment(
         'Trading or investing with incomplete price history introduces severe estimation error and unquantified tail risk.'
       ],
       missingEvidence: [
-        'Minimum 50 historical daily candles needed to calibrate EMA 20/50, RSI(14), and ATR(14).',
+        'Minimum 50 historical daily candles needed to compute EMA 20/50, RSI(14), and ATR(14).',
         'Direct primary exchange feed for live price validation.'
       ],
       strengthenConditions: [

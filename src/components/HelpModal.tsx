@@ -44,7 +44,7 @@ export const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
               <span>Quantitative Decision Synthesis Overview</span>
             </div>
             <p className="text-slate-300 text-xs leading-relaxed">
-              Nexus integrates real-time corporate news sentiment, financial statement filings, technical price indicators, and probabilistic trade rules into a unified decision framework. Each dimension is weighted and calibrated to produce clear, actionable market outlooks with zero look-ahead bias.
+              Nexus integrates real-time corporate news sentiment, financial statement filings, technical price indicators, and probabilistic trade rules into a unified decision framework. Each dimension is weighted and evaluated to produce clear, actionable market outlooks with zero look-ahead bias.
             </p>
           </div>
 
@@ -97,7 +97,7 @@ export const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
           <section className="pt-6 space-y-3">
             <div className="flex items-center gap-2 text-sm font-semibold text-emerald-400">
               <CheckCircle2 className="w-4 h-4" />
-              <h3>2. Exact Decision Mapping & Confidence Calibrations</h3>
+              <h3>2. Exact Decision Mapping & Heuristic Confidence Bands</h3>
             </div>
             <div className="bg-slate-950/40 border border-slate-800 rounded-xl overflow-hidden font-mono text-xs">
               <table className="w-full text-left">
@@ -185,7 +185,7 @@ export const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
               <div className="bg-slate-950/40 border border-slate-800/80 p-3 rounded-lg space-y-1">
                 <span className="font-semibold text-slate-200 block">Quantitative Multi-Factor Rule Engine</span>
                 <p className="text-slate-400">
-                  Calculates calibrated probability distribution over Buy, Hold, and Sell states based on multi-indicator momentum and price action vetoes.
+                  Calculates heuristic probability distribution over Buy, Hold, and Sell states based on multi-indicator momentum and price action vetoes.
                 </p>
                 <div className="font-mono text-[10px] text-sky-400 bg-slate-900 p-1.5 rounded border border-slate-800">
                   Rule Engine Margin = P(Buy) - P(Sell) in range [-1.0 to +1.0]
@@ -208,7 +208,7 @@ export const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
                 <strong className="text-slate-200">Walk-Forward Backtesting:</strong> Strictly sequential historical execution using bar (i-1) signals for execution at bar i open, applying 15 basis points (0.15%) friction (10 bps commission + 5 bps slippage) with zero look-ahead leakage.
               </li>
               <li>
-                <strong className="text-slate-200">Consistent Currency:</strong> Quotes, indicators, pivots, targets, and simulated equity are uniformly calibrated to Indian Rupees (₹).
+                <strong className="text-slate-200">Consistent Currency:</strong> Quotes, indicators, pivots, targets, and simulated equity are uniformly denominated in Indian Rupees (₹).
               </li>
             </ul>
           </section>

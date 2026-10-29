@@ -172,6 +172,7 @@ const mockSignal: ModelSignal = {
     vader: { score: 0.12, weight: 25, contribution: 0.03 },
     technicals: { score: -0.4, weight: 35, contribution: -0.14 },
     fundamentals: { score: 0.3, weight: 25, contribution: 0.075 },
+    ruleEnsemble: { score: -0.1, weight: 15, contribution: -0.015 },
     mlEnsemble: { score: -0.1, weight: 15, contribution: -0.015 }
   },
   executiveSummary: 'Defensive momentum below 20 EMA',

@@ -237,7 +237,7 @@ export const NewsIntelligencePage: React.FC<NewsIntelligencePageProps> = ({
       explanation = `${posCount} of ${total} headlines positive, ${negCount} negative. Media coverage is balanced between expansion catalysts and cautionary factors, with no single directional narrative dominating news headlines.`;
     }
 
-    const agreement = `Deterministic Consensus: VADER financial lexicon and the Financial Context Engine analyze corporate disclosures in unison without external API dependencies.`;
+    const agreement = `Sentiment: finance-tuned VADER lexicon plus financial-context rules.`;
 
     return { tone, shortLabel, explanation, modelAgreement: agreement };
   };

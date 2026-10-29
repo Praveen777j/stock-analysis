@@ -788,6 +788,7 @@ async function startServer() {
         low52w: low52wVal,
         volume: meta.regularMarketVolume || (displayBars.length > 0 ? displayBars[displayBars.length - 1].volume : 0),
         lastUpdated: `${lastTradeDate} IST`,
+        quoteTimestamp: meta.regularMarketTime ? meta.regularMarketTime * 1000 : Date.now(),
         change1mPct,
         change1wPct,
         change3mPct,

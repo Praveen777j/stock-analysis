@@ -17,6 +17,7 @@ export interface StockQuote {
   website?: string;
   businessSummary?: string;
   fundamentals?: StockFundamentals;
+  quoteTimestamp?: number;
   // Multi-period returns during fetch
   change1mPct?: number;
   change1wPct?: number;
@@ -321,6 +322,17 @@ export interface TomorrowForecast {
   keyDrivers: string[];
 }
 
+export interface MarketIndexItem {
+  symbol: string;
+  name: string;
+  region: 'India' | 'US';
+  price: number;
+  change: number;
+  changePct: number;
+  previousClose: number;
+  timestamp: string;
+}
+
 export interface ModelSignal {
   signal: 'BUY' | 'HOLD' | 'SELL' | 'HOLD / LOW CONFIDENCE';
   probabilities: {
@@ -341,6 +353,7 @@ export interface ModelSignal {
     vader: { score: number; weight: number; contribution: number };
     technicals: { score: number; weight: number; contribution: number };
     fundamentals?: { score: number; weight: number; contribution: number };
+    ruleEnsemble: { score: number; weight: number; contribution: number };
     mlEnsemble: { score: number; weight: number; contribution: number };
   };
   executiveSummary: string;

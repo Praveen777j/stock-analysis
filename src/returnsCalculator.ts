@@ -127,3 +127,33 @@ export function getStandardHistoricalReturns(bars: HistoricalBar[]) {
     year5: calculateHistoricalReturn(bars, 365 * 5, '5 Years')
   };
 }
+
+/**
+ * Formats any timestamp into an IST time string: "hh:mm am/pm IST".
+ */
+export function formatQuoteTimeIst(timestamp?: string | number | Date): string {
+  if (!timestamp) return 'Live feed active';
+  const d = new Date(timestamp);
+  if (isNaN(d.getTime())) {
+    const s = String(timestamp).trim();
+    if (s.toLowerCase().includes('ist')) return s;
+    return `${s} IST`;
+  }
+  return d.toLocaleTimeString('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true
+  }) + ' IST';
+}
+
+/**
+ * Checks if a timestamp is delayed (> 15 minutes old).
+ */
+export function isQuoteDelayed(timestamp?: string | number | Date, maxAgeMs = 15 * 60 * 1000): boolean {
+  if (!timestamp) return false;
+  const d = new Date(timestamp);
+  if (isNaN(d.getTime())) return false;
+  return (Date.now() - d.getTime()) > maxAgeMs;
+}
+

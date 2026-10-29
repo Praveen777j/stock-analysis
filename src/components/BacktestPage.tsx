@@ -120,9 +120,11 @@ export const BacktestPage: React.FC<BacktestPageProps> = ({ backtest, ticker }) 
         <div className="bg-slate-900/50 border border-slate-800 rounded-lg p-3">
           <span className="text-xs text-slate-400">Win Rate</span>
           <div className="text-lg font-bold font-mono tabular-nums text-amber-400 mt-1">
-            {metrics.winRatePct.toFixed(1)}%
+            {metrics.totalTrades === 0 ? 'No trades' : `${metrics.winRatePct.toFixed(1)}%`}
           </div>
-          <div className="text-[11px] text-slate-500 mt-0.5">{metrics.winningTrades} of {metrics.totalTrades} Won</div>
+          <div className="text-[11px] text-slate-500 mt-0.5">
+            {metrics.totalTrades === 0 ? '0 trades in this period' : `${metrics.winningTrades} of ${metrics.totalTrades} Won`}
+          </div>
         </div>
 
         <div className="bg-slate-900/50 border border-slate-800 rounded-lg p-3">

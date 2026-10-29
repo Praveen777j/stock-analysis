@@ -128,9 +128,9 @@ export const SignalBanner: React.FC<SignalBannerProps> = ({ signal }) => {
               </span>
             </div>
             <div className="bg-slate-900/80 border border-slate-800 p-2 rounded-lg text-center">
-              <span className="text-[10px] text-slate-400 block">Rule Engine ({Math.round(signal.breakdown.mlEnsemble.weight * 100)}%)</span>
-              <span className={`font-bold ${signal.breakdown.mlEnsemble.score >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                {signal.breakdown.mlEnsemble.score >= 0 ? '+' : ''}{signal.breakdown.mlEnsemble.score.toFixed(2)}
+              <span className="text-[10px] text-slate-400 block">Rule Engine ({Math.round((signal.breakdown.ruleEnsemble || signal.breakdown.mlEnsemble!).weight * 100)}%)</span>
+              <span className={`font-bold ${(signal.breakdown.ruleEnsemble || signal.breakdown.mlEnsemble!).score >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                {(signal.breakdown.ruleEnsemble || signal.breakdown.mlEnsemble!).score >= 0 ? '+' : ''}{(signal.breakdown.ruleEnsemble || signal.breakdown.mlEnsemble!).score.toFixed(2)}
               </span>
             </div>
           </div>

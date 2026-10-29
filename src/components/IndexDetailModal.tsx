@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { X, TrendingUp, TrendingDown, Clock, Activity, AlertCircle, RefreshCw, BarChart2 } from 'lucide-react';
-import { HistoricalBar, StockQuote, TechnicalIndicators } from '../types';
-import { getStandardHistoricalReturns } from '../returnsCalculator';
+import { HistoricalBar, StockQuote, TechnicalIndicators, MarketIndexItem } from '../types';
+import { getStandardHistoricalReturns, formatQuoteTimeIst } from '../returnsCalculator';
 import { computeIndicators } from '../dataEngine';
 
 interface IndexDetailModalProps {
@@ -10,6 +10,7 @@ interface IndexDetailModalProps {
   symbol: string;
   name: string;
   region: 'India' | 'US';
+  indexItem?: MarketIndexItem | null;
 }
 
 export const IndexDetailModal: React.FC<IndexDetailModalProps> = ({
@@ -17,7 +18,8 @@ export const IndexDetailModal: React.FC<IndexDetailModalProps> = ({
   onClose,
   symbol,
   name,
-  region
+  region,
+  indexItem
 }) => {
   const [selectedRange, setSelectedRange] = useState<'1m' | '3m' | '6m' | '1y'>('3m');
   const [chartType, setChartType] = useState<'candlestick' | 'line'>('candlestick');
@@ -36,7 +38,7 @@ export const IndexDetailModal: React.FC<IndexDetailModalProps> = ({
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch(`/api/stock/${encodeURIComponent(symbol)}?range=${selectedRange}`);
+        const res = await fetch(`/api/stock/${encodeURIComponent(symbol)}?range=1y`);
         if (!res.ok) {
           throw new Error(`Failed to load index data for ${name} (${symbol})`);
         }
@@ -69,7 +71,7 @@ export const IndexDetailModal: React.FC<IndexDetailModalProps> = ({
 
     fetchIndexData();
     return () => { isMounted = false; };
-  }, [isOpen, symbol, selectedRange]);
+  }, [isOpen, symbol, indexItem?.timestamp]);
 
   // Handle escape key to close
   useEffect(() => {
@@ -102,20 +104,48 @@ export const IndexDetailModal: React.FC<IndexDetailModalProps> = ({
 
   if (!isOpen) return null;
 
-  const price = quote?.price ?? (bars.length > 0 ? bars[bars.length - 1].close : null);
-  const change = quote?.change ?? (bars.length >= 2 ? bars[bars.length - 1].close - bars[bars.length - 2].close : 0);
-  const changePct = quote?.changePct ?? (bars.length >= 2 && bars[bars.length - 2].close > 0 ? ((change / bars[bars.length - 2].close) * 100) : 0);
+  // Use the shared index quote values from the card to ensure 100% agreement between card and modal
+  const price = indexItem ? indexItem.price : (quote?.price ?? (bars.length > 0 ? bars[bars.length - 1].close : null));
+  const change = indexItem ? indexItem.change : (quote?.change ?? (bars.length >= 2 ? bars[bars.length - 1].close - bars[bars.length - 2].close : 0));
+  const changePct = indexItem ? indexItem.changePct : (quote?.changePct ?? (bars.length >= 2 && bars[bars.length - 2].close > 0 ? ((change / bars[bars.length - 2].close) * 100) : 0));
   const isPos = change >= 0;
   const currSym = region === 'US' ? '$' : '₹';
+  const quoteTimeIst = formatQuoteTimeIst(indexItem?.timestamp || lastUpdatedIst || new Date());
 
   // Day high/low
   const latestBar = bars.length > 0 ? bars[bars.length - 1] : null;
   const dayHigh = latestBar?.high && latestBar.high > 0 ? latestBar.high : null;
   const dayLow = latestBar?.low && latestBar.low > 0 ? latestBar.low : null;
 
-  // 52-week range from bars or quote
-  const high52 = quote?.high52w && quote.high52w > 0 ? quote.high52w : null;
-  const low52 = quote?.low52w && quote.low52w > 0 ? quote.low52w : null;
+  // 52-week range computed from the last 252 daily bars (or all bars if fewer)
+  const barsFor52w = useMemo(() => {
+    return bars.slice(-252).filter(b => typeof b.low === 'number' && typeof b.high === 'number' && b.low > 0 && b.high > 0);
+  }, [bars]);
+
+  const sessions52wCount = barsFor52w.length;
+  const has52w = sessions52wCount >= 150;
+
+  const low52 = useMemo(() => {
+    if (!has52w) return null;
+    let min = Infinity;
+    for (const b of barsFor52w) {
+      if (b.low < min) min = b.low;
+    }
+    return min === Infinity ? null : min;
+  }, [barsFor52w, has52w]);
+
+  const high52 = useMemo(() => {
+    if (!has52w) return null;
+    let max = -Infinity;
+    for (const b of barsFor52w) {
+      if (b.high > max) max = b.high;
+    }
+    return max === -Infinity ? null : max;
+  }, [barsFor52w, has52w]);
+
+  const caption52w = has52w
+    ? `High/low over ${sessions52wCount} sessions`
+    : `High/low over ${sessions52wCount} sessions (minimum 150 required)`;
 
   // Technical values (never fabricated)
   const currentRsi = technicals.rsi !== undefined ? technicals.rsi : latestBar?.rsi;
@@ -182,7 +212,7 @@ export const IndexDetailModal: React.FC<IndexDetailModalProps> = ({
             <div className="flex items-center gap-2 text-xs font-mono text-slate-400">
               <span className="flex items-center gap-1">
                 <Clock className="w-3.5 h-3.5 text-slate-500" />
-                Updated: {lastUpdatedIst || 'Exchange Feed Active'}
+                Quote: {quoteTimeIst}
               </span>
               <span>·</span>
               <span className="text-slate-400">Source: Yahoo Finance Live Index Feed</span>
@@ -224,7 +254,7 @@ export const IndexDetailModal: React.FC<IndexDetailModalProps> = ({
                 <div className={`flex items-center gap-1 text-xs font-bold mt-1 ${isPos ? 'text-emerald-400' : 'text-rose-400'}`}>
                   {isPos ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
                   <span>{isPos ? '+' : ''}{change.toFixed(2)} ({isPos ? '+' : ''}{changePct.toFixed(2)}%)</span>
-                  <span className="text-slate-500 font-normal ml-1">Today</span>
+                  <span className="text-slate-500 font-normal ml-1">Today · {quoteTimeIst}</span>
                 </div>
               </div>
 
@@ -248,7 +278,7 @@ export const IndexDetailModal: React.FC<IndexDetailModalProps> = ({
                     : 'N/A'}
                 </div>
                 <div className="text-[10px] text-slate-500 mt-0.5">
-                  Historical extreme levels over 252 sessions
+                  {caption52w}
                 </div>
               </div>
             </div>

@@ -380,7 +380,7 @@ export const SentimentTab: React.FC<SentimentTabProps> = ({ sentiment, quote }) 
               </div>
             ) : (
               redditPosts.map((post: RedditPost, idx: number) => {
-              const postScore: number = (post.finbertScore !== undefined && post.finbertScore !== null) ? post.finbertScore : (post.vaderScore ?? 0);
+              const postScore: number = post.vaderScore ?? 0;
               const isBullishPost = postScore > 0.10;
               const isBearishPost = postScore < -0.10;
 

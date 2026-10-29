@@ -38,8 +38,8 @@ export const RedditSentimentPage: React.FC<RedditSentimentPageProps> = ({ sentim
     return p.subreddit === selectedSubreddit;
   });
 
-  const bullishCount = redditPosts.filter(p => (p.finbertScore ?? p.vaderScore ?? 0) > 0.05).length;
-  const bearishCount = redditPosts.filter(p => (p.finbertScore ?? p.vaderScore ?? 0) < -0.05).length;
+  const bullishCount = redditPosts.filter(p => (p.vaderScore ?? 0) > 0.05).length;
+  const bearishCount = redditPosts.filter(p => (p.vaderScore ?? 0) < -0.05).length;
   const totalAnalyzed = Math.max(1, bullishCount + bearishCount);
   const bullPct = hasPosts ? Math.round((bullishCount / totalAnalyzed) * 100) : 0;
   const bearPct = hasPosts ? 100 - bullPct : 0;
@@ -233,7 +233,7 @@ export const RedditSentimentPage: React.FC<RedditSentimentPageProps> = ({ sentim
             </div>
           ) : (
             filteredPosts.map((post: RedditPost, idx: number) => {
-              const postScore: number = (post.finbertScore !== undefined && post.finbertScore !== null) ? post.finbertScore : (post.vaderScore ?? 0);
+              const postScore: number = post.vaderScore ?? 0;
               const isBullishPost = postScore > 0.08;
               const isBearishPost = postScore < -0.08;
 

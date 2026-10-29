@@ -96,7 +96,7 @@ export const StockIntelligencePage: React.FC<StockIntelligencePageProps> = ({
   const [isRiskOpen, setIsRiskOpen] = useState(false);
   const [isTrendOpen, setIsTrendOpen] = useState(false);
 
-  // ML Outlook using calibrated logistic regression with walk-forward gap
+  // ML Outlook using logistic regression with walk-forward gap
   const mlOutput = useMemo(() => {
     return runStockLogisticRegression(quote.ticker, bars);
   }, [quote.ticker, bars]);
@@ -209,7 +209,7 @@ export const StockIntelligencePage: React.FC<StockIntelligencePageProps> = ({
   // Generate the WHY explanation strictly from real indicator values and bullish/bearish factor lists
   const whyExplanation = useMemo(() => {
     if (classification === 'INSUFFICIENT DATA' || bars.length < 50) {
-      return `Insufficient verified historical trading observations (${bars.length} available, minimum 50 required) or unavailable live exchange feed. Technical indicators and directional momentum cannot be statistically calibrated.`;
+      return `Insufficient verified historical trading observations (${bars.length} available, minimum 50 required) or unavailable live exchange feed. Technical indicators and directional momentum cannot be statistically evaluated.`;
     }
 
     const bullList = assessment.bullishFactors && assessment.bullishFactors.length > 0
@@ -304,9 +304,6 @@ export const StockIntelligencePage: React.FC<StockIntelligencePageProps> = ({
                 {isPos ? <TrendingUp className="w-4 h-4 mr-0.5" /> : <TrendingDown className="w-4 h-4 mr-0.5" />}
                 {isPos ? '+' : ''}{quote.change.toFixed(2)} ({isPos ? '+' : ''}{quote.changePct.toFixed(2)}%)
               </span>
-            </div>
-            <div className="text-[11px] text-slate-500 font-mono mt-1">
-              Verified daily settlement
             </div>
           </div>
         </div>
@@ -673,16 +670,23 @@ export const StockIntelligencePage: React.FC<StockIntelligencePageProps> = ({
 
         {isFactorOpen && (
           <div className="p-5 space-y-4 border-t border-slate-800 bg-slate-950/40">
-            <p className="text-slate-400 font-sans text-xs">
-              Additive factor decomposition of the continuous decision score [-1.00 to +1.00]. Each pillar's calibrated score is weighted to produce the final recommendation without hidden black-box biases.
-            </p>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <p className="text-slate-400 font-sans text-xs">
+                Additive factor decomposition of the continuous decision score [-1.00 to +1.00]. Each pillar's evaluated score is weighted to produce the final recommendation without hidden black-box biases.
+              </p>
+              {(!signal.breakdown.fundamentals || signal.breakdown.fundamentals.weight === 0) && (
+                <span className="shrink-0 text-[11px] font-mono text-amber-400 bg-amber-950/40 border border-amber-800/80 px-2.5 py-1 rounded-md">
+                  Re-weighted: P&L data unavailable
+                </span>
+              )}
+            </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               {/* Pillar 1: Technicals */}
               <div className="bg-slate-950/80 border border-slate-800 p-3.5 rounded-xl space-y-1.5">
                 <div className="flex justify-between items-center text-slate-400 text-[11px]">
-                  <span className="font-bold text-amber-400">Technicals (40%)</span>
-                  <span>Weight: 0.40</span>
+                  <span className="font-bold text-amber-400">Technicals ({Math.round(signal.breakdown.technicals.weight * 100)}%)</span>
+                  <span>Weight: {signal.breakdown.technicals.weight.toFixed(2)}</span>
                 </div>
                 <div className="text-lg font-bold text-slate-100">
                   {signal.breakdown.technicals.score >= 0 ? '+' : ''}{signal.breakdown.technicals.score.toFixed(2)}
@@ -698,8 +702,8 @@ export const StockIntelligencePage: React.FC<StockIntelligencePageProps> = ({
               {/* Pillar 2: News & Context */}
               <div className="bg-slate-950/80 border border-slate-800 p-3.5 rounded-xl space-y-1.5">
                 <div className="flex justify-between items-center text-slate-400 text-[11px]">
-                  <span className="font-bold text-emerald-400">News & Context (25%)</span>
-                  <span>Weight: 0.25</span>
+                  <span className="font-bold text-emerald-400">News & Context ({Math.round(signal.breakdown.vader.weight * 100)}%)</span>
+                  <span>Weight: {signal.breakdown.vader.weight.toFixed(2)}</span>
                 </div>
                 <div className="text-lg font-bold text-slate-100">
                   {sentiment.overallScore >= 0 ? '+' : ''}{sentiment.overallScore.toFixed(2)}
@@ -715,8 +719,10 @@ export const StockIntelligencePage: React.FC<StockIntelligencePageProps> = ({
               {/* Pillar 3: Solvency & P&L */}
               <div className="bg-slate-950/80 border border-slate-800 p-3.5 rounded-xl space-y-1.5">
                 <div className="flex justify-between items-center text-slate-400 text-[11px]">
-                  <span className="font-bold text-teal-400">P&L / Solvency (15%)</span>
-                  <span>Weight: 0.15</span>
+                  <span className="font-bold text-teal-400">
+                    P&L / Solvency ({signal.breakdown.fundamentals ? Math.round(signal.breakdown.fundamentals.weight * 100) : 0}%)
+                  </span>
+                  <span>Weight: {signal.breakdown.fundamentals ? signal.breakdown.fundamentals.weight.toFixed(2) : '0.00'}</span>
                 </div>
                 <div className="text-lg font-bold text-slate-100">
                   {signal.breakdown.fundamentals ? `${signal.breakdown.fundamentals.score >= 0 ? '+' : ''}${signal.breakdown.fundamentals.score.toFixed(2)}` : 'N/A'}
@@ -732,16 +738,18 @@ export const StockIntelligencePage: React.FC<StockIntelligencePageProps> = ({
               {/* Pillar 4: Rule Engine */}
               <div className="bg-slate-950/80 border border-slate-800 p-3.5 rounded-xl space-y-1.5">
                 <div className="flex justify-between items-center text-slate-400 text-[11px]">
-                  <span className="font-bold text-sky-400">Rule Engine (20%)</span>
-                  <span>Weight: 0.20</span>
+                  <span className="font-bold text-sky-400">
+                    Rule Engine ({Math.round(((signal.breakdown.ruleEnsemble || signal.breakdown.mlEnsemble!).weight) * 100)}%)
+                  </span>
+                  <span>Weight: {(signal.breakdown.ruleEnsemble || signal.breakdown.mlEnsemble!).weight.toFixed(2)}</span>
                 </div>
                 <div className="text-lg font-bold text-slate-100">
-                  {signal.breakdown.mlEnsemble.score >= 0 ? '+' : ''}{signal.breakdown.mlEnsemble.score.toFixed(2)}
+                  {(signal.breakdown.ruleEnsemble || signal.breakdown.mlEnsemble!).score >= 0 ? '+' : ''}{(signal.breakdown.ruleEnsemble || signal.breakdown.mlEnsemble!).score.toFixed(2)}
                 </div>
                 <div className="flex justify-between text-[10px] text-slate-400 pt-1 border-t border-slate-800/80">
                   <span>Net Impact:</span>
-                  <span className={signal.breakdown.mlEnsemble.contribution >= 0 ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}>
-                    {signal.breakdown.mlEnsemble.contribution >= 0 ? '+' : ''}{signal.breakdown.mlEnsemble.contribution.toFixed(2)}
+                  <span className={(signal.breakdown.ruleEnsemble || signal.breakdown.mlEnsemble!).contribution >= 0 ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}>
+                    {(signal.breakdown.ruleEnsemble || signal.breakdown.mlEnsemble!).contribution >= 0 ? '+' : ''}{(signal.breakdown.ruleEnsemble || signal.breakdown.mlEnsemble!).contribution.toFixed(2)}
                   </span>
                 </div>
               </div>
@@ -839,7 +847,9 @@ export const StockIntelligencePage: React.FC<StockIntelligencePageProps> = ({
               Walk-Forward Backtesting Summary vs Benchmark
             </span>
             <span className="px-2 py-0.5 rounded text-[10px] bg-slate-800 text-slate-300 border border-slate-700">
-              Win Rate: {backtest.metrics.winRatePct.toFixed(1)}%
+              {backtest.metrics.totalTrades === 0
+                ? 'No trades in this period (0 trades)'
+                : `Win Rate: ${backtest.metrics.winRatePct.toFixed(1)}% (${backtest.metrics.totalTrades} trades)`}
             </span>
           </div>
           {isBacktestOpen ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}

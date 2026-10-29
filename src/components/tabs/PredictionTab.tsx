@@ -133,13 +133,13 @@ export const PredictionTab: React.FC<PredictionTabProps> = ({ signal, quote }) =
             <div className="bg-slate-950/60 border border-slate-800/80 p-3 rounded-xl space-y-1">
               <div className="flex items-center justify-between">
                 <span className="text-slate-400 text-[11px]">4. Rule Engine</span>
-                <span className="text-[10px] text-sky-400 font-bold">{breakdown ? `${Math.round(breakdown.mlEnsemble.weight * 100)}%` : 'Unavailable'}</span>
+                <span className="text-[10px] text-sky-400 font-bold">{breakdown ? `${Math.round(((breakdown.ruleEnsemble || breakdown.mlEnsemble)!).weight * 100)}%` : 'Unavailable'}</span>
               </div>
-              <div className={`text-lg font-bold ${breakdown && breakdown.mlEnsemble.score >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                {breakdown ? `${breakdown.mlEnsemble.score >= 0 ? '+' : ''}${breakdown.mlEnsemble.score.toFixed(2)}` : 'Unavailable'}
+              <div className={`text-lg font-bold ${breakdown && ((breakdown.ruleEnsemble || breakdown.mlEnsemble)!).score >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                {breakdown ? `${((breakdown.ruleEnsemble || breakdown.mlEnsemble)!).score >= 0 ? '+' : ''}${((breakdown.ruleEnsemble || breakdown.mlEnsemble)!).score.toFixed(2)}` : 'Unavailable'}
               </div>
               <div className="text-[10px] text-slate-400">
-                {breakdown ? `Contrib: ${breakdown.mlEnsemble.contribution >= 0 ? '+' : ''}${breakdown.mlEnsemble.contribution.toFixed(3)}` : 'Unavailable'}
+                {breakdown ? `Contrib: ${((breakdown.ruleEnsemble || breakdown.mlEnsemble)!).contribution >= 0 ? '+' : ''}${((breakdown.ruleEnsemble || breakdown.mlEnsemble)!).contribution.toFixed(3)}` : 'Unavailable'}
               </div>
             </div>
           </div>

@@ -140,7 +140,7 @@ const wSum = signalWithFunds.breakdown.technicals.weight +
   signalWithFunds.breakdown.finbert.weight +
   (signalWithFunds.breakdown.fundamentals?.weight || 0) +
   signalWithFunds.breakdown.vader.weight +
-  signalWithFunds.breakdown.mlEnsemble.weight;
+  signalWithFunds.breakdown.ruleEnsemble.weight;
 assert(Math.abs(wSum - 1.0) < 1e-4, `Sum of weights must equal 1.00, got ${wSum}`);
 
 // Contribution check: sum of contributions must match unifiedScore within rounding
@@ -148,7 +148,7 @@ const contribSum = signalWithFunds.breakdown.technicals.contribution +
   signalWithFunds.breakdown.finbert.contribution +
   (signalWithFunds.breakdown.fundamentals?.contribution || 0) +
   signalWithFunds.breakdown.vader.contribution +
-  signalWithFunds.breakdown.mlEnsemble.contribution;
+  signalWithFunds.breakdown.ruleEnsemble.contribution;
 assert(Math.abs(signalWithFunds.unifiedScore - contribSum) <= 0.05, `Unified score ${signalWithFunds.unifiedScore} matches contrib sum ${contribSum}`);
 console.log(`✓ 5-Pillar Decision Synthesis & Additive Decomposition verified (Unified Score: ${signalWithFunds.unifiedScore}, Weights sum: ${wSum * 100}%).`);
 
@@ -159,7 +159,7 @@ assert(signalNoFunds.breakdown.fundamentals === undefined, 'Fundamentals must be
 const wSumNoFunds = signalNoFunds.breakdown.technicals.weight +
   signalNoFunds.breakdown.finbert.weight +
   signalNoFunds.breakdown.vader.weight +
-  signalNoFunds.breakdown.mlEnsemble.weight;
+  signalNoFunds.breakdown.ruleEnsemble.weight;
 assert(Math.abs(wSumNoFunds - 1.0) < 1e-4, `Sum of fallback weights must equal 1.00, got ${wSumNoFunds}`);
 console.log(`✓ Fallback without fundamentals verified (Weights sum: ${wSumNoFunds * 100}%, Fundamentals excluded without distortion).`);
 

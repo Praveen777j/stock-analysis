@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { StockQuote, HistoricalBar, TechnicalIndicators, BenchmarkData } from '../../types';
+import { StockQuote, HistoricalBar, TechnicalIndicators, BenchmarkData, MarketIndexItem } from '../../types';
 import { ChartsPage } from '../ChartsPage';
 import { UNIVERSE_CATALOG } from '../../universeCatalog';
 import { getIndianMarketStatus, IndianMarketSession } from '../../marketStatus';
 import { searchLiveStocks } from '../../dataEngine';
-import { getStandardHistoricalReturns } from '../../returnsCalculator';
+import { getStandardHistoricalReturns, formatQuoteTimeIst, isQuoteDelayed } from '../../returnsCalculator';
 import { IndexDetailModal } from '../IndexDetailModal';
 import {
   TrendingUp,
@@ -28,17 +28,6 @@ import {
   History,
   Calendar
 } from 'lucide-react';
-
-interface MarketIndexItem {
-  symbol: string;
-  name: string;
-  region: 'India' | 'US';
-  price: number;
-  change: number;
-  changePct: number;
-  previousClose: number;
-  timestamp: string;
-}
 
 export interface RecentStockRecord {
   ticker: string;
@@ -82,7 +71,7 @@ export const StockOverviewPage: React.FC<StockOverviewPageProps> = ({
 }) => {
   const [activeChartType, setActiveChartType] = useState<'candle' | 'line'>('candle');
   const [indices, setIndices] = useState<MarketIndexItem[]>([]);
-  const [selectedIndex, setSelectedIndex] = useState<{ symbol: string; name: string; region: 'India' | 'US' } | null>(null);
+  const [selectedIndex, setSelectedIndex] = useState<MarketIndexItem | null>(null);
   const [marketSession, setMarketSession] = useState<IndianMarketSession>(() => getIndianMarketStatus());
 
   // Search state
@@ -390,7 +379,7 @@ export const StockOverviewPage: React.FC<StockOverviewPageProps> = ({
                 <button
                   key={idx.symbol}
                   type="button"
-                  onClick={() => setSelectedIndex({ symbol: idx.symbol, name: idx.name, region: idx.region })}
+                  onClick={() => setSelectedIndex(idx)}
                   aria-label={`Open interactive details and chart for ${idx.name}`}
                   className="w-full text-left bg-slate-900/60 border border-slate-800/80 hover:border-emerald-500/60 active:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 rounded-xl p-3 transition-all font-mono group cursor-pointer"
                 >
@@ -406,6 +395,10 @@ export const StockOverviewPage: React.FC<StockOverviewPageProps> = ({
                   <div className={`flex items-center gap-1 text-xs font-bold mt-0.5 ${isPos ? 'text-emerald-400' : 'text-rose-400'}`}>
                     {isPos ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
                     <span>{isPos ? '+' : ''}{idx.change.toFixed(2)} ({isPos ? '+' : ''}{idx.changePct.toFixed(2)}%)</span>
+                  </div>
+                  <div className="flex items-center gap-1 text-[10px] text-slate-500 font-mono mt-1">
+                    <Clock className="w-3 h-3 text-slate-600 shrink-0" />
+                    <span>{formatQuoteTimeIst(idx.timestamp)}</span>
                   </div>
                   <div className="text-[10px] text-emerald-400/80 group-hover:text-emerald-300 flex items-center justify-between mt-2 pt-1.5 border-t border-slate-800/60">
                     <span>Tap for details</span>
@@ -562,11 +555,22 @@ export const StockOverviewPage: React.FC<StockOverviewPageProps> = ({
                 {quote?.lastUpdated || 'Exchange Feed Active'}
               </span>
               <span>•</span>
-              {/* Correct Data Quality Label (Bug Fix: Do not show INSUFFICIENT DATA when quote is valid) */}
-              <span className="text-emerald-400 flex items-center gap-1 font-bold">
-                <ShieldCheck className="w-3.5 h-3.5" />
-                {price > 0 && bars.length > 0 ? 'MARKET DATA VALIDATED' : 'DATA FEED PENDING'}
-              </span>
+              {/* Real data source and quote time */}
+              {(!price || price <= 0) ? (
+                <span className="text-slate-500 font-bold">
+                  Data unavailable
+                </span>
+              ) : (
+                <span className="text-slate-300 flex items-center gap-1 font-semibold">
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>
+                    Source: Yahoo Finance · quote {quote?.quoteTimestamp ? formatQuoteTimeIst(quote.quoteTimestamp) : (quote?.lastUpdated || formatQuoteTimeIst(new Date()))}
+                    {quote?.quoteTimestamp && isQuoteDelayed(quote.quoteTimestamp) && (
+                      <span className="text-amber-400 font-bold ml-1">· Delayed</span>
+                    )}
+                  </span>
+                </span>
+              )}
             </div>
           </div>
 
@@ -835,6 +839,7 @@ export const StockOverviewPage: React.FC<StockOverviewPageProps> = ({
         symbol={selectedIndex?.symbol || ''}
         name={selectedIndex?.name || ''}
         region={selectedIndex?.region || 'India'}
+        indexItem={selectedIndex}
       />
     </div>
   );
