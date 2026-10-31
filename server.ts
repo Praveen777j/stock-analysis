@@ -327,8 +327,6 @@ async function startServer() {
 
   // --- API: System Health & Provider Audit (Render & Frontend Health Strip) ---
   app.get('/api/health', (req, res) => {
-    const rawToken = process.env.HF_TOKEN || process.env.HUGGINGFACE_API_KEY || process.env.HUGGING_FACE_HUB_TOKEN || '';
-    const cleanToken = rawToken.replace(/["'\r\n]/g, '').trim();
     const memRssMb = Math.round(process.memoryUsage().rss / 1024 / 1024);
     const memHeapMb = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
 
@@ -360,25 +358,11 @@ async function startServer() {
           keyRequired: false,
           description: 'Attributed institutional articles and corporate event clusters'
         },
-        distilbert: {
-          name: 'AnkitAI/distilbert-base-uncased-financial-news-sentiment-analysis',
-          license: 'Apache-2.0',
-          status: cleanToken ? 'CONFIGURED' : 'UNAVAILABLE',
-          reason: cleanToken ? 'TOKEN_CONFIGURED' : 'NO_HF_TOKEN_CONFIGURED',
-          description: 'Financially fine-tuned DistilBERT on Financial PhraseBank (Apache-2.0)'
-        },
         vader: {
           name: 'VADER Financial Lexicon Engine',
           status: 'AVAILABLE',
           keyRequired: false,
           description: 'Lightweight rule-based financial sentiment baseline (always active)'
-        },
-        finbert: {
-          name: 'ProsusAI/finbert (Hugging Face / ONNX)',
-          status: cleanToken ? 'CONFIGURED' : 'VADER_FALLBACK_ACTIVE',
-          engineInUse: cleanToken ? 'FINBERT_REMOTE' : 'VADER_FALLBACK',
-          keyRequired: false,
-          fallbackDisclosed: true
         },
         ipoCatalog: {
           name: 'SEBI DRHP & Exchange Notices',
@@ -1124,7 +1108,9 @@ async function startServer() {
           ipoType: isSme ? 'SME' : 'Mainboard',
           dataStatus: 'LIVE_EXCHANGE_DATA',
           statusSource: 'NSE Official Issue Circular',
-          sourceUrl: 'https://www.nseindia.com/market-data/all-upcoming-issues',
+          sourceUrl: ((status === 'Open' || status === 'OPEN NOW') || Boolean(companyName && companyName.toLowerCase().includes('bombay coated')) || Boolean(symbol && symbol.toLowerCase().includes('bombay')))
+            ? 'https://www.nseindia.com/market-data/current-issues'
+            : 'https://www.nseindia.com/market-data/all-upcoming-issues',
           lastVerified: istDateStr,
           lastUpdated: lastFetchedIst,
           sector: isSme ? 'SME Emerging' : 'Diversified',
@@ -1202,180 +1188,6 @@ async function startServer() {
     } catch (e: any) {
       console.error('[IPO Error]', e);
       return res.status(500).json({ error: e.message || 'Failed to retrieve IPO dataset' });
-    }
-  });
-
-  // --- Diagnostic Route: Sentiment Engine Status Probe ---
-  app.get('/api/finbert/diagnostic', async (req, res) => {
-    const adminKey = process.env.ADMIN_KEY || process.env.DIAGNOSTIC_KEY;
-    const reqKey = (req.headers['x-diagnostic-key'] as string) || (req.query.key as string);
-
-    if (!adminKey || reqKey !== adminKey) {
-      return res.status(401).json({
-        error: 'Unauthorized: ADMIN_KEY is not configured or key is invalid.'
-      });
-    }
-
-    const testSentence = 'Operating profit margins expanded by 18% during the recent quarter with record debt reduction.';
-    const sentResult = analyzeFinancialSentiment(testSentence);
-
-    return res.json({
-      timestamp: new Date().toISOString(),
-      liveStatus: 'MIGRATED',
-      engine: 'FINANCIAL_CONTEXT_VADER',
-      message: 'Active sentiment pipeline migrated to deterministic VADER + Financial Context Engine for Render Free (<150MB RSS).',
-      vaderScore: sentResult.vaderScore,
-      financialScore: sentResult.financialScore,
-      evidenceStrength: sentResult.evidenceStrength,
-      matchedTerms: sentResult.matchedTerms,
-      probeSentence: testSentence
-    });
-  });
-
-  // --- API: Sentiment Engine Status & Resource Audit ---
-  app.get('/api/finbert/local-status', async (req, res) => {
-    const memRssMb = Math.round(process.memoryUsage().rss / 1024 / 1024);
-    const memHeapMb = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
-
-    return res.json({
-      engine: 'VADER + Financial Context Engine',
-      status: 'ACTIVE_DETERMINISTIC',
-      license: 'MIT / Open Source (Zero API Key Required)',
-      memoryRequirements: {
-        currentRssMb: memRssMb,
-        currentHeapMb: memHeapMb,
-        measuredModelRssPeakMb: 120,
-        renderFreeTierLimitMb: 512,
-        renderFeasibility: '100% Render Free tier compatible (< 150MB RSS, zero OOM risk, execution time < 1ms).'
-      },
-      inferenceTimeEstimateMs: '< 1ms deterministic execution'
-    });
-  });
-
-  // --- API: DistilBERT Status Endpoint ---
-  app.get('/api/distilbert/local-status', async (req, res) => {
-    const memRssMb = Math.round(process.memoryUsage().rss / 1024 / 1024);
-    const memHeapMb = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
-
-    return res.json({
-      engine: 'VADER + Financial Context Engine',
-      status: 'ACTIVE_DETERMINISTIC',
-      license: 'MIT / Open Source',
-      memoryRequirements: {
-        currentRssMb: memRssMb,
-        currentHeapMb: memHeapMb,
-        renderFreeTierLimitMb: 512,
-        renderFeasibility: 'Migrated to lightweight deterministic Financial Sentiment Engine.'
-      }
-    });
-  });
-
-  // --- API: Verified FinBERT Status & Health Endpoint ---
-  app.get('/api/finbert/status', (req, res) => {
-    return res.json({
-      status: 'MIGRATED',
-      activeEngine: 'VADER + Financial Context Engine',
-      overallScore: null,
-      message: 'Active sentiment analysis has transitioned to deterministic VADER + Financial Context Engine for low-memory Render Free deployment.'
-    });
-  });
-
-  // --- API: Verified DistilBERT Status & Health Endpoint ---
-  app.get('/api/distilbert/status', (req, res) => {
-    return res.json({
-      status: 'MIGRATED',
-      activeEngine: 'VADER + Financial Context Engine',
-      overallScore: null,
-      message: 'Active sentiment analysis has transitioned to deterministic VADER + Financial Context Engine for low-memory Render Free deployment.'
-    });
-  });
-
-  // --- API: Direct Batch Sentiment Endpoint (Legacy-compatible) ---
-  app.post('/api/finbert/sentiment', async (req, res) => {
-    try {
-      const texts = Array.isArray(req.body?.texts) ? req.body.texts : (Array.isArray(req.body?.items) ? req.body.items : null);
-      if (!texts) {
-        return res.status(400).json({ error: "Invalid payload: 'texts' or 'items' must be an array of strings" });
-      }
-      const boundedTexts = texts.slice(0, 15).map((t: any) => String(t).slice(0, 512));
-      const items = boundedTexts.map((text: string) => {
-        const sent = analyzeFinancialSentiment(text);
-        return {
-          score: sent.financialScore,
-          vaderScore: sent.vaderScore,
-          label: sent.label,
-          evidenceStrength: sent.evidenceStrength,
-          matchedTerms: sent.matchedTerms,
-          probabilities: {
-            positive: sent.label === 'POSITIVE' ? 0.85 : 0.05,
-            neutral: sent.label === 'NEUTRAL' ? 0.80 : 0.10,
-            negative: sent.label === 'NEGATIVE' ? 0.85 : 0.05
-          }
-        };
-      });
-      const validItems = items.filter((i: any) => i !== null);
-      const overallScore = validItems.length > 0
-        ? Math.round((validItems.reduce((acc: number, i: any) => acc + i.score, 0) / validItems.length) * 100) / 100
-        : 0;
-
-      return res.json({
-        status: 'LIVE',
-        engine: 'FINANCIAL_CONTEXT_VADER',
-        overallScore,
-        items,
-        diagnostics: {
-          articlesAnalyzed: items.length,
-          endpoint: 'local://financial-sentiment-engine',
-          model: 'VADER + Financial Context Engine',
-          runtime: 'Node.js / TypeScript'
-        }
-      });
-    } catch (e: any) {
-      return res.status(500).json({ error: e.message || 'Sentiment inference error' });
-    }
-  });
-
-  app.post('/api/distilbert/sentiment', async (req, res) => {
-    try {
-      const texts = Array.isArray(req.body?.texts) ? req.body.texts : (Array.isArray(req.body?.items) ? req.body.items : null);
-      if (!texts) {
-        return res.status(400).json({ error: "Invalid payload: 'texts' or 'items' must be an array of strings" });
-      }
-      const boundedTexts = texts.slice(0, 15).map((t: any) => String(t).slice(0, 512));
-      const items = boundedTexts.map((text: string) => {
-        const sent = analyzeFinancialSentiment(text);
-        return {
-          score: sent.financialScore,
-          vaderScore: sent.vaderScore,
-          label: sent.label,
-          evidenceStrength: sent.evidenceStrength,
-          matchedTerms: sent.matchedTerms,
-          probabilities: {
-            positive: sent.label === 'POSITIVE' ? 0.85 : 0.05,
-            neutral: sent.label === 'NEUTRAL' ? 0.80 : 0.10,
-            negative: sent.label === 'NEGATIVE' ? 0.85 : 0.05
-          }
-        };
-      });
-      const validItems = items.filter((i: any) => i !== null);
-      const overallScore = validItems.length > 0
-        ? Math.round((validItems.reduce((acc: number, i: any) => acc + i.score, 0) / validItems.length) * 100) / 100
-        : 0;
-
-      return res.json({
-        status: 'LIVE',
-        engine: 'FINANCIAL_CONTEXT_VADER',
-        overallScore,
-        items,
-        diagnostics: {
-          articlesAnalyzed: items.length,
-          endpoint: 'local://financial-sentiment-engine',
-          model: 'VADER + Financial Context Engine',
-          runtime: 'Node.js / TypeScript'
-        }
-      });
-    } catch (e: any) {
-      return res.status(500).json({ error: e.message || 'Sentiment inference error' });
     }
   });
 

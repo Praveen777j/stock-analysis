@@ -147,10 +147,30 @@ export const FINANCIAL_PHRASE_DICTIONARY: FinancialPhraseRule[] = [
   { phrase: 'missed estimates', category: 'EARNINGS_REVENUE', valence: 'NEGATIVE', weight: -2.5 },
   { phrase: 'revenue decline', category: 'EARNINGS_REVENUE', valence: 'NEGATIVE', weight: -2.3 },
   { phrase: 'profit fall', category: 'EARNINGS_REVENUE', valence: 'NEGATIVE', weight: -2.5 },
+  { phrase: 'profit falls', category: 'EARNINGS_REVENUE', valence: 'NEGATIVE', weight: -2.6 },
+  { phrase: 'profit fell', category: 'EARNINGS_REVENUE', valence: 'NEGATIVE', weight: -2.6 },
+  { phrase: 'profit falling', category: 'EARNINGS_REVENUE', valence: 'NEGATIVE', weight: -2.6 },
   { phrase: 'profit drop', category: 'EARNINGS_REVENUE', valence: 'NEGATIVE', weight: -2.4 },
   { phrase: 'profit drops', category: 'EARNINGS_REVENUE', valence: 'NEGATIVE', weight: -2.4 },
+  { phrase: 'profit dropped', category: 'EARNINGS_REVENUE', valence: 'NEGATIVE', weight: -2.5 },
+  { phrase: 'profit dropping', category: 'EARNINGS_REVENUE', valence: 'NEGATIVE', weight: -2.5 },
+  { phrase: 'profit plunge', category: 'EARNINGS_REVENUE', valence: 'NEGATIVE', weight: -2.8 },
   { phrase: 'profit plunges', category: 'EARNINGS_REVENUE', valence: 'NEGATIVE', weight: -2.8 },
+  { phrase: 'profit plunged', category: 'EARNINGS_REVENUE', valence: 'NEGATIVE', weight: -2.8 },
+  { phrase: 'profit plunging', category: 'EARNINGS_REVENUE', valence: 'NEGATIVE', weight: -2.8 },
   { phrase: 'profit slumps', category: 'EARNINGS_REVENUE', valence: 'NEGATIVE', weight: -2.7 },
+  { phrase: 'profit slumped', category: 'EARNINGS_REVENUE', valence: 'NEGATIVE', weight: -2.7 },
+  { phrase: 'profit down', category: 'EARNINGS_REVENUE', valence: 'NEGATIVE', weight: -2.4 },
+  { phrase: 'net profit plunges', category: 'EARNINGS_REVENUE', valence: 'NEGATIVE', weight: -2.9 },
+  { phrase: 'net profit plunged', category: 'EARNINGS_REVENUE', valence: 'NEGATIVE', weight: -2.9 },
+  { phrase: 'net profit fell', category: 'EARNINGS_REVENUE', valence: 'NEGATIVE', weight: -2.7 },
+  { phrase: 'net profit falls', category: 'EARNINGS_REVENUE', valence: 'NEGATIVE', weight: -2.7 },
+  { phrase: 'net profit drops', category: 'EARNINGS_REVENUE', valence: 'NEGATIVE', weight: -2.7 },
+  { phrase: 'net profit dropped', category: 'EARNINGS_REVENUE', valence: 'NEGATIVE', weight: -2.7 },
+  { phrase: 'net profit down', category: 'EARNINGS_REVENUE', valence: 'NEGATIVE', weight: -2.5 },
+  { phrase: 'on fire', category: 'GROWTH_EXPANSION', valence: 'POSITIVE', weight: 2.4 },
+  { phrase: 'shares on fire', category: 'GROWTH_EXPANSION', valence: 'POSITIVE', weight: 2.8 },
+  { phrase: 'stock on fire', category: 'GROWTH_EXPANSION', valence: 'POSITIVE', weight: 2.8 },
   { phrase: 'net loss', category: 'EARNINGS_REVENUE', valence: 'NEGATIVE', weight: -2.3 },
   { phrase: 'losses widen', category: 'EARNINGS_REVENUE', valence: 'NEGATIVE', weight: -2.6 },
   { phrase: 'losses widened', category: 'EARNINGS_REVENUE', valence: 'NEGATIVE', weight: -2.6 },
@@ -271,8 +291,16 @@ export function calculateVaderScore(text: string): {
     const rawWord = words[i];
     const cleanWord = rawWord.toLowerCase();
 
-    if (VADER_FINANCIAL_LEXICON[cleanWord] !== undefined) {
-      let v = VADER_FINANCIAL_LEXICON[cleanWord];
+    if (VADER_FINANCIAL_LEXICON[cleanWord] !== undefined || (cleanWord === 'fire' && i > 0 && words[i - 1].toLowerCase() === 'on')) {
+      let v = VADER_FINANCIAL_LEXICON[cleanWord] ?? (cleanWord === 'fire' ? 2.6 : 0);
+
+      // Look ahead for "profit plunges/falls/drops/down" - when profit falls, the statement is negative
+      if (cleanWord === 'profit' && i + 1 < words.length) {
+        const nextWord = words[i + 1].toLowerCase();
+        if (['plunge', 'plunges', 'plunged', 'plunging', 'fall', 'falls', 'fell', 'falling', 'drop', 'drops', 'dropped', 'dropping', 'slump', 'slumps', 'slumped', 'down'].includes(nextWord)) {
+          v = -2.8;
+        }
+      }
 
       // All-caps booster
       if (rawWord === rawWord.toUpperCase() && rawWord.length > 1) {
@@ -613,11 +641,11 @@ export function analyzeFinancialSentiment(
     unifiedScore = Math.max(-1.0, Math.min(1.0, unifiedScore));
   }
 
-  // Determine directional label
+  // Determine directional label: strictly agrees with score
   let label: 'POSITIVE' | 'NEUTRAL' | 'NEGATIVE' = 'NEUTRAL';
-  if (unifiedScore >= 0.06) {
+  if (unifiedScore >= 0.05) {
     label = 'POSITIVE';
-  } else if (unifiedScore <= -0.06) {
+  } else if (unifiedScore <= -0.05) {
     label = 'NEGATIVE';
   } else {
     label = 'NEUTRAL';
@@ -637,6 +665,16 @@ export function analyzeFinancialSentiment(
   const isUncertainOrAttributed = ctxRes.detail.uncertaintyTerms.length > 0;
   const financialMagnitude = Math.round(evidenceCount * (1 + Math.abs(unifiedScore)) * 10) / 10;
 
+  // Evidence strength: Replace INSUFFICIENT with real label when item has a score
+  let evidenceStrength: 'VERY_STRONG' | 'STRONG' | 'MODERATE' | 'WEAK' | 'NEUTRAL' | 'UNCERTAIN' | 'INSUFFICIENT' = ctxRes.detail.evidenceStrength;
+  if (unifiedScore !== 0 || vaderRes.compound !== 0 || evidenceCount > 0) {
+    if (evidenceStrength === 'INSUFFICIENT') {
+      evidenceStrength = Math.abs(unifiedScore) >= 0.25 ? 'MODERATE' : 'WEAK';
+    }
+  } else {
+    evidenceStrength = 'INSUFFICIENT';
+  }
+
   return {
     score: unifiedScore,
     financialScore: unifiedScore,
@@ -645,7 +683,7 @@ export function analyzeFinancialSentiment(
     vaderCompound: vaderRes.compound,
     keywordScore: ctxRes.keywordScore,
     confidence,
-    evidenceStrength: ctxRes.detail.evidenceStrength,
+    evidenceStrength,
     financialMagnitude,
     isHeadlineOnly,
     isMixed: ctxRes.detail.isMixed,

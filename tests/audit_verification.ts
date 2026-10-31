@@ -219,7 +219,7 @@ console.log('✓ Feature 3 (Technicals): Pivot order S3 < S2 < S1 < P < R1 < R2 
 
 // 6.4 Feature 4 & 5: News & Social Provenance Invariants
 assert(mockSentiment.newsCount === 4, 'News count must reflect actual articles');
-assert(mockSentiment.finbertScore === 0.0 || mockSentiment.finbertScore === null, 'FinBERT score must be transparent');
+assert(mockSentiment.finbertScore === 0.0 || mockSentiment.finbertScore === null, 'Sentiment engine offline score must be transparent');
 console.log('✓ Feature 4 & 5 (News & Reddit): Data counts and sentiment indicators reflect actual sources.');
 
 // 6.5 Feature 6: Company Financials Invariants

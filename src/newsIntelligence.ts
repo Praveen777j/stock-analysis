@@ -505,7 +505,9 @@ export function deduplicateAndGroupNewsArticles(rawArticles: any[]): GroupedNews
 
     classifiedArticles.push(classified);
 
-    const eventId = classification.corporateEventId || `general-${art.publisher.toLowerCase().replace(/[^a-z0-9]/g, '')}-${art.date.replace(/[^a-z0-9]/gi, '')}`;
+    const normSlug = normalizeHeadline(art.title).slice(0, 28) || 'story';
+    const pubSlug = (art.publisher || '').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 12);
+    const eventId = classification.corporateEventId || `routine-${normSlug}-${pubSlug}`;
     const eventTitle = classification.corporateEventTitle || (classification.corporateEventType === 'ROUTINE' ? 'Routine Financial Media Disclosure' : 'General Market & Corporate Coverage');
 
     let cluster = clusterMap.get(eventId);
@@ -565,7 +567,7 @@ export function deduplicateAndGroupNewsArticles(rawArticles: any[]): GroupedNews
  * for Indian blue-chips and major international stocks.
  */
 export const KNOWN_COMPANY_ALIASES: Record<string, string[]> = {
-  'RELIANCE': ['reliance industries', 'reliance', 'ril', 'jio', 'reliance retail', 'mukesh ambani'],
+  'RELIANCE': ['reliance industries', 'ril', 'jio', 'reliance retail', 'mukesh ambani'],
   'TCS': ['tata consultancy services', 'tcs', 'tata consultancy'],
   'INFY': ['infosys', 'infy', 'salil parekh'],
   'HDFCBANK': ['hdfc bank', 'hdfcbank', 'hdfc'],
@@ -621,11 +623,20 @@ export const KNOWN_COMPANY_ALIASES: Record<string, string[]> = {
 
 export function getCompanyAliases(ticker: string, companyName?: string): string[] {
   const cleanTicker = ticker.replace('.NS', '').replace('.BO', '').trim().toUpperCase();
+  const isRelianceNS = ticker.toUpperCase() === 'RELIANCE.NS' || ticker.toUpperCase() === 'RELIANCE';
   const list = new Set<string>();
-  list.add(cleanTicker.toLowerCase());
+
+  // Add ticker symbol if not generic
+  if (cleanTicker !== 'RELIANCE') {
+    list.add(cleanTicker.toLowerCase());
+  }
 
   if (KNOWN_COMPANY_ALIASES[cleanTicker]) {
     for (const a of KNOWN_COMPANY_ALIASES[cleanTicker]) {
+      // Exclude Reliance Retail unless the ticker is RELIANCE.NS
+      if (a === 'reliance retail' && !isRelianceNS) continue;
+      // Do not add generic "reliance" standalone without qualifiers
+      if (a === 'reliance') continue;
       list.add(a.toLowerCase());
     }
   }
@@ -635,12 +646,9 @@ export function getCompanyAliases(ticker: string, companyName?: string): string[
       .replace(/\s+(ltd|limited|corp|corporation|inc|incorporated|plc|llc|co)\.?$/i, '')
       .trim()
       .toLowerCase();
+    // Keep full clean company name as alias; do NOT split into single generic words
     if (cleanComp.length > 2) {
       list.add(cleanComp);
-      const words = cleanComp.split(/\s+/).filter(w => w.length >= 4);
-      for (const w of words) {
-        list.add(w);
-      }
     }
   }
 
@@ -781,27 +789,64 @@ export function calculateRelevanceScore(
   companyName: string,
   aliases: string[]
 ): RelevanceScoreResult {
-  const cleanTicker = ticker.replace('.NS', '').replace('.BO', '').trim().toLowerCase();
+  const cleanTicker = ticker.replace('.NS', '').replace('.BO', '').trim().toUpperCase();
+  const isReliance = cleanTicker === 'RELIANCE';
+  const isRelianceNS = ticker.toUpperCase() === 'RELIANCE.NS' || cleanTicker === 'RELIANCE';
   const cleanComp = (companyName || '').toLowerCase().replace(/\s+(ltd|limited|corp|inc)\.?$/i, '').trim();
   const title = (article.title || '').toLowerCase();
   const summary = (article.summary || '').toLowerCase();
+  const fullText = `${title} ${summary}`;
+
+  // 0. Known false matches exclusion for Reliance:
+  // "Reliance Power", "Reliance Capital", "Reliance Infra" (and "Reliance Infrastructure") are distinct ADAG entities.
+  // "Reliance Retail" is only valid if the ticker is RELIANCE.NS.
+  if (isReliance) {
+    const hasFalseMatch = /\breliance\s+(power|capital|infra(?:structure)?|naval|communications?|home\s*finance)\b/i.test(fullText);
+    const hasExplicitRIL = /\b(reliance\s+industries|ril|jio)\b/i.test(fullText);
+    if (hasFalseMatch && !hasExplicitRIL) {
+      return {
+        score: 0,
+        isRelated: false,
+        matchedEntity: 'General Market / Global'
+      };
+    }
+
+    if (!isRelianceNS && /\breliance\s+retail\b/i.test(fullText) && !hasExplicitRIL) {
+      return {
+        score: 0,
+        isRelated: false,
+        matchedEntity: 'General Market / Global'
+      };
+    }
+  }
 
   let score = 0;
   let matchedEntity = '';
 
-  // 1. Title matches
-  const tickerRegex = new RegExp(`\\b${cleanTicker}\\b`, 'i');
-  if (tickerRegex.test(title)) {
+  // 1. Title matches - strictly with word boundaries \b
+  const tickerLower = cleanTicker.toLowerCase();
+  const tickerRegex = new RegExp(`\\b${tickerLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+
+  const matchesTickerInTitle = isReliance
+    ? (/\b(ril|reliance\s+industries)\b/i.test(title) || (/\breliance\b/i.test(title) && !/\breliance\s+(power|capital|infra(?:structure)?|naval|comm|retail)/i.test(title)))
+    : tickerRegex.test(title);
+
+  if (matchesTickerInTitle) {
     score += 120;
     matchedEntity = ticker.toUpperCase();
-  } else if (cleanComp && title.includes(cleanComp)) {
-    score += 100;
-    matchedEntity = companyName;
-  } else {
+  } else if (cleanComp) {
+    const compRegex = new RegExp(`\\b${cleanComp.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+    if (compRegex.test(title)) {
+      score += 100;
+      matchedEntity = companyName;
+    }
+  }
+
+  if (score === 0) {
     for (const alias of aliases) {
       if (alias.length < 3) continue;
       const aliasRegex = new RegExp(`\\b${alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
-      if (aliasRegex.test(title) || (alias.length >= 4 && title.includes(alias))) {
+      if (aliasRegex.test(title)) {
         score += 80;
         matchedEntity = alias.charAt(0).toUpperCase() + alias.slice(1);
         break;
@@ -809,17 +854,22 @@ export function calculateRelevanceScore(
     }
   }
 
-  // 2. Summary matches
-  if (tickerRegex.test(summary)) {
+  // 2. Summary matches - strictly with word boundaries \b
+  const matchesTickerInSummary = isReliance
+    ? (/\b(ril|reliance\s+industries)\b/i.test(summary) || (/\breliance\b/i.test(summary) && !/\breliance\s+(power|capital|infra(?:structure)?|naval|comm|retail)/i.test(summary)))
+    : tickerRegex.test(summary);
+
+  if (matchesTickerInSummary) {
     score += 50;
     if (!matchedEntity) matchedEntity = ticker.toUpperCase();
-  } else if (cleanComp && summary.includes(cleanComp)) {
+  } else if (cleanComp && new RegExp(`\\b${cleanComp.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(summary)) {
     score += 40;
     if (!matchedEntity) matchedEntity = companyName;
   } else {
     for (const alias of aliases) {
       if (alias.length < 3) continue;
-      if (summary.includes(alias)) {
+      const aliasRegex = new RegExp(`\\b${alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+      if (aliasRegex.test(summary)) {
         score += 25;
         if (!matchedEntity) matchedEntity = alias.charAt(0).toUpperCase() + alias.slice(1);
         break;
@@ -1114,13 +1164,10 @@ export function getCachedNews<T>(key: string): { data: T; isStale: boolean; cach
   const item = inMemoryNewsCache.get(key);
   if (!item) return null;
   const now = Date.now();
-  if (now > item.expiresAt) {
-    inMemoryNewsCache.delete(key);
-    return null;
-  }
+  const isStale = now > item.expiresAt;
   return {
     data: item.data,
-    isStale: now - item.cachedAt > 60000,
+    isStale,
     cachedAt: item.cachedAt
   };
 }

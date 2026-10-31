@@ -28,12 +28,35 @@ import {
 export const UpcomingIPOsTab: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<
-    'ALL' | 'UPCOMING' | 'OPEN_NOW' | 'CLOSED_PENDING' | 'ALLOTMENT_DONE' | 'LISTED' | 'SME'
+    'ALL' | 'UPCOMING' | 'OPEN_NOW' | 'CLOSED_PENDING' | 'ALLOTMENT_DONE' | 'LISTED' | 'DRAFT' | 'SME'
   >('ALL');
   const [ipos, setIpos] = useState<IPODetails[]>([]);
   const [selectedIPO, setSelectedIPO] = useState<IPODetails | null>(null);
   const [dataStatus, setDataStatus] = useState<string>('LOADING');
   const [isLoading, setIsLoading] = useState(true);
+
+  // Categorize every IPO into exactly one bucket so counters sum to total list count
+  const getIpoBucket = (ipo: IPODetails): 'OPEN' | 'PENDING' | 'ALLOTMENT_DONE' | 'UPCOMING' | 'LISTED' | 'DRAFT' => {
+    const status = ipo.status;
+    const openDate = (ipo.openDate || '').toLowerCase();
+    if (status === 'Draft / DRHP' || status === 'Draft DRHP' || status === 'Unverified' || openDate.includes('drhp') || openDate.includes('draft')) {
+      return 'DRAFT';
+    }
+    if (status === 'Open' || status === 'OPEN NOW') return 'OPEN';
+    if (status === 'Closed (allotment pending)' || status === 'CLOSED') return 'PENDING';
+    if (status === 'Allotment done') return 'ALLOTMENT_DONE';
+    if (status === 'Upcoming' || status === 'UPCOMING') return 'UPCOMING';
+    if (status === 'Listed' || status === 'LISTED' || ipo.isHistorical) return 'LISTED';
+    return 'DRAFT';
+  };
+
+  const getReferenceUrl = (ipo: IPODetails) => {
+    const text = `${ipo.name || ''} ${ipo.companyName || ''} ${ipo.symbol || ''}`.toLowerCase();
+    if (text.includes('bombay coated') || text.includes('bombaycoat') || ipo.status === 'Open' || ipo.status === 'OPEN NOW') {
+      return 'https://www.nseindia.com/market-data/current-issues';
+    }
+    return ipo.sourceUrl || 'https://www.nseindia.com/market-data/all-upcoming-issues';
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -77,6 +100,13 @@ export const UpcomingIPOsTab: React.FC = () => {
     return () => { isMounted = false; };
   }, []);
 
+  const openCount = ipos.filter(i => getIpoBucket(i) === 'OPEN').length;
+  const pendingCount = ipos.filter(i => getIpoBucket(i) === 'PENDING').length;
+  const allotmentDoneCount = ipos.filter(i => getIpoBucket(i) === 'ALLOTMENT_DONE').length;
+  const upcomingCount = ipos.filter(i => getIpoBucket(i) === 'UPCOMING').length;
+  const listedCount = ipos.filter(i => getIpoBucket(i) === 'LISTED').length;
+  const draftCount = ipos.filter(i => getIpoBucket(i) === 'DRAFT').length;
+
   const filteredIPOs = ipos.filter(ipo => {
     const q = searchQuery.trim().toLowerCase();
     const name = (ipo.name || ipo.companyName || '').toLowerCase();
@@ -91,11 +121,12 @@ export const UpcomingIPOsTab: React.FC = () => {
       industry.includes(q);
 
     if (!matchesQuery) return false;
-    if (filterStatus === 'UPCOMING') return ipo.status === 'Upcoming' || ipo.status === 'UPCOMING';
-    if (filterStatus === 'OPEN_NOW') return ipo.status === 'Open' || ipo.status === 'OPEN NOW';
-    if (filterStatus === 'CLOSED_PENDING') return ipo.status === 'Closed (allotment pending)' || ipo.status === 'CLOSED';
-    if (filterStatus === 'ALLOTMENT_DONE') return ipo.status === 'Allotment done';
-    if (filterStatus === 'LISTED') return ipo.status === 'Listed' || ipo.status === 'LISTED' || ipo.isHistorical;
+    if (filterStatus === 'UPCOMING') return getIpoBucket(ipo) === 'UPCOMING';
+    if (filterStatus === 'OPEN_NOW') return getIpoBucket(ipo) === 'OPEN';
+    if (filterStatus === 'CLOSED_PENDING') return getIpoBucket(ipo) === 'PENDING';
+    if (filterStatus === 'ALLOTMENT_DONE') return getIpoBucket(ipo) === 'ALLOTMENT_DONE';
+    if (filterStatus === 'LISTED') return getIpoBucket(ipo) === 'LISTED';
+    if (filterStatus === 'DRAFT') return getIpoBucket(ipo) === 'DRAFT';
     if (filterStatus === 'SME') return ipo.market === 'SME' || ipo.ipoType === 'SME';
     return true;
   });
@@ -193,7 +224,7 @@ export const UpcomingIPOsTab: React.FC = () => {
                 : 'bg-indigo-950/80 text-indigo-400 border-indigo-800'
             }`}>
               <Activity className="w-3.5 h-3.5" />
-              {dataStatus === 'LIVE_EXCHANGE_DATA' ? 'Live Exchange Feed' : 'Verified Catalog'} · {ipos.length} Tracked Issues
+              {dataStatus === 'LIVE_EXCHANGE_DATA' ? 'Live Exchange Feed' : 'Source: Reference Catalog'} · {ipos.length} Tracked Issues
             </span>
           </div>
         </div>
@@ -204,42 +235,49 @@ export const UpcomingIPOsTab: React.FC = () => {
           <span>{IPO_CATALOG_DISCLOSURE}</span>
         </div>
 
-        {/* 5 Quick Stat Strip */}
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 text-xs font-mono pt-1">
+        {/* 6 Quick Stat Strip - Sum equals total tracked IPOs */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 text-xs font-mono pt-1">
           <div className="bg-slate-950/60 border border-slate-800 p-2.5 rounded-xl">
             <span className="text-slate-400 text-[10px] block">Currently Open</span>
             <div className="text-base font-bold text-emerald-400 mt-0.5">
-              {ipos.filter(i => i.status === 'Open' || i.status === 'OPEN NOW').length} Active
+              {openCount} Active
             </div>
             <div className="text-[9px] text-slate-500">Active bidding window</div>
           </div>
           <div className="bg-slate-950/60 border border-slate-800 p-2.5 rounded-xl">
             <span className="text-slate-400 text-[10px] block">Allotment Pending</span>
             <div className="text-base font-bold text-amber-400 mt-0.5">
-              {ipos.filter(i => i.status === 'Closed (allotment pending)').length} Issues
+              {pendingCount} Issues
             </div>
             <div className="text-[9px] text-slate-500">Awaiting allotment</div>
           </div>
           <div className="bg-slate-950/60 border border-slate-800 p-2.5 rounded-xl">
             <span className="text-slate-400 text-[10px] block">Allotment Done</span>
             <div className="text-base font-bold text-cyan-400 mt-0.5">
-              {ipos.filter(i => i.status === 'Allotment done').length} Finalized
+              {allotmentDoneCount} Finalized
             </div>
             <div className="text-[9px] text-slate-500">Basis finalized</div>
           </div>
           <div className="bg-slate-950/60 border border-slate-800 p-2.5 rounded-xl">
             <span className="text-slate-400 text-[10px] block">Upcoming</span>
             <div className="text-base font-bold text-indigo-400 mt-0.5">
-              {ipos.filter(i => i.status === 'Upcoming' || i.status === 'UPCOMING').length} Issues
+              {upcomingCount} Issues
             </div>
             <div className="text-[9px] text-slate-500">Future scheduled</div>
           </div>
           <div className="bg-slate-950/60 border border-slate-800 p-2.5 rounded-xl">
             <span className="text-slate-400 text-[10px] block">Historical Listings</span>
             <div className="text-base font-bold text-blue-400 mt-0.5">
-              {ipos.filter(i => i.status === 'Listed' || i.status === 'LISTED' || i.isHistorical).length} Verified
+              {listedCount} Listed
             </div>
             <div className="text-[9px] text-slate-500">Public debuts</div>
+          </div>
+          <div className="bg-slate-950/60 border border-slate-800 p-2.5 rounded-xl">
+            <span className="text-slate-400 text-[10px] block">Draft / DRHP</span>
+            <div className="text-base font-bold text-purple-400 mt-0.5">
+              {draftCount} Filings
+            </div>
+            <div className="text-[9px] text-slate-500">Draft / DRHP: {draftCount}</div>
           </div>
         </div>
       </div>
@@ -250,7 +288,7 @@ export const UpcomingIPOsTab: React.FC = () => {
           <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
           <input
             type="text"
-            placeholder="Search IPOs (e.g. Jio, Swiggy, Hyundai)..."
+            placeholder="Search IPOs (e.g. Jio, Swiggy, Tonbo)..."
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
             className="w-full pl-9 pr-4 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors font-mono"
@@ -276,7 +314,7 @@ export const UpcomingIPOsTab: React.FC = () => {
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
             }`}
           >
-            Open ({ipos.filter(i => i.status === 'Open' || i.status === 'OPEN NOW').length})
+            Open ({openCount})
           </button>
           <button
             onClick={() => setFilterStatus('CLOSED_PENDING')}
@@ -286,7 +324,7 @@ export const UpcomingIPOsTab: React.FC = () => {
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
             }`}
           >
-            Pending ({ipos.filter(i => i.status === 'Closed (allotment pending)').length})
+            Pending ({pendingCount})
           </button>
           <button
             onClick={() => setFilterStatus('ALLOTMENT_DONE')}
@@ -296,7 +334,7 @@ export const UpcomingIPOsTab: React.FC = () => {
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
             }`}
           >
-            Allotment Done ({ipos.filter(i => i.status === 'Allotment done').length})
+            Allotment Done ({allotmentDoneCount})
           </button>
           <button
             onClick={() => setFilterStatus('UPCOMING')}
@@ -306,7 +344,7 @@ export const UpcomingIPOsTab: React.FC = () => {
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
             }`}
           >
-            Upcoming ({ipos.filter(i => i.status === 'Upcoming' || i.status === 'UPCOMING').length})
+            Upcoming ({upcomingCount})
           </button>
           <button
             onClick={() => setFilterStatus('LISTED')}
@@ -316,7 +354,17 @@ export const UpcomingIPOsTab: React.FC = () => {
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
             }`}
           >
-            Listed ({ipos.filter(i => i.status === 'Listed' || i.status === 'LISTED' || i.isHistorical).length})
+            Listed ({listedCount})
+          </button>
+          <button
+            onClick={() => setFilterStatus('DRAFT')}
+            className={`px-2.5 py-1.5 rounded-lg font-semibold transition-colors ${
+              filterStatus === 'DRAFT'
+                ? 'bg-emerald-500 text-slate-950 font-bold'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+            }`}
+          >
+            Draft / DRHP ({draftCount})
           </button>
           <button
             onClick={() => setFilterStatus('SME')}
@@ -385,7 +433,11 @@ export const UpcomingIPOsTab: React.FC = () => {
                         <div className="flex items-center gap-2 font-mono text-[11px] text-slate-400 flex-wrap">
                           <span className="font-semibold text-slate-300">{ipo.symbol}</span>
                           <span>·</span>
-                          <span>Open: <strong className="text-slate-200">{ipo.openDate || 'Unverified'}</strong></span>
+                          {getIpoBucket(ipo) === 'DRAFT' ? (
+                            <span>Filing: <strong className="text-slate-200">{ipo.openDate || 'Draft DRHP Filed'}</strong></span>
+                          ) : (
+                            <span>Open: <strong className="text-slate-200">{ipo.openDate || 'Unverified'}</strong></span>
+                          )}
                           <span>·</span>
                           <span>{ipo.sector}</span>
                         </div>
@@ -475,7 +527,11 @@ export const UpcomingIPOsTab: React.FC = () => {
                     )}
                   </div>
                   <div className="text-xs text-slate-400 mt-0.5 font-mono">
-                    {activeIPO.symbol} · {activeIPO.exchange} · Open: <strong className="text-slate-200">{activeIPO.openDate || 'Unverified'}</strong> · {activeIPO.industry}
+                    {activeIPO.symbol} · {activeIPO.exchange} · {getIpoBucket(activeIPO) === 'DRAFT' ? (
+                      <span>Filing: <strong className="text-slate-200">{activeIPO.openDate || 'Draft DRHP Filed'}</strong></span>
+                    ) : (
+                      <span>Open: <strong className="text-slate-200">{activeIPO.openDate || 'Unverified'}</strong></span>
+                    )} · {activeIPO.industry}
                   </div>
                 </div>
 
@@ -492,7 +548,7 @@ export const UpcomingIPOsTab: React.FC = () => {
                 )}
               </div>
 
-              {/* Status & Timing Verification Banner */}
+              {/* Status & Timing Verification Audit Banner */}
               <div className="p-4 rounded-xl border bg-slate-950/80 border-slate-800 space-y-2">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <div className="flex items-center gap-2 text-slate-200">
@@ -520,7 +576,7 @@ export const UpcomingIPOsTab: React.FC = () => {
                 {/* Key Lifecycle Timestamps */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-slate-800/80 font-mono text-[11px]">
                   <div>
-                    <span className="text-slate-400 text-[10px] block">Open Date</span>
+                    <span className="text-slate-400 text-[10px] block">{getIpoBucket(activeIPO) === 'DRAFT' ? 'Filing Status' : 'Open Date'}</span>
                     <span className="font-bold text-slate-200">{activeIPO.openDate || 'Unverified'}</span>
                   </div>
                   <div>
@@ -724,22 +780,22 @@ export const UpcomingIPOsTab: React.FC = () => {
                         </span>
                       )}
                     </span>
-                    {activeIPO.subscription?.qib && activeIPO.subscription.qib > 0 && (
+                    {activeIPO.subscription && typeof activeIPO.subscription.qib === 'number' && activeIPO.subscription.qib > 0 ? (
                       <span className="text-[10px] text-slate-500">
                         (QIB: {activeIPO.subscription.qib}x, NII: {activeIPO.subscription.nii || 0}x)
                       </span>
-                    )}
+                    ) : null}
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center justify-between text-[11px] text-slate-500 pt-1 border-t border-slate-800/60 font-sans">
                   <span className="flex items-center gap-1 font-mono">
-                    Official Reference: {activeIPO.sourceUrl ? (
-                      <a href={activeIPO.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-emerald-400 hover:underline">
-                        {activeIPO.sourceUrl}
+                    Official Reference: {
+                      <a href={getReferenceUrl(activeIPO)} target="_blank" rel="noopener noreferrer" className="text-emerald-400 hover:underline">
+                        {getReferenceUrl(activeIPO)}
                       </a>
-                    ) : 'National Stock Exchange (NSE) / SEBI Filing'}
+                    }
                   </span>
-                  <span>Last Verified: {activeIPO.lastVerified || '2026-10-25'}</span>
+                  <span>Source: {activeIPO.statusSource || 'Exchange Filing'} (As of {activeIPO.lastVerified || '2026-10-25'})</span>
                 </div>
               </div>
             </>

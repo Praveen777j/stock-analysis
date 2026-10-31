@@ -1,5 +1,7 @@
 # AI Stock Insight
 
+> **Note**: This directory contains standalone academic Python research code and experiments. It is **not** used by the live production Node.js/React web application.
+
 **Explainable AI-Based Stock Analysis and Decision Support System Using Financial Sentiment, Technical Indicators, and Machine Learning**
 
 An academic MCA project demonstrating a leakage-safe, explainable machine-learning decision support system. The system combines financial news sentiment (VADER + FinBERT), technical indicators, and a calibrated gradient boosting ensemble to generate BUY / HOLD / SELL classifications evaluated through historical walk-forward backtesting.

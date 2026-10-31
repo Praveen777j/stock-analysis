@@ -99,7 +99,7 @@ nexus/
 │   ├── main.tsx               # React 19 DOM entry point
 │   ├── types.ts               # Strict TypeScript definitions & interfaces
 │   ├── dataEngine.ts          # Financial calculations, technicals, backtest
-│   ├── finbertService.ts      # FinBERT inference, circuit breaker, local ONNX
+│   ├── financialSentiment.ts  # Deterministic VADER + financial context engine
 │   ├── ipoCatalog.ts          # SEBI DRHP filing data & GMP tracking
 │   ├── newsIntelligence.ts    # Google News RSS parser, article clustering
 │   ├── universeCatalog.ts     # Curated stock universe & sector classifications
@@ -128,8 +128,8 @@ nexus/
 └── tests/
     ├── audit_verification.ts             # Invariants, math, and data tests
     ├── data_integrations.ts              # Provider parsing & formatting tests
-    ├── finbert_inference.ts              # Circuit breaker & fallback tests
-    └── master_upgrade_verification.ts    # Moat, clustering & local inference
+    ├── financial_sentiment.ts            # VADER & corporate context tests
+    └── master_upgrade_verification.ts    # Moat, clustering & signal verification
 ```
 
 ---
@@ -184,10 +184,10 @@ npm run build
 ```
 
 ### Test Coverage Summary:
-- **`tests/finbert_inference.ts`**: Tests HTTP 401, 402 (`CREDITS_EXHAUSTED`), 403, 404, 429, 500, 503 error handling, 15-minute circuit breaker cooldown, VADER fallback labelling, and secret redaction.
+- **`tests/financial_sentiment.ts`**: Tests deterministic VADER polarity scoring, financial context dictionary, catalyst detection, and zero-token local execution.
 - **`tests/audit_verification.ts`**: Verifies dynamic 1:2.5 R:R calculation, ATR historical volatility labelling, absence of zero-converted delivery volume, and SEBI IPO catalog integrity.
-- **`tests/data_integrations.ts`**: Verifies RSS headline sanitization, number formatting, currency conversion, and missing-data guards.
-- **`tests/master_upgrade_verification.ts`**: Tests 12-dimension moat framework, timeframe disagreement reconciliation, corporate event clustering, and local ONNX inference.
+- **`tests/data_integrations.ts`**: Verifies RSS headline sanitization, number formatting, currency conversion, sentiment engine offline reporting, and missing-data guards.
+- **`tests/master_upgrade_verification.ts`**: Tests 12-dimension moat framework, timeframe disagreement reconciliation, corporate event clustering, and signal weighting.
 
 ---
 
@@ -197,9 +197,6 @@ npm run build
 | :--- | :--- | :--- | :--- |
 | `PORT` | Optional | `3000` | Port for Express server (automatically injected by Render). |
 | `NODE_ENV` | Optional | `development` | Set to `production` in production environments. |
-| `HF_TOKEN` | Optional | `""` | Hugging Face Access Token for remote FinBERT inference. |
-| `HF_INFERENCE_ENDPOINT` | Optional | Router URL | Hugging Face inference endpoint for `ProsusAI/finbert`. |
-| `ENABLE_LOCAL_FINBERT` | Optional | `false` | Enables local ONNX model execution (requires $\ge 1\text{ GB}$ RAM). |
 | `NEWS_API_KEY` | Optional | `""` | NewsAPI key. Keyless Google News RSS is used by default. |
 | `REDDIT_CLIENT_ID` | Optional | `""` | Reddit OAuth Client ID for live Reddit API queries. |
 | `REDDIT_CLIENT_SECRET` | Optional | `""` | Reddit OAuth Client Secret. |
@@ -259,8 +256,7 @@ Returns HTTP 200 with system uptime, RAM consumption, and status of all data pro
    - Free instances spin down after 15 minutes of inactivity. The first request after sleep may take 30–50 seconds to boot.
 2. **512 MB RAM Limit**:
    - The in-memory Node/Express process requires ~220–350 MB RSS.
-   - The local quantized ONNX FinBERT model requires ~733 MB peak RSS during active batch inference. Running local ONNX on the free tier risks out-of-memory SIGKILLs.
-   - **Solution**: The platform defaults to the cloud Hugging Face Router API with VADER fallback, preserving stability on the 512 MB free tier. Local ONNX can be activated on instances with $\ge 1\text{ GB}$ RAM (`ENABLE_LOCAL_FINBERT=true`).
+   - The platform utilizes a lightweight deterministic VADER + Financial Context Engine (<150 MB RAM footprint), easily fitting within free-tier resource limits with zero external token dependencies.
 3. **Public Rate Limits**:
    - Public Yahoo Finance endpoints can occasionally rate-limit excessive bursts. The server implements request caching (60s TTL) to prevent throttling.
 4. **NSE Delivery Volume**:

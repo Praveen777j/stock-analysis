@@ -465,6 +465,8 @@ export type IPOStatus =
   | 'Listed'
   | 'Postponed'
   | 'Withdrawn'
+  | 'Draft / DRHP'
+  | 'Draft DRHP'
   | 'Unverified'
   | 'OPEN NOW'
   | 'CLOSED'

@@ -45,7 +45,6 @@ interface HealthData {
   providers: {
     marketData: { name: string; status: string; keyRequired: boolean };
     newsIntelligence: { name: string; status: string; keyRequired: boolean };
-    finbert: { name: string; status: string; engineInUse: string; keyRequired: boolean };
     vader: { name: string; status: string; keyRequired: boolean };
     ipoCatalog: { name: string; status: string; totalEntries: number };
     modelLab: { name: string; status: string; targetHorizon: string };

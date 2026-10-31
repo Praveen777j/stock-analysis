@@ -254,8 +254,11 @@ export const NewsIntelligencePage: React.FC<NewsIntelligencePageProps> = ({
 
   // Company articles filtered by tone & search
   const filteredCompanyArticles = articles.filter(a => {
-    const isBull = a.sentimentLabel === 'POSITIVE' || a.vaderScore >= 0.05;
-    const isBear = a.sentimentLabel === 'NEGATIVE' || a.vaderScore <= -0.05;
+    const effectiveScore = a.financialScore !== undefined && Math.abs(a.financialScore) >= 0.05
+      ? a.financialScore
+      : a.vaderScore;
+    const isBull = effectiveScore >= 0.05;
+    const isBear = effectiveScore <= -0.05;
     const isNeu = !isBull && !isBear;
 
     if (filterType === 'BULLISH' && !isBull) return false;
@@ -299,14 +302,18 @@ export const NewsIntelligencePage: React.FC<NewsIntelligencePageProps> = ({
           <div className="flex items-center gap-2 flex-wrap">
             <Radio className="w-4 h-4 text-emerald-400 shrink-0" />
             <span className="font-bold text-slate-200 uppercase tracking-wider text-xs">
-              Live Verified RSS Network
+              Live RSS Network
             </span>
             <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-800">
               {sourcesSummary}
             </span>
-            {isStale && (
+            {isStale ? (
               <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-950 text-amber-300 border border-amber-800">
                 Stale Cache
+              </span>
+            ) : (
+              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-800">
+                Fresh
               </span>
             )}
             {sentiment.cachedAt && (
@@ -331,7 +338,7 @@ export const NewsIntelligencePage: React.FC<NewsIntelligencePageProps> = ({
         {/* Active Sources Badges Strip */}
         <div className="space-y-2">
           <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
-            <span>Verified Sources Responding:</span>
+            <span>Source: Active RSS Feeds Responding:</span>
           </div>
           <div className="flex flex-wrap gap-1.5">
             {sourcesUsed.map((src, sIdx) => (
@@ -545,7 +552,7 @@ export const NewsIntelligencePage: React.FC<NewsIntelligencePageProps> = ({
               </span>
             </div>
             <p className="text-[11px] text-slate-400 font-sans leading-relaxed">
-              Verified institutional headlines and corporate filings.
+              Source: Institutional headlines and corporate filings.
             </p>
             <div className="flex items-center justify-between pt-2 border-t border-slate-800">
               <span className="text-slate-400">Strength:</span>
@@ -682,15 +689,19 @@ export const NewsIntelligencePage: React.FC<NewsIntelligencePageProps> = ({
         {isLoadingState && articles.length === 0 ? (
           <div className="p-8 text-center text-slate-400 font-mono text-xs space-y-2">
             <RefreshCw className="w-6 h-6 text-emerald-400 animate-spin mx-auto mb-2" />
-            <p className="font-semibold text-slate-200">Aggregating live news from verified RSS publishers...</p>
+            <p className="font-semibold text-slate-200">Aggregating live news from RSS publishers...</p>
             <p className="text-[11px] text-slate-500">Querying Economic Times, Moneycontrol, Livemint, Business Standard, CNBC & Google News</p>
           </div>
         ) : groupedCompanyArticles.length > 0 ? (
           <div className="space-y-3">
             {groupedCompanyArticles.slice(0, companyLimit).map((article, idx) => {
-              const isPositive = article.sentimentLabel === 'POSITIVE' || article.vaderScore >= 0.05;
-              const isNegative = article.sentimentLabel === 'NEGATIVE' || article.vaderScore <= -0.05;
+              const effectiveScore = article.financialScore !== undefined && Math.abs(article.financialScore) >= 0.05
+                ? article.financialScore
+                : article.vaderScore;
+              const isPositive = effectiveScore >= 0.05;
+              const isNegative = effectiveScore <= -0.05;
               const isZeroScores = Math.abs(article.vaderScore) < 0.001 && (!article.financialScore || Math.abs(article.financialScore) < 0.001);
+              const effectiveLabel = isPositive ? 'POSITIVE' : isNegative ? 'NEGATIVE' : 'NEUTRAL';
 
               return (
                 <div
@@ -789,7 +800,7 @@ export const NewsIntelligencePage: React.FC<NewsIntelligencePageProps> = ({
                           ? 'bg-rose-950/80 text-rose-400 border-rose-800'
                           : 'bg-slate-900 text-slate-400 border-slate-800'
                       }`}>
-                        {article.sentimentLabel || (isPositive ? 'POSITIVE' : isNegative ? 'NEGATIVE' : 'NEUTRAL')}
+                        {effectiveLabel}
                       </span>
                     </div>
                   </div>
@@ -811,7 +822,9 @@ export const NewsIntelligencePage: React.FC<NewsIntelligencePageProps> = ({
                       )}
                       {article.evidenceStrength && article.evidenceStrength !== 'NEUTRAL' && (
                         <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 text-[10px]">
-                          {article.evidenceStrength}
+                          {article.evidenceStrength === 'INSUFFICIENT'
+                            ? (isZeroScores ? 'No clear signal' : (Math.abs(effectiveScore) >= 0.25 ? 'MODERATE' : 'WEAK'))
+                            : article.evidenceStrength}
                         </span>
                       )}
                       {article.isHeadlineOnly && (
@@ -917,8 +930,12 @@ export const NewsIntelligencePage: React.FC<NewsIntelligencePageProps> = ({
           <>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {filteredGlobalArticles.slice(0, globalLimit).map((article, idx) => {
-                const isPositive = article.sentimentLabel === 'POSITIVE' || article.vaderScore >= 0.05;
-                const isNegative = article.sentimentLabel === 'NEGATIVE' || article.vaderScore <= -0.05;
+                const effectiveScore = article.financialScore !== undefined && Math.abs(article.financialScore) >= 0.05
+                  ? article.financialScore
+                  : article.vaderScore;
+                const isPositive = effectiveScore >= 0.05;
+                const isNegative = effectiveScore <= -0.05;
+                const effectiveLabel = isPositive ? 'POSITIVE' : isNegative ? 'NEGATIVE' : 'NEUTRAL';
 
                 return (
                   <div
@@ -966,7 +983,7 @@ export const NewsIntelligencePage: React.FC<NewsIntelligencePageProps> = ({
                           ? 'bg-rose-950/80 text-rose-400 border-rose-800'
                           : 'bg-slate-900 text-slate-400 border-slate-800'
                       }`}>
-                        {article.sentimentLabel || 'NEUTRAL'} ({article.vaderScore >= 0 ? '+' : ''}{article.vaderScore.toFixed(2)})
+                        {effectiveLabel} ({effectiveScore >= 0 ? '+' : ''}{effectiveScore.toFixed(2)})
                       </span>
                     </div>
                   </div>

@@ -149,12 +149,12 @@ const withdrawnStatus = calculateIPOStatus({
 assert.strictEqual(withdrawnStatus, 'Withdrawn', 'Withdrawn flag must override dates to produce Withdrawn');
 console.log('✓ Withdrawn IPO: correctly computed as "Withdrawn"');
 
-// Test 2.9: Undated / Draft DRHP Issue -> 'Unverified'
+// Test 2.9: Undated / Draft DRHP Issue -> 'Draft / DRHP'
 const unverifiedStatus = calculateIPOStatus({
   todayIst: TEST_TODAY
 });
-assert.strictEqual(unverifiedStatus, 'Unverified', 'Issue without open date must be Unverified');
-console.log('✓ Draft / Undated filing: correctly computed as "Unverified"');
+assert.strictEqual(unverifiedStatus, 'Draft / DRHP', 'Issue without open date must be Draft / DRHP');
+console.log('✓ Draft / Undated filing: correctly computed as "Draft / DRHP"');
 
 // ==============================================================================
 // 3. JIO PLATFORMS SPECIFIC VALIDATION
@@ -251,6 +251,37 @@ assert.strictEqual(enriched.length, UPCOMING_IPOS_CATALOG.length);
 const enrichedJio = enriched.find(i => i.id === 'jio-platforms');
 assert.ok(enrichedJio);
 assert.strictEqual(enrichedJio.status, 'Closed (allotment pending)');
+
+const enrichedTonbo = enriched.find(i => i.id === 'tonbo');
+assert.ok(enrichedTonbo, 'Tonbo Imaging must exist in enriched catalog');
+assert.strictEqual(enrichedTonbo.status, 'Draft / DRHP', 'Tonbo Imaging must be classified as Draft / DRHP');
+
+// Verify that the 6 buckets sum exactly to the total list count
+const getIpoBucket = (ipo: any): string => {
+  const status = ipo.status;
+  const openDate = (ipo.openDate || '').toLowerCase();
+  if (status === 'Draft / DRHP' || status === 'Draft DRHP' || status === 'Unverified' || openDate.includes('drhp') || openDate.includes('draft')) {
+    return 'DRAFT';
+  }
+  if (status === 'Open' || status === 'OPEN NOW') return 'OPEN';
+  if (status === 'Closed (allotment pending)' || status === 'CLOSED') return 'PENDING';
+  if (status === 'Allotment done') return 'ALLOTMENT_DONE';
+  if (status === 'Upcoming' || status === 'UPCOMING') return 'UPCOMING';
+  if (status === 'Listed' || status === 'LISTED' || ipo.isHistorical) return 'LISTED';
+  return 'DRAFT';
+};
+const buckets = {
+  OPEN: enriched.filter(i => getIpoBucket(i) === 'OPEN').length,
+  PENDING: enriched.filter(i => getIpoBucket(i) === 'PENDING').length,
+  ALLOTMENT_DONE: enriched.filter(i => getIpoBucket(i) === 'ALLOTMENT_DONE').length,
+  UPCOMING: enriched.filter(i => getIpoBucket(i) === 'UPCOMING').length,
+  LISTED: enriched.filter(i => getIpoBucket(i) === 'LISTED').length,
+  DRAFT: enriched.filter(i => getIpoBucket(i) === 'DRAFT').length
+};
+const totalBucketed = Object.values(buckets).reduce((a, b) => a + b, 0);
+assert.strictEqual(totalBucketed, enriched.length, 'Sum of IPO buckets must equal total IPO count');
+assert(buckets.DRAFT >= 1, 'Draft bucket must include at least Tonbo');
+console.log(`✓ IPO counters sum to list total: ${totalBucketed} / ${enriched.length} (Draft / DRHP: ${buckets.DRAFT})`);
 
 console.log('✓ Enriched IPO list dynamically calculated all statuses successfully.');
 

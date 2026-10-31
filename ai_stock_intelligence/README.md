@@ -1,5 +1,7 @@
 # Explainable AI-Based Stock Analysis & Decision Support System
 
+> **Note**: This directory contains standalone academic Python/Streamlit research code and experiments. It is **not** used by the live production Node.js/React web application.
+
 An enterprise-grade, academic Master of Computer Applications (MCA) research capstone project. Combines dual-engine financial sentiment (NLTK VADER & ProsusAI/finbert), quantitative technical indicators, calibrated machine learning (Logistic Regression, Random Forest, XGBoost), SHAP explainability, and walk-forward backtesting across a multi-exchange stock universe of **9,800+ securities** (NSE India, NASDAQ, NYSE, and AMEX).
 
 ---

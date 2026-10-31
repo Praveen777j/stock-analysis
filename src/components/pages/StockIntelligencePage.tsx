@@ -33,6 +33,7 @@ import {
   Zap,
   BarChart3,
   Scale,
+  AlertCircle,
   Info
 } from 'lucide-react';
 
@@ -261,7 +262,7 @@ export const StockIntelligencePage: React.FC<StockIntelligencePageProps> = ({
   }, [classification, assessment.setupConditions, technicals, currSym]);
 
   const dataQualitySummary = useMemo(() => {
-    return `Historical market data: ${bars.length} daily bars through ${quote.lastUpdated || 'Current session'}. News: ${sentiment.newsCount} indexed stories (${sentiment.newsCount > 0 ? 'Verified Feed' : 'Neutral Baseline'}).`;
+    return `Historical market data: ${bars.length} daily bars through ${quote.lastUpdated || 'Current session'}. News: ${sentiment.newsCount} indexed stories (${sentiment.newsCount > 0 ? 'Source: RSS Financial Wire' : 'Neutral Baseline'}).`;
   }, [bars.length, quote.lastUpdated, sentiment.newsCount]);
 
   return (
@@ -317,7 +318,7 @@ export const StockIntelligencePage: React.FC<StockIntelligencePageProps> = ({
             </div>
           </div>
           <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-3">
-            <span className="text-slate-500 text-[10px] uppercase block">20D Volatility</span>
+            <span className="text-slate-500 text-[10px] uppercase block">20-day volatility</span>
             <div className="text-sm font-bold text-slate-200 mt-1">
               {technicals.volatility20d ? `${technicals.volatility20d.toFixed(1)}% p.a.` : 'N/A'}
             </div>
@@ -358,6 +359,14 @@ export const StockIntelligencePage: React.FC<StockIntelligencePageProps> = ({
         <div className="text-[11px] text-slate-400 font-sans italic border-b border-slate-800 pb-2">
           Rule-based analysis of past data. Not a prediction or advice.
         </div>
+
+        {/* Verdict vs Score Override Notice (Requirement 4) */}
+        {signal.unifiedScore <= -0.10 && (classification === 'WAIT / MIXED EVIDENCE' || assessment.outcome === 'WAIT') && (
+          <div className="bg-amber-950/70 border border-amber-600/80 rounded-xl px-4 py-2.5 text-xs text-amber-200 font-mono flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+            <span>Score {signal.unifiedScore.toFixed(2)} is in the SELL band but mixed-signal rule overrides to WAIT</span>
+          </div>
+        )}
 
         {/* Structured 5 Answers (Why, Main Risk, What would change view, Data Quality) */}
         <div className="space-y-3 font-sans text-xs sm:text-sm">
@@ -509,7 +518,7 @@ export const StockIntelligencePage: React.FC<StockIntelligencePageProps> = ({
           <div className="flex items-center gap-2">
             <Layers className="w-5 h-5 text-emerald-400" />
             <h3 className="text-sm font-bold text-slate-200 uppercase tracking-wider">
-              Essential Technical Indicators (Verified Calculations)
+              Essential Technical Indicators (Calculated from OHLCV)
             </h3>
           </div>
           <span className="text-slate-500 text-[10px]">Wilder's Smoothing & Exponential Formulations</span>
@@ -774,7 +783,11 @@ export const StockIntelligencePage: React.FC<StockIntelligencePageProps> = ({
                 ? 'bg-cyan-950 text-cyan-300 border-cyan-800'
                 : 'bg-slate-800 text-slate-400 border-slate-700'
             }`}>
-              {mlOutput.hasStatisticalEdge ? 'STATISTICAL EDGE VERIFIED' : 'NO STATISTICAL EDGE'}
+              {mlOutput.hasStatisticalEdge
+                ? 'STATISTICAL EDGE VERIFIED'
+                : bars.length < 500
+                ? `Insufficient history (${bars.length}/500 bars)`
+                : 'NO STATISTICAL EDGE'}
             </span>
           </div>
           {isMlOpen ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
@@ -821,10 +834,16 @@ export const StockIntelligencePage: React.FC<StockIntelligencePageProps> = ({
               <div className="p-4 bg-slate-950 rounded-xl border border-slate-800 text-slate-400 space-y-1.5">
                 <div className="flex items-center gap-2 text-slate-300 font-bold text-xs">
                   <Info className="w-4 h-4 text-slate-400 shrink-0" />
-                  <span>No statistical edge detected on this stock</span>
+                  <span>
+                    {bars.length < 500
+                      ? `Insufficient history (${bars.length}/500 bars)`
+                      : 'No statistical edge detected on this stock'}
+                  </span>
                 </div>
                 <p className="text-[11px] text-slate-400 font-sans leading-relaxed">
-                  {mlOutput.edgeExplanation}
+                  {bars.length < 500
+                    ? `Training requires at least 500 daily bars to perform a reliable walk-forward cross-validation. Currently loaded: ${bars.length} bars.`
+                    : mlOutput.edgeExplanation}
                 </p>
                 <div className="text-[10px] text-slate-500 font-sans pt-1">
                   Because no out-of-fold advantage over the majority baseline was validated, experimental ML weights are set to 0.00 and excluded from the core BUY/SELL scoring engine.
@@ -908,7 +927,7 @@ export const StockIntelligencePage: React.FC<StockIntelligencePageProps> = ({
               Comprehensive Quantitative Risk Metrics
             </span>
             <span className="px-2 py-0.5 rounded text-[10px] bg-slate-800 text-slate-300 border border-slate-700">
-              Vol: {riskMetrics.annualizedVolPct}%
+              252-day vol: {riskMetrics.annualizedVolPct}%
             </span>
           </div>
           {isRiskOpen ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
@@ -918,7 +937,7 @@ export const StockIntelligencePage: React.FC<StockIntelligencePageProps> = ({
           <div className="p-5 space-y-4 border-t border-slate-800 bg-slate-950/40">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
               <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-1">
-                <span className="text-[10px] text-slate-500 uppercase block">Annualized Volatility</span>
+                <span className="text-[10px] text-slate-500 uppercase block">252-day volatility</span>
                 <span className="text-base font-bold text-amber-400">
                   {riskMetrics.annualizedVolPct}% p.a.
                 </span>

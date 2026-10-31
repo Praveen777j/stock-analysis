@@ -540,11 +540,11 @@ console.log('✓ 12-story count consistency verified: 12 indexed stories, 1 dist
 
 
 // ==============================================================================
-// 5. FINBERT HONEST STATUS & VADER SENTIMENT TESTS
+// 5. SENTIMENT ENGINE OFFLINE REPORTING & VADER SENTIMENT TESTS
 // ==============================================================================
-console.log('\n[Test Suite 5] Testing FinBERT Offline Reporting & VADER Polarity Distinction...');
+console.log('\n[Test Suite 5] Testing sentiment engine offline reporting & VADER polarity distinction...');
 
-// FinBERT offline state verification
+// Sentiment engine offline state verification
 const offlineSentiment: SentimentData = {
   overallScore: 0.35,
   vaderCompound: 0.35,
@@ -568,15 +568,15 @@ const offlineSentiment: SentimentData = {
   reddit: { status: 'EMPTY', posts: [], message: '', postCount: 0 }
 };
 
-assert.strictEqual(offlineSentiment.finbertScore, null, 'FinBERT score must be null when service is offline');
-assert.strictEqual(offlineSentiment.finbertStatus, 'UNAVAILABLE', 'FinBERT status must be UNAVAILABLE');
-assert.notStrictEqual(offlineSentiment.vaderCompound, offlineSentiment.finbertScore, 'VADER output must not be copied into FinBERT field');
+assert.strictEqual(offlineSentiment.finbertScore, null, 'Sentiment engine score must be null when service is offline');
+assert.strictEqual(offlineSentiment.finbertStatus, 'UNAVAILABLE', 'Sentiment engine status must be UNAVAILABLE');
+assert.notStrictEqual(offlineSentiment.vaderCompound, offlineSentiment.finbertScore, 'VADER output must not be copied into sentiment engine field');
 
 const modelSignalOffline = computeModelSignal(dummyTech, offlineSentiment, unavailQuote);
-assert.strictEqual(modelSignalOffline.breakdown.finbert.status, 'UNAVAILABLE', 'Breakdown must report FinBERT status as UNAVAILABLE');
-assert.strictEqual(modelSignalOffline.breakdown.finbert.weight, 0.0, 'FinBERT weight must be 0% when offline');
-assert(modelSignalOffline.breakdown.vader.weight > 0.15, 'VADER weight must be increased to absorb news weighting when FinBERT is offline');
-console.log('✓ FinBERT offline status reported honestly with weight redistributed to active engines without fake +0.00.');
+assert.strictEqual(modelSignalOffline.breakdown.finbert.status, 'UNAVAILABLE', 'Breakdown must report sentiment engine offline status as UNAVAILABLE');
+assert.strictEqual(modelSignalOffline.breakdown.finbert.weight, 0.0, 'Sentiment engine offline weight must be 0% when offline');
+assert(modelSignalOffline.breakdown.vader.weight > 0.15, 'VADER weight must be increased to absorb news weighting when sentiment engine is offline');
+console.log('✓ Sentiment engine offline status reported honestly with weight redistributed to active engines without fake +0.00.');
 
 console.log('\n======================================================');
 console.log('ALL PRODUCTION DATA INTEGRATION TESTS PASSED!');

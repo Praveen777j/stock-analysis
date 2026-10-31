@@ -102,7 +102,7 @@ export function calculateIPOStatus(params: {
   const allotmentIso = normalizeDateToIso(params.allotmentDate);
 
   if (!openIso) {
-    return 'Unverified';
+    return 'Draft / DRHP';
   }
 
   // 1. Before Open Date
@@ -710,7 +710,7 @@ export const UPCOMING_IPOS_CATALOG: IPODetails[] = [
     lastVerified: '2026-10-25',
     isHistorical: false,
     isVerifiedListed: false,
-    status: 'Unverified', // Calculated dynamically as Unverified due to pending open date
+    status: 'Draft / DRHP', // Calculated dynamically as Draft / DRHP due to pending open date
     sector: 'Industrials & Defence Technology',
     industry: 'Electro-Optics, Autonomous Surveillance & Defence Systems',
     priceBand: '', // Left blank / unverified until official RHP price band

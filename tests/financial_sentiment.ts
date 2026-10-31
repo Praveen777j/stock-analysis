@@ -5,6 +5,10 @@ import {
   analyzeFinancialSentiment,
   aggregateArticleSentiment
 } from '../src/financialSentiment';
+import {
+  calculateRelevanceScore,
+  getCompanyAliases
+} from '../src/newsIntelligence';
 
 console.log('--- STARTING FINANCIAL SENTIMENT ENGINE UNIT & REGRESSION TESTS ---\n');
 
@@ -97,6 +101,75 @@ assert(aggregate.overallScore > 0, 'Composite of 2 positive + 1 minor negative s
 assert(aggregate.vaderCompound !== undefined, 'Must provide independent VADER baseline');
 assert(aggregate.matchedCatalysts.length > 0, 'Must record matched catalysts');
 console.log(`✓ Aggregate sentiment verified: Overall: ${aggregate.overallScore}, VADER baseline: ${aggregate.vaderCompound}, Label: ${aggregate.label}, Evidence: ${aggregate.evidenceStrength}`);
+
+// 9. Sentiment Labels & Financial Context Rules for Loss / Plunge / Fall
+console.log('\n[Test 9] Testing Headline Sentiment Rules & Label Agreement...');
+const suzlonResult = analyzeFinancialSentiment('Suzlon profit plunges 69% in Q3 due to margin compression');
+assert(suzlonResult.score < 0, `Suzlon profit plunge must score negative, got ${suzlonResult.score}`);
+assert.strictEqual(suzlonResult.label, 'NEGATIVE', `Suzlon profit plunge must be labelled NEGATIVE, got ${suzlonResult.label}`);
+assert(suzlonResult.evidenceStrength !== 'INSUFFICIENT', 'Non-zero scored article must not have INSUFFICIENT evidence');
+console.log(`✓ Suzlon headline verified: Score=${suzlonResult.score}, Label=${suzlonResult.label}, Evidence=${suzlonResult.evidenceStrength}`);
+
+const relPowerResult = analyzeFinancialSentiment('Reliance Power shares on fire after major solar tender win');
+assert(relPowerResult.score > 0, `Shares on fire must score positive, got ${relPowerResult.score}`);
+assert.strictEqual(relPowerResult.label, 'POSITIVE', `Reliance Power shares on fire must be labelled POSITIVE, got ${relPowerResult.label}`);
+assert(relPowerResult.evidenceStrength !== 'INSUFFICIENT', 'Non-zero scored article must not have INSUFFICIENT evidence');
+console.log(`✓ Reliance Power headline verified: Score=${relPowerResult.score}, Label=${relPowerResult.label}, Evidence=${relPowerResult.evidenceStrength}`);
+
+// 10. News Relevance & False Match Exclusion (RELIANCE.NS)
+console.log('\n[Test 10] Testing News Relevance & False Match Exclusion for Reliance Industries...');
+const rilAliases = getCompanyAliases('RELIANCE.NS', 'Reliance Industries Ltd');
+
+// Exclusion of Reliance Power from RELIANCE.NS wire
+const relPowerWire = calculateRelevanceScore(
+  { title: 'Reliance Power shares on fire after major debt restructuring', summary: '' },
+  'RELIANCE.NS',
+  'Reliance Industries Ltd',
+  rilAliases
+);
+assert.strictEqual(relPowerWire.isRelated, false, 'Reliance Power must NOT match Reliance Industries wire');
+assert.strictEqual(relPowerWire.score, 0, 'False match must score 0');
+console.log(`✓ Reliance Power correctly excluded from RELIANCE.NS wire (isRelated=${relPowerWire.isRelated}, score=${relPowerWire.score})`);
+
+// Exclusion of Reliance Capital and Reliance Infra from RELIANCE.NS wire
+const relCapWire = calculateRelevanceScore(
+  { title: 'Reliance Capital asset resolution process advances', summary: '' },
+  'RELIANCE.NS',
+  'Reliance Industries Ltd',
+  rilAliases
+);
+assert.strictEqual(relCapWire.isRelated, false, 'Reliance Capital must NOT match Reliance Industries wire');
+console.log(`✓ Reliance Capital correctly excluded from RELIANCE.NS wire (isRelated=${relCapWire.isRelated})`);
+
+// Inclusion of true Reliance Industries news
+const rilTrueWire = calculateRelevanceScore(
+  { title: 'Reliance Industries signs $2 billion green energy partnership', summary: 'RIL announces solar giga-factory progress' },
+  'RELIANCE.NS',
+  'Reliance Industries Ltd',
+  rilAliases
+);
+assert.strictEqual(rilTrueWire.isRelated, true, 'Reliance Industries news must match RELIANCE.NS');
+assert(rilTrueWire.score > 50, 'True match must have strong score');
+console.log(`✓ Reliance Industries correctly matched to RELIANCE.NS wire (isRelated=${rilTrueWire.isRelated}, score=${rilTrueWire.score})`);
+
+// Reliance Retail only matches if ticker is RELIANCE.NS
+const relRetailRil = calculateRelevanceScore(
+  { title: 'Reliance Retail expands store network by 500 outlets', summary: '' },
+  'RELIANCE.NS',
+  'Reliance Industries Ltd',
+  rilAliases
+);
+assert.strictEqual(relRetailRil.isRelated, true, 'Reliance Retail must match RELIANCE.NS');
+
+const otherAliases = getCompanyAliases('TCS.NS', 'Tata Consultancy Services');
+const relRetailOther = calculateRelevanceScore(
+  { title: 'Reliance Retail expands store network by 500 outlets', summary: '' },
+  'TCS.NS',
+  'Tata Consultancy Services',
+  otherAliases
+);
+assert.strictEqual(relRetailOther.isRelated, false, 'Reliance Retail must not match other tickers');
+console.log(`✓ Reliance Retail aliasing correctly restricted to RELIANCE.NS`);
 
 console.log('\n======================================================');
 console.log('ALL FINANCIAL SENTIMENT ENGINE TESTS PASSED CLEANLY!');

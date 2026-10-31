@@ -124,7 +124,7 @@ export const SentimentTab: React.FC<SentimentTabProps> = ({ sentiment, quote }) 
           </div>
           <span className="text-[11px] font-mono text-emerald-400 font-semibold bg-emerald-950/60 px-2.5 py-0.5 rounded border border-emerald-800 flex items-center gap-1.5">
             <CheckCircle2 className="w-3.5 h-3.5" />
-            Verified Feeds: Economic Times · Mint · Moneycontrol · Reddit
+            Source: RSS Feeds (Economic Times · Mint · Moneycontrol · Reddit)
           </span>
         </div>
 
@@ -150,7 +150,7 @@ export const SentimentTab: React.FC<SentimentTabProps> = ({ sentiment, quote }) 
               Financial media coverage highlights key quarterly earnings metrics, capital expenditure announcements, and regulatory disclosures. Articles are indexed in real time to assess institutional positioning.
             </p>
             <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between font-mono text-[11px] text-slate-400">
-              <span>Verified Press Articles: <strong className="text-slate-200">{sentiment.articles.length}</strong></span>
+              <span>Source: Financial Press Articles (<strong className="text-slate-200">{sentiment.articles.length}</strong>)</span>
               <span className="text-emerald-400">Institutional Impact: High</span>
             </div>
           </div>
@@ -210,7 +210,7 @@ export const SentimentTab: React.FC<SentimentTabProps> = ({ sentiment, quote }) 
               : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
           }`}
         >
-          All Verified Feeds ({sentiment.articles.length + redditPosts.length})
+          All Sources ({sentiment.articles.length + redditPosts.length})
         </button>
         <button
           onClick={() => setActiveFilter('NEWS')}
@@ -242,7 +242,7 @@ export const SentimentTab: React.FC<SentimentTabProps> = ({ sentiment, quote }) 
           <div className="flex items-center justify-between">
             <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5 font-mono">
               <Newspaper className="w-4 h-4 text-emerald-400" />
-              Verified Financial Press Articles
+              Source: Financial Press Articles
             </h4>
             <span className="text-[11px] text-slate-400 font-mono">
               Economic Times · Mint · Moneycontrol · Reuters · Business Standard
